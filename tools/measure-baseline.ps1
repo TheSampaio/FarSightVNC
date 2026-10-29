@@ -43,6 +43,11 @@ function Get-Median([double[]]$values) {
   return ($sorted[$count / 2 - 1] + $sorted[$count / 2]) / 2
 }
 
+# The viewer records per-host options in its history; drop the entry
+# afterwards unless the user already had one for this host and port.
+$historyKey = "HKCU:\Software\TightVNC\Viewer\History\${HostName}::$Port"
+$historyExisted = Test-Path -LiteralPath $historyKey
+
 $rows = @()
 foreach ($name in $Viewers.Keys) {
   $path = $Viewers[$name]
@@ -81,6 +86,10 @@ foreach ($name in $Viewers.Keys) {
       PeakUserObjects = $peakUser
     }
   }
+}
+
+if (-not $historyExisted -and (Test-Path -LiteralPath $historyKey)) {
+  Remove-Item -LiteralPath $historyKey -Recurse
 }
 
 New-Item -ItemType Directory -Force (Split-Path $OutCsv) | Out-Null

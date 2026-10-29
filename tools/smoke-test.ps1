@@ -55,12 +55,20 @@ function Invoke-ViewerCase([string]$name, [string[]]$arguments, [bool]$expectSes
 }
 
 $common = @("-host=$HostName", "-port=$Port", '-viewonly=yes')
+# The viewer records per-host options in its history; drop the entry
+# afterwards unless the user already had one for this host and port.
+$historyKey = "HKCU:\Software\TightVNC\Viewer\History\${HostName}::$Port"
+$historyExisted = Test-Path -LiteralPath $historyKey
 $results = @()
 foreach ($encoding in $Encodings) {
   $results += Invoke-ViewerCase "encoding=$encoding" ($common + "-password=$Password" + "-encoding=$encoding") $true
 }
 if (-not $SkipWrongPassword) {
   $results += Invoke-ViewerCase 'wrong password' ($common + '-password=wrong-pw') $false
+}
+
+if (-not $historyExisted -and (Test-Path -LiteralPath $historyKey)) {
+  Remove-Item -LiteralPath $historyKey -Recurse
 }
 
 $results | Format-Table -AutoSize | Out-String -Width 200 | Write-Host
