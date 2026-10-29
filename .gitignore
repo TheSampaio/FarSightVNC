@@ -1,0 +1,17 @@
+# Visual Studio / MSBuild outputs
+/Debug/
+/Release/
+/DebugNoUnicode/
+/ReleaseNoUnicode/
+/x64/
+**/Debug/
+**/Release/
+**/DebugNoUnicode/
+**/ReleaseNoUnicode/
+**/x64/
+.vs/
+*.user
+*.aps
+*.ipch
+*.VC.db
+*.VC.opendb
