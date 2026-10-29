@@ -1,6 +1,6 @@
-# FarsightVNC — modification notice
+# FarSightVNC — modification notice
 
-FarsightVNC is a modified version of **TightVNC 2.8.90**, Copyright (C)
+FarSightVNC is a modified version of **TightVNC 2.8.90**, Copyright (C)
 GlavSoft LLC, distributed under the GNU General Public License version 2 or
 (at your option) any later version. See `wix-installer/LICENSE.txt` for the
 license text. The original copyright and license notices in every file are
@@ -8,7 +8,7 @@ preserved.
 
 As required by section 2(a) of the GPL, this file lists the changes made to
 the original work and their dates. Source files that were changed also carry a
-short "Modified for FarsightVNC" notice in their header. The complete,
+short "Modified for FarSightVNC" notice in their header. The complete,
 line-level history is in the Git log; the first commit is the unmodified
 TightVNC 2.8.90 source tree.
 

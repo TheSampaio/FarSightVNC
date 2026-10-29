@@ -1,4 +1,4 @@
-# FarsightVNC — Relatório da Fase 0 (Fundação)
+# FarSightVNC — Relatório da Fase 0 (Fundação)
 
 - **Data:** 2026-10-29
 - **Executado por:** Claude (agente único; a fase é sequencial e não justificava subagentes)
@@ -31,12 +31,12 @@
 | `b2cb695` | Scripts de teste não deixam rastro no histórico do Viewer |
 | (seguintes) | `MODIFICATIONS.md` (aviso de modificações exigido pela GPL) e este relatório |
 
-Licença: os avisos GPLv2-ou-posterior originais foram mantidos. O arquivo alterado recebeu um aviso "Modified for FarsightVNC" com a data, e `MODIFICATIONS.md` lista todas as mudanças (GPLv2 §2a).
+Licença: os avisos GPLv2-ou-posterior originais foram mantidos. O arquivo alterado recebeu um aviso "Modified for FarSightVNC" com a data, e `MODIFICATIONS.md` lista todas as mudanças (GPLv2 §2a).
 
 ## 3. GitHub
 
 - **Conta autenticada no `gh`:** `TheSampaio` (escopos `repo`, `workflow`).
-- **Tentativa:** `gh repo create TheSampaio/FarsightVNC --private --source . --remote origin`, seguida do push de `main` e `develop`.
+- **Tentativa:** `gh repo create TheSampaio/FarSightVNC --private --source . --remote origin`, seguida do push de `main` e `develop`.
 - **Resultado:** **negado pela política de permissões do Claude Code** (classificada como envio de dados para serviço externo). Nada foi enviado e nenhum repositório foi criado.
 - **Para concluir:** autorize essa ação ou crie o repositório você mesmo e me passe a URL. Depois, só faltam `git remote add origin <url>`, `git push -u origin main` e `git push -u origin develop`.
 - **Visibilidade proposta:** **privado** por padrão. Pode ser tornado público depois; a GPL não obriga a publicar enquanto não houver distribuição de binários.
@@ -70,7 +70,7 @@ Dentro do repositório, as saídas de build (`x64\`, `Release\`, `Debug\`, pasta
 Nenhuma chave em `HKLM` foi alterada.
 
 ### 4.4 Firewall, serviços e rede
-- **Firewall:** nenhuma regra criada ou alterada. O servidor de teste escuta só em `127.0.0.1:5910`, o que não aciona o firewall. Verifiquei que não existe nenhuma regra para `tvnserver`, `tvnviewer` ou FarsightVNC.
+- **Firewall:** nenhuma regra criada ou alterada. O servidor de teste escuta só em `127.0.0.1:5910`, o que não aciona o firewall. Verifiquei que não existe nenhuma regra para `tvnserver`, `tvnviewer` ou FarSightVNC.
 - **Serviços:** nenhum criado, alterado ou parado.
 - **Processos:** o servidor de teste foi encerrado. Nenhum processo dos testes ficou rodando.
 

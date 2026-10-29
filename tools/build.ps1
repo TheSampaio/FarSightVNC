@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Builds the FarsightVNC viewer (tvnviewer) with MSBuild.
+  Builds the FarSightVNC viewer (tvnviewer) with MSBuild.
 
 .DESCRIPTION
   Locates MSBuild through vswhere, builds the requested configurations of the
