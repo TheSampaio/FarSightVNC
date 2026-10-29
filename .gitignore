@@ -20,3 +20,6 @@
 /win-event-log/MSG*.bin
 /win-event-log/MessageProvider.h
 /win-event-log/MessageProvider.rc
+
+# Local build logs (tools/build.ps1)
+/build-logs/
