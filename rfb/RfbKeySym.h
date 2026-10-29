@@ -21,9 +21,13 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarsightVNC on 2026-10-29: added missing <string> include.
+//
 
 #ifndef __RFBKEYSYM_H__
 #define __RFBKEYSYM_H__
+
+#include <string>
 
 #include "RfbKeySymListener.h"
 #include "util/Keymap.h"
