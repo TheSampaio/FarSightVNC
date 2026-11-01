@@ -346,6 +346,7 @@ class Server:
             'update_interval_ms_median': round(statistics.median(gaps), 2) if gaps else None,
             'update_interval_ms_p95': round(gaps[int(0.95 * (len(gaps) - 1))], 2) if gaps else None,
             'bytes_in_window': sum(u[3] for u in updates),
+            'update_starts_ns': [u[0] for u in self.updates],
             'pointer_events': [{'ns': t, 'x': x, 'y': y, 'buttons': b} for t, x, y, b in self.pointer],
             'key_events': [{'ns': t, 'down': d, 'keysym': k} for t, d, k in self.keys],
             'marker_events': [{'ns': t, 'index': i, 'rgb': list(c)} for t, i, c in self.markers],
