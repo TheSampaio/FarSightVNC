@@ -17,3 +17,4 @@ TightVNC 2.8.90 source tree.
 | 2026-10-29 | all `*.vcxproj` | Build retargeted from MSVC v141_xp / Windows SDK 8.1 to MSVC v145 / Windows SDK 10. Windows XP is no longer a supported target. |
 | 2026-10-29 | `rfb/RfbKeySym.h` | Added missing `<string>` include. No behavior change. |
 | 2026-10-29 | `.gitignore`, `tools/*.ps1`, `docs/` | New files: build, test and measurement scripts and project documentation. |
+| 2026-11-01 | `tools/fake-rfb-server.py`, `tools/render-probe.py`, `tools/measure-render.ps1` | New files: fake RFB server, input/display latency probe and render benchmark orchestrator for the rendering and latency phase. |
