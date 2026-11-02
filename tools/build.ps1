@@ -31,7 +31,7 @@ $msbuild = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild 
 if (-not $msbuild) { throw 'MSBuild not found. Install Visual Studio with the C++ workload.' }
 
 New-Item -ItemType Directory -Force $LogDir | Out-Null
-$msbuildTarget = if ($Project) { "${Project}:$Target" } else { $Target }
+$msbuildTarget = if ($Project -and $Target -eq 'Build') { $Project } elseif ($Project) { "${Project}:$Target" } else { $Target }
 $failed = @()
 
 foreach ($configuration in $Configurations) {
