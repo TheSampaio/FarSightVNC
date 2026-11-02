@@ -21,6 +21,8 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-01: message loop translates remote keyboard input after dispatch.
+//
 
 #include "TvnViewer.h"
 #include "network/socket/WindowsSocket.h"

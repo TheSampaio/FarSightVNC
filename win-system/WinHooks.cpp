@@ -37,7 +37,8 @@ WinHooks::WinHooks()
 
 WinHooks::~WinHooks()
 {
-  unregisterKeyboardHook(0);
+  // The owner (ViewerWindow) calls unregisterKeyboardHook(this) itself. Removing
+  // the process wide hook here would break another window that owns it.
 }
 
 LRESULT CALLBACK WinHooks::lowLevelKeyboardHook(int nCode, WPARAM wParam, LPARAM lParam)
@@ -45,7 +46,7 @@ LRESULT CALLBACK WinHooks::lowLevelKeyboardHook(int nCode, WPARAM wParam, LPARAM
   if (nCode < 0) {
     return CallNextHookEx(s_hooks, nCode, wParam, lParam);
   }
-  if (s_eventListener->onHookProc(nCode, wParam, lParam)) {
+  if (s_eventListener != 0 && s_eventListener->onHookProc(nCode, wParam, lParam)) {
     // Processing is successful. Don't pass it to the next hook procedure.
     return true;
   } else {
@@ -67,11 +68,34 @@ void WinHooks::registerKeyboardHook(HookEventListener *hookEventListener)
 
 void WinHooks::unregisterKeyboardHook(HookEventListener *hookEventListener)
 {
+  if (hookEventListener != 0 && hookEventListener != s_eventListener) {
+    return;
+  }
   if (s_hooks != 0) {
     UnhookWindowsHookEx(s_hooks);
   }
   s_hooks = 0;
   s_eventListener = 0;
+}
+
+bool WinHooks::isRegisteredFor(HookEventListener *hookEventListener)
+{
+  return s_hooks != 0 && s_eventListener == hookEventListener;
+}
+
+unsigned char WinHooks::applyKeyToStateTable(BYTE *keys, WPARAM virtKey, LPARAM lParam)
+{
+  bool isDown = (lParam & 0x80000000) == 0;
+  bool extended = (lParam & 0x1000000) != 0;
+  unsigned char key = (unsigned char)virtKey;
+  if (key == VK_SHIFT) key = ((lParam >> 16) & 0xff) == 0x36 ? VK_RSHIFT : VK_LSHIFT;
+  if (key == VK_CONTROL) key = extended ? VK_RCONTROL : VK_LCONTROL;
+  if (key == VK_MENU) key = extended ? VK_RMENU : VK_LMENU;
+  keys[key] = (BYTE)((keys[key] & 1) | (isDown ? 0x80 : 0));
+  keys[VK_SHIFT] = keys[VK_LSHIFT] | keys[VK_RSHIFT];
+  keys[VK_CONTROL] = keys[VK_LCONTROL] | keys[VK_RCONTROL];
+  keys[VK_MENU] = keys[VK_LMENU] | keys[VK_RMENU];
+  return key;
 }
 
 WinHooks::HookKeyAction WinHooks::decideKeyAction(DWORD vkCode, DWORD flags)

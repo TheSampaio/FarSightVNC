@@ -653,6 +653,17 @@ void testWinKey(LogWriter *log)
     e.press(XK_Super_L);
     finish("Win key is sent when not ignored", h, e);
   }
+  {
+    // Leaving fullscreen (hook off, Win ignored again) while Win is held.
+    Harness h(g_us->hkl, log);
+    h.ks().setWinKeyIgnore(false);
+    h.down(VK_LWIN, 0x5B, true);
+    h.ks().setWinKeyIgnore(true);
+    h.up(VK_LWIN, 0x5B, true);
+    Seq e;
+    e.d(XK_Super_L).u(XK_Super_L);
+    finish("R1 held Win key is released after the ignore flag is set", h, e);
+  }
 }
 
 //----------------------------------------------------------------------------
@@ -733,6 +744,58 @@ void testHook()
             WinHooks::decideKeyAction('A', LLKHF_INJECTED | LLKHF_UP) == WinHooks::HOOK_KEY_PASS);
 }
 
+//----------------------------------------------------------------------------
+// R2: key state table of hook-posted keys, R3: hook ownership
+
+void testStateTable()
+{
+  BYTE k[256] = {0};
+  k[VK_CAPITAL] = 1;
+  unsigned char r = WinHooks::applyKeyToStateTable(k, VK_SHIFT, 1u | (SC_RSHIFT << 16));
+  checkTrue("R2 Right Shift (scan 0x36) sets VK_RSHIFT and VK_SHIFT",
+            r == VK_RSHIFT && k[VK_RSHIFT] == 0x80 && k[VK_LSHIFT] == 0 && k[VK_SHIFT] == 0x80);
+  WinHooks::applyKeyToStateTable(k, VK_LSHIFT, 1u | (SC_LSHIFT << 16));
+  WinHooks::applyKeyToStateTable(k, VK_RSHIFT, 1u | (SC_RSHIFT << 16) | 0xC0000000u);
+  checkTrue("R2 releasing one Shift keeps the generic Shift down", k[VK_SHIFT] == 0x80 && k[VK_RSHIFT] == 0);
+  WinHooks::applyKeyToStateTable(k, VK_LSHIFT, 1u | (SC_LSHIFT << 16) | 0xC0000000u);
+  checkTrue("R2 releasing both Shifts clears the generic Shift and keeps Caps Lock toggle",
+            k[VK_SHIFT] == 0 && k[VK_CAPITAL] == 1);
+  r = WinHooks::applyKeyToStateTable(k, VK_MENU, 1u | (SC_ALT << 16) | 0x1000000u);
+  checkTrue("R2 extended Alt is Right Alt (AltGr)", r == VK_RMENU && k[VK_RMENU] == 0x80 && k[VK_MENU] == 0x80);
+  r = WinHooks::applyKeyToStateTable(k, VK_LCONTROL, 1u | (SC_CTRL << 16));
+  checkTrue("R2 AltGr plus its Left Ctrl keep both tables set",
+            r == VK_LCONTROL && k[VK_CONTROL] == 0x80 && k[VK_MENU] == 0x80);
+}
+
+class DummyListener : public HookEventListener
+{
+public:
+  virtual LRESULT onHookProc(int, WPARAM, LPARAM) { return 0; }
+};
+
+void testHookOwnership()
+{
+  DummyListener a, b;
+  // The hook is installed only for the duration of this check and this thread
+  // pumps no input meanwhile; the listeners never swallow keys.
+  WinHooks::registerKeyboardHook(&a);
+  checkTrue("R3 hook registered for A", WinHooks::isRegisteredFor(&a));
+  WinHooks::unregisterKeyboardHook(&b);
+  checkTrue("R3 another window cannot remove the hook of A", WinHooks::isRegisteredFor(&a));
+  WinHooks::registerKeyboardHook(&b);
+  checkTrue("R3 a newly active window takes the hook over",
+            WinHooks::isRegisteredFor(&b) && !WinHooks::isRegisteredFor(&a));
+  WinHooks::unregisterKeyboardHook(&a);
+  checkTrue("R3 the previous owner cannot remove it either", WinHooks::isRegisteredFor(&b));
+  {
+    WinHooks unrelated;
+  }
+  checkTrue("R3 destroying a WinHooks object keeps the hook of its owner", WinHooks::isRegisteredFor(&b));
+  WinHooks::unregisterKeyboardHook(&b);
+  checkTrue("R3 the owner removes the hook", !WinHooks::isRegisteredFor(&b));
+  WinHooks::unregisterKeyboardHook(&b);   // second call is harmless
+}
+
 void testSyntheticModifierFocus(LogWriter *log)
 {
   Harness h(g_us->hkl, log);
@@ -777,6 +840,8 @@ int main()
   testWinKey(&log);
   testFocusLoss(&log);
   testHook();
+  testStateTable();
+  testHookOwnership();
   testSyntheticModifierFocus(&log);
 
   unloadLayouts();

@@ -21,8 +21,11 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-02: keyboard state kept in sync for hook-posted keys, also in view-only mode.
+//
 
 #include "DesktopWindow.h"
+#include "win-system/WinHooks.h"
 
 DesktopWindow::DesktopWindow(LogWriter *logWriter, ConnectionConfig *conConf)
 : m_logWriter(logWriter),
@@ -257,45 +260,35 @@ bool DesktopWindow::onMouse(unsigned char mouseButtons, unsigned short wheelSpee
 
 bool DesktopWindow::onKey(WPARAM wParam, LPARAM lParam)
 {
-  if (!m_conConf->isViewOnly()) {
-    unsigned short virtualKey = static_cast<unsigned short>(wParam);
-    unsigned int additionalInfo = static_cast<unsigned int>(lParam);
-    static const unsigned int DOWN_FLAG = 0x80000000;
-    bool isDown = (additionalInfo & DOWN_FLAG) == 0;
+  unsigned short virtualKey = static_cast<unsigned short>(wParam);
+  unsigned int additionalInfo = static_cast<unsigned int>(lParam);
 
-    if (virtualKey == VK_PROCESSKEY) {
-      bool extended = HIWORD(lParam) & KF_EXTENDED;
-      UINT scancode = HIWORD(lParam) & 0xFF;
-      if (extended) {
-        scancode += 0xE000;
-      }
-      virtualKey = MapVirtualKey(scancode, MAPVK_VSC_TO_VK_EX);
+  if (virtualKey == VK_PROCESSKEY) {
+    bool extended = HIWORD(lParam) & KF_EXTENDED;
+    UINT scancode = HIWORD(lParam) & 0xFF;
+    if (extended) {
+      scancode += 0xE000;
     }
+    virtualKey = MapVirtualKey(scancode, MAPVK_VSC_TO_VK_EX);
+  }
 
-    if (virtualKey == VK_CONTROL) {
-      m_ctrlDown = isDown;
-    }
-
-    if (virtualKey == VK_MENU) {
-      m_altDown = isDown;
-    }
-
-    // Posted fullscreen keys do not update the thread state used by
-    // TranslateMessage. This changes only this UI thread's keyboard state.
-    BYTE keys[256];
-    if (GetKeyboardState(keys)) {
-      unsigned key = virtualKey;
-      if (key == VK_SHIFT) key = ((additionalInfo >> 16) & 0xff) == 0x36 ? VK_RSHIFT : VK_LSHIFT;
-      if (key == VK_CONTROL) key = (additionalInfo & 0x1000000) ? VK_RCONTROL : VK_LCONTROL;
-      if (key == VK_MENU) key = (additionalInfo & 0x1000000) ? VK_RMENU : VK_LMENU;
-      keys[key & 255] = (keys[key & 255] & 1) | (isDown ? 0x80 : 0);
-      keys[VK_SHIFT] = keys[VK_LSHIFT] | keys[VK_RSHIFT];
-      keys[VK_CONTROL] = keys[VK_LCONTROL] | keys[VK_RCONTROL];
-      keys[VK_MENU] = keys[VK_LMENU] | keys[VK_RMENU];
-      SetKeyboardState(keys);
+  // Keys posted by the fullscreen hook never reach the thread's own key
+  // state, which TranslateMessage and TranslateAccelerator rely on. Keep it
+  // current, also in view-only mode (the accelerators must keep working).
+  // Only the Ctrl/Alt key events change the toolbar latch flags.
+  BYTE keys[256];
+  if (GetKeyboardState(keys)) {
+    unsigned char key = WinHooks::applyKeyToStateTable(keys, virtualKey, lParam);
+    SetKeyboardState(keys);
+    if (key == VK_LCONTROL || key == VK_RCONTROL) {
       m_ctrlDown = (keys[VK_CONTROL] & 0x80) != 0;
+    }
+    if (key == VK_LMENU || key == VK_RMENU) {
       m_altDown = (keys[VK_MENU] & 0x80) != 0;
     }
+  }
+
+  if (!m_conConf->isViewOnly()) {
     m_rfbKeySym->processKeyEvent(virtualKey,
                                  additionalInfo);
   }

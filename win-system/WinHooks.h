@@ -55,8 +55,17 @@ public:
   // Registration of keyboard hook.
   static void registerKeyboardHook(HookEventListener *hookEventListener);
 
-  // Unregistration of keyboard hook.
+  // Unregistration of keyboard hook. The hook is process wide, so a listener
+  // that does not own it leaves it untouched; 0 removes it unconditionally.
   static void unregisterKeyboardHook(HookEventListener *hookEventListener);
+
+  // True when the hook is installed on behalf of this listener.
+  static bool isRegisteredFor(HookEventListener *hookEventListener);
+
+  // Applies a WM_KEYDOWN/WM_KEYUP style message to a GetKeyboardState table
+  // (toggle bits are kept) and returns the left/right specific virtual key.
+  // Keys posted by the hook never reach the thread's own key state.
+  static unsigned char applyKeyToStateTable(BYTE *keys, WPARAM virtKey, LPARAM lParam);
 
 private:
   // Hook object.
