@@ -12,6 +12,9 @@
 // the socket.
 //
 
+// Modified for FarSightVNC on 2026-11-02: preserve pointer transitions and
+// provide a bounded wait for the sender to drain during shutdown.
+
 #include "InputEventSender.h"
 
 #include "thread/AutoLock.h"
@@ -29,8 +32,14 @@ InputEventSender::InputEventSender(LogWriter *logWriter)
 : m_logWriter(logWriter),
   m_failureHandler(0),
   m_output(0),
-  m_closed(false)
+  m_closed(false),
+  m_lastButtonMask(0),
+  m_started(false),
+  m_finished(CreateEvent(0, TRUE, FALSE, 0))
 {
+  if (m_finished == 0) {
+    throw Exception(_T("Cannot create input sender completion event"));
+  }
 }
 
 InputEventSender::~InputEventSender()
@@ -40,13 +49,33 @@ InputEventSender::~InputEventSender()
     wait();
   } catch (...) {
   }
+  CloseHandle(m_finished);
 }
 
 void InputEventSender::setOutput(RfbOutputGate *output)
 {
-  m_output = output;
-  resume();
+  {
+    AutoLock al(&m_queueLock);
+    m_output = output;
+    m_started = true;
+  }
+  if (!resume()) {
+    AutoLock al(&m_queueLock);
+    m_started = false;
+    throw Exception(_T("Cannot start input sender thread"));
+  }
   m_logWriter->debug(_T("InputEventSender is started"));
+}
+
+bool InputEventSender::waitForDrain(DWORD timeout)
+{
+  {
+    AutoLock al(&m_queueLock);
+    if (!m_started) {
+      return true;
+    }
+  }
+  return WaitForSingleObject(m_finished, timeout) == WAIT_OBJECT_0;
 }
 
 void InputEventSender::postKeyEvent(bool downFlag, UINT32 key)
@@ -83,18 +112,23 @@ void InputEventSender::push(const Event &event)
     if (m_closed) {
       return;
     }
-    // Merge a pointer move into the queued one only if that one is the very
-    // last queued event (so the order relative to keys is untouched) and the
-    // button mask is identical and has no wheel bits.
-    if (event.type == POINTER && !m_queue.empty()) {
-      Event &last = m_queue.back();
-      if (last.type == POINTER && last.buttonMask == event.buttonMask &&
-          (event.buttonMask & WHEEL_BITS) == 0) {
-        last.position = event.position;
-        return;
+    Event queued = event;
+    if (queued.type == POINTER) {
+      queued.pointerMove = queued.buttonMask == m_lastButtonMask &&
+                           (queued.buttonMask & WHEEL_BITS) == 0;
+      m_lastButtonMask = queued.buttonMask;
+      // A button transition must retain its original position. Only a pair
+      // of pure moves can be merged, and only across no intervening event.
+      if (queued.pointerMove && !m_queue.empty()) {
+        Event &last = m_queue.back();
+        if (last.type == POINTER && last.pointerMove &&
+            last.buttonMask == queued.buttonMask) {
+          last.position = queued.position;
+          return;
+        }
       }
     }
-    m_queue.push_back(event);
+    m_queue.push_back(queued);
   }
   m_eventQueued.notify();
 }
@@ -184,6 +218,7 @@ void InputEventSender::execute()
       }
     }
   }
+  SetEvent(m_finished);
 }
 
 void InputEventSender::onTerminate()

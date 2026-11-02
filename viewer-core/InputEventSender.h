@@ -12,6 +12,9 @@
 // the socket.
 //
 
+// Modified for FarSightVNC on 2026-11-02: preserve pointer transitions and
+// provide a bounded wait for the sender to drain during shutdown.
+
 #ifndef _INPUT_EVENT_SENDER_H_
 #define _INPUT_EVENT_SENDER_H_
 
@@ -63,6 +66,10 @@ public:
   // Sets the output gate and starts the thread. Call once.
   void setOutput(RfbOutputGate *output);
 
+  // Call after terminate(). Waits for sender completion, including failed flushes.
+  // A never-started sender is already complete. Repeated waits are supported.
+  bool waitForDrain(DWORD timeout);
+
   void postKeyEvent(bool downFlag, UINT32 key);
   void postPointerEvent(UINT8 buttonMask, const Point *position);
   void postCutText(const StringStorage *cutText, bool utf8);
@@ -76,12 +83,13 @@ private:
 
   struct Event
   {
-    Event() : type(KEY), downFlag(false), key(0), buttonMask(0), utf8(false) {}
+    Event() : type(KEY), downFlag(false), key(0), buttonMask(0), pointerMove(false), utf8(false) {}
 
     EventType type;
     bool downFlag;      // KEY
     UINT32 key;         // KEY
     UINT8 buttonMask;   // POINTER
+    bool pointerMove;  // POINTER: no button transition or wheel tick
     Point position;     // POINTER
     StringStorage text; // CUT_TEXT
     bool utf8;          // CUT_TEXT
@@ -97,11 +105,14 @@ private:
 
   RfbOutputGate *m_output;
 
-  // Protects m_queue and m_closed. Never held while writing to the socket.
+  // Protects queue state and m_started. Never held while writing to the socket.
   LocalMutex m_queueLock;
   std::deque<Event> m_queue;
   bool m_closed;
+  UINT8 m_lastButtonMask;
+  bool m_started;
   WindowsEvent m_eventQueued;
+  HANDLE m_finished; // manual-reset: completion remains observable after a wait
 };
 
 #endif

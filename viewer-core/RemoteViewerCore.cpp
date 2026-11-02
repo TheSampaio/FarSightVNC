@@ -23,7 +23,8 @@
 //
 // Modified for FarSightVNC on 2026-11-01: client input events (keyboard,
 // pointer, cut text) are queued and written by a dedicated thread
-// (InputEventSender) instead of the UI thread.
+// (InputEventSender) instead of the UI thread; stop() waits briefly for
+// queued key releases before closing the connection (2026-11-02).
 //
 
 #include "RemoteViewerCore.h"
@@ -263,11 +264,13 @@ void RemoteViewerCore::onInputSendFailed(const TCHAR *message)
 
 void RemoteViewerCore::stop()
 {
-  // Terminate the input sender before closing the socket, so that a write
-  // aborted by the close is not reported as a failure.
+  // Modified for FarSightVNC on 2026-11-02: allow queued releases to drain,
+  // with a bounded wait so a stalled peer cannot hold the UI indefinitely.
   m_inputSender.terminate();
   m_updateRequestSender.terminate();
-
+  if (!m_inputSender.waitForDrain(250)) {
+    m_logWriter.debug(_T("Input drain timed out; closing the connection"));
+  }
   m_tcpConnection.close();
   m_fbUpdateNotifier.terminate();
   terminate();

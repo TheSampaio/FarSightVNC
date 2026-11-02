@@ -17,6 +17,9 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //
 
+// Modified for FarSightVNC on 2026-11-02: cover pointer transition positions,
+// bounded shutdown waits and fail-fast watchdogs without detached threads.
+
 // Deterministic test for InputEventSender (the input queue that moves the
 // socket writes of key, pointer and cut text messages off the UI thread). No
 // network and no desktop input is involved: the RfbOutputGate writes to an
@@ -24,15 +27,19 @@
 // RFB messages that reach it are parsed back and compared.
 
 #include "viewer-core/InputEventSender.h"
+#include "viewer-core/TcpConnection.h"
+#include "network/socket/SocketIPv4.h"
 #include "network/RfbOutputGate.h"
 #include "io-lib/OutputStream.h"
 #include "log-writer/LogWriter.h"
 #include "util/Exception.h"
 
+#include <stdlib.h>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <mutex>
+#include <memory>
 #include <stdio.h>
 #include <string>
 #include <thread>
@@ -251,7 +258,7 @@ void postCut(InputEventSender &s, const TCHAR *text, bool utf8)
 }
 
 // Runs fn on a helper thread and reports whether it finished within timeoutMs.
-// A hang is reported as a failure instead of blocking the test run.
+// A timeout ends this test process: no helper may outlive its captured state.
 template <class F>
 bool finishesWithin(F fn, int timeoutMs)
 {
@@ -264,8 +271,10 @@ bool finishesWithin(F fn, int timeoutMs)
     t.join();
     return true;
   }
-  t.detach();
-  return false;
+  fprintf(stderr, "FAIL: test watchdog expired after %d ms\n", timeoutMs);
+  fflush(stderr);
+  TerminateProcess(GetCurrentProcess(), 2);
+  abort();
 }
 
 //----------------------------------------------------------------------------
@@ -327,7 +336,11 @@ void testPointerMerge()
   f.sender.postKeyEvent(true, 0x41);
   postPointer(f.sender, 0, 3, 3);   // a key lies between: no merge
   postPointer(f.sender, 1, 4, 4);   // different mask: no merge
-  postPointer(f.sender, 1, 5, 5);   // merges
+  postPointer(f.sender, 1, 45, 45); // first drag move: keep the down position
+  postPointer(f.sender, 1, 5, 5);   // merges with the preceding move only
+  postPointer(f.sender, 0, 10, 10); // release: retain this position
+  postPointer(f.sender, 0, 11, 11); // first move after release
+  postPointer(f.sender, 0, 12, 12); // merge moves only
   postPointer(f.sender, 8, 6, 6);   // wheel tick
   postPointer(f.sender, 8, 7, 7);   // wheel tick: never merged
   postPointer(f.sender, 0x20, 8, 8);  // horizontal wheel
@@ -339,7 +352,10 @@ void testPointerMerge()
   expected.push_back(ptr(0, 2, 2));
   expected.push_back(key(true, 0x41));
   expected.push_back(ptr(0, 3, 3));
+  expected.push_back(ptr(1, 4, 4));
   expected.push_back(ptr(1, 5, 5));
+  expected.push_back(ptr(0, 10, 10));
+  expected.push_back(ptr(0, 12, 12));
   expected.push_back(ptr(8, 6, 6));
   expected.push_back(ptr(8, 7, 7));
   expected.push_back(ptr(0x20, 8, 8));
@@ -444,6 +460,141 @@ void testFailureDuringTerminate()
   check(f.handler.calls == 0, "terminate+close: aborted write is not reported as failure");
 }
 
+void testBoundedDrain()
+{
+  Fixture notStarted;
+  notStarted.sender.terminate();
+  check(notStarted.sender.waitForDrain(0), "drain: never-started sender is complete");
+
+  Fixture empty;
+  empty.sender.setOutput(&empty.gate);
+  empty.sender.terminate();
+  check(empty.sender.waitForDrain(5000), "drain: empty sender completes");
+  check(empty.sender.waitForDrain(0), "drain: completion remains signaled");
+  empty.sender.wait();
+
+  Fixture blocked;
+  blocked.stream.setBlocked(true);
+  blocked.sender.postKeyEvent(true, 0x41);
+  blocked.sender.postKeyEvent(false, 0x41);
+  blocked.sender.setOutput(&blocked.gate);
+  blocked.sender.terminate();
+  check(!blocked.sender.waitForDrain(20), "drain: blocked socket times out");
+  blocked.stream.setBlocked(false);
+  check(blocked.sender.waitForDrain(5000), "drain: sender completes after socket unblocks");
+  blocked.sender.wait();
+  std::vector<Msg> expected;
+  expected.push_back(key(true, 0x41));
+  expected.push_back(key(false, 0x41));
+  check(parse(blocked.stream.data()) == expected, "drain: timeout does not discard queued releases");
+}
+
+// Real TCP regression: closing either kind of TcpConnection (outbound or an
+// accepted reverse connection) must end a blocked protocol read once the peer
+// answers the FIN.
+void checkConnectionClose(TcpConnection &connection, SocketIPv4 &peer,
+                          const char *scenario)
+{
+  const char marker = 'q';
+  if (peer.send(&marker, 1) != 1) {
+    fprintf(stderr, "FAIL: loopback marker could not be sent (%s)\n", scenario);
+    fflush(stderr);
+    TerminateProcess(GetCurrentProcess(), 2);
+    abort();
+  }
+  std::atomic<bool> entered(false);
+  std::atomic<bool> finished(false);
+  std::atomic<bool> interrupted(false);
+  std::atomic<bool> markerRead(false);
+  std::thread reader([&] {
+    try {
+      markerRead = connection.getInput()->readUInt8() == marker;
+      entered = true;
+      connection.getInput()->readUInt8();
+    } catch (const Exception &) {
+      interrupted = true;
+      entered = true;
+    }
+    finished = true;
+  });
+  finishesWithin([&] {
+    while (!entered) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+  }, 5000);
+  std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  check(markerRead && !finished, "TCP close: reader blocks while peer stays connected");
+  connection.close();
+  // close() is a Winsock shutdown(SD_BOTH): it sends a FIN, but a recv that is
+  // already pending only completes once the peer answers it (observed on
+  // Windows 11; the real server closes its end when it sees the FIN). Play
+  // that part of the peer, then the blocked read must end.
+  bool peerSawFin = false;
+  finishesWithin([&] {
+    try {
+      char c;
+      peer.recv(&c, 1);
+    } catch (const Exception &) {
+      peerSawFin = true;
+    }
+  }, 5000);
+  check(peerSawFin, "TCP close: peer observes the end of stream");
+  try {
+    peer.shutdown(SD_BOTH);
+  } catch (const Exception &) {
+  }
+  finishesWithin([&] { reader.join(); }, 5000);
+  if (!interrupted) {
+    fprintf(stderr, "FAIL: blocked read did not report EOF/error (%s)\n", scenario);
+  }
+  check(interrupted, scenario);
+}
+
+void testTcpConnectionClose()
+{
+  // SocketIPv4 owns WsaStartup. Never listen on wildcard addresses or port 5900.
+  SocketIPv4 listener;
+  try {
+    listener.setExclusiveAddrUse();
+    listener.bind(_T("127.0.0.1"), 5923);
+    listener.listen(2);
+  } catch (const Exception &) {
+    fprintf(stderr, "FAIL: cannot exclusively bind/listen on 127.0.0.1:5923; aborting\n");
+    fflush(stderr);
+    TerminateProcess(GetCurrentProcess(), 2);
+    abort();
+  }
+
+  LogWriter log(0);
+  try {
+    {
+      SocketIPv4 peer;
+      peer.connect(_T("127.0.0.1"), 5923);
+      std::unique_ptr<SocketIPv4> accepted(listener.accept());
+      {
+        TcpConnection connection(&log);
+        connection.bind(accepted.get());
+        connection.connect();
+        checkConnectionClose(connection, peer,
+                             "TCP close: accepted reverse connection interrupts blocked read");
+      } // TcpConnection does not own accepted; destroy its gates first.
+    }
+    {
+      TcpConnection connection(&log);
+      connection.bind(_T("127.0.0.1"), 5923);
+      connection.connect();
+      std::unique_ptr<SocketIPv4> peer(listener.accept());
+      checkConnectionClose(connection, *peer,
+                           "TCP close: outbound connection interrupts blocked read");
+    }
+  } catch (const Exception &) {
+    fprintf(stderr, "FAIL: TCP close regression setup failed on 127.0.0.1:5923\n");
+    fflush(stderr);
+    TerminateProcess(GetCurrentProcess(), 2);
+    abort();
+  }
+}
+
 void testDestructorWithoutStart()
 {
   bool ok = finishesWithin([] {
@@ -524,17 +675,24 @@ void testCutTextUtf8()
 
 int main()
 {
-  testFifoMixed();
-  testPressReleasePairing();
-  testPointerMerge();
-  testPostsDoNotBlockOnStalledSocket();
-  testReleaseNotLostOnTerminate();
-  testWriteFailure();
-  testFailureDuringTerminate();
-  testDestructorWithoutStart();
-  testDestructorWhileRunning();
-  testConcurrentProducers();
-  testCutTextUtf8();
+  setvbuf(stdout, NULL, _IONBF, 0); // keep results visible if a watchdog ends the process
+  // The name is printed before each scenario so a watchdog exit shows which
+  // one was running.
+#define RUN_TEST(t) (printf("RUN " #t "\n"), t())
+  RUN_TEST(testFifoMixed);
+  RUN_TEST(testPressReleasePairing);
+  RUN_TEST(testPointerMerge);
+  RUN_TEST(testPostsDoNotBlockOnStalledSocket);
+  RUN_TEST(testReleaseNotLostOnTerminate);
+  RUN_TEST(testWriteFailure);
+  RUN_TEST(testFailureDuringTerminate);
+  RUN_TEST(testBoundedDrain);
+  RUN_TEST(testTcpConnectionClose);
+  RUN_TEST(testDestructorWithoutStart);
+  RUN_TEST(testDestructorWhileRunning);
+  RUN_TEST(testConcurrentProducers);
+  RUN_TEST(testCutTextUtf8);
+#undef RUN_TEST
   printf("viewer-input-queue-test: %d passed, %d failed\n", g_passed, g_failed);
   return g_failed == 0 ? 0 : 1;
 }

@@ -22,7 +22,8 @@
 //-------------------------------------------------------------------------
 //
 // Modified for FarSightVNC on 2026-11-01: TCP_NODELAY is now enabled for
-// every viewer socket, including sockets accepted in listening mode.
+// every viewer socket, including sockets accepted in listening mode;
+// close() also shuts down accepted sockets (2026-11-02).
 //
 
 #include "thread/AutoLock.h"
@@ -141,10 +142,10 @@ void TcpConnection::connect()
 
 void TcpConnection::close()
 {
-  if (!m_host.isEmpty() && m_port != 0) {
-    if (m_socketStream != 0) {
-      m_socketStream->close();
-    }
+  // Modified for FarSightVNC on 2026-11-02: accepted reverse connections
+  // also need shutdown to unblock protocol reads and queued writes.
+  if (m_socketStream != 0) {
+    m_socketStream->close();
   }
 }
 
