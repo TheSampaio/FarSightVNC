@@ -36,6 +36,8 @@ param(
   [int]$Rects = 0,
   [double]$MaxFps = 0,
   [int]$Port = 5931,
+  # Extra command line arguments per viewer name, e.g. @{ gpu = @('-renderer=gpu') }.
+  [System.Collections.IDictionary]$ViewerArgs = @{},
   [int]$Repetitions = 3,
   [int]$DurationSeconds = 15,
   [int]$WarmupSeconds = 3,
@@ -102,8 +104,9 @@ function Invoke-Run([string]$viewerName, [string]$viewerPath, [string]$mode, [in
     Wait-LogLine $serverLog 'LISTENING' 10
 
     $scaleArg = if ($mode -eq 'fit') { '-scale=auto' } else { '-scale=100' }
-    $viewer = Start-Process -FilePath $viewerPath -PassThru -ArgumentList @(
-      '-host=127.0.0.1', "-port=$Port", $scaleArg, '-encoding=raw', '-showcontrols=no')
+    $extra = if ($ViewerArgs.Contains($viewerName)) { @($ViewerArgs[$viewerName]) } else { @() }
+    $viewer = Start-Process -FilePath $viewerPath -PassThru -ArgumentList (@(
+      '-host=127.0.0.1', "-port=$Port", $scaleArg, '-encoding=raw', '-showcontrols=no') + $extra)
     Wait-LogLine $serverLog 'ACTIVE' 20
 
     $probeArgs = @("`"$probeScript`"", '--pid', $viewer.Id, '--server-json', "`"$serverJson`"", '--size', $Size,
