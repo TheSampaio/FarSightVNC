@@ -51,6 +51,7 @@ DesktopWindow::DesktopWindow(LogWriter *logWriter, ConnectionConfig *conConf)
   m_rfbKeySym = std::auto_ptr<RfbKeySym>(new RfbKeySym(this, m_logWriter));
   if (RenderSettings::isGpuAllowed()) {
     m_gpu.reset(new GpuPresenter(m_logWriter));
+    m_gpu->warmUp();
   }
 }
 

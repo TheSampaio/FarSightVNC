@@ -75,12 +75,15 @@ struct GpuPresenter::Impl
     librariesTried(false), failures(0), disabled(false), maxBitmap(0),
     swapWindow(0), swapW(0), swapH(0),
     bitmapBits(0), bitmapW(0), bitmapH(0), bitmapFormat(DXGI_FORMAT_UNKNOWN),
+    warmThread(0), warmDone(0), warmLevel(D3D_FEATURE_LEVEL_10_0), warmHr(E_FAIL),
     fullUpload(true)
   {
   }
 
   ~Impl()
   {
+    finishWarmUp();
+    warmDevice.Reset();
     releaseDevice();
     if (d2d1Dll != 0) {
       FreeLibrary(d2d1Dll);
@@ -111,6 +114,69 @@ struct GpuPresenter::Impl
     return true;
   }
 
+  HRESULT createD3dDevice(ComPtr<ID3D11Device> *device, D3D_FEATURE_LEVEL *obtained)
+  {
+    const D3D_FEATURE_LEVEL levels[] = {
+      D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0,
+      D3D_FEATURE_LEVEL_10_1, D3D_FEATURE_LEVEL_10_0
+    };
+    HRESULT hr = createDevice(0, D3D_DRIVER_TYPE_HARDWARE, 0, D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+                              levels, 4, D3D11_SDK_VERSION, device->ReleaseAndGetAddressOf(),
+                              obtained, 0);
+    if (hr == E_INVALIDARG) {
+      // Older runtimes do not know feature level 11.1.
+      hr = createDevice(0, D3D_DRIVER_TYPE_HARDWARE, 0, D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+                        levels + 1, 3, D3D11_SDK_VERSION, device->ReleaseAndGetAddressOf(),
+                        obtained, 0);
+    }
+    return hr;
+  }
+
+  // Loading the libraries and creating the hardware device takes a few
+  // hundred milliseconds. Doing it on a worker thread, before the first frame,
+  // keeps the window thread (and its keyboard hook) responsive; until the
+  // worker is done GDI paints.
+  static DWORD WINAPI warmUpProc(LPVOID param)
+  {
+    Impl *self = static_cast<Impl *>(param);
+    self->warmHr = E_FAIL;
+    if (self->loadLibraries()) {
+      self->warmHr = self->createD3dDevice(&self->warmDevice, &self->warmLevel);
+    }
+    SetEvent(self->warmDone);
+    return 0;
+  }
+
+  void startWarmUp()
+  {
+    if (warmDone != 0 || ctx || librariesTried) {
+      return;
+    }
+    warmDone = CreateEvent(0, TRUE, FALSE, 0);
+    if (warmDone == 0) {
+      return;
+    }
+    warmThread = CreateThread(0, 0, warmUpProc, this, 0, 0);
+    if (warmThread == 0) {
+      CloseHandle(warmDone);
+      warmDone = 0;
+    }
+  }
+
+  // Joins the worker; its result stays in warmHr / warmDevice / warmLevel.
+  void finishWarmUp()
+  {
+    if (warmThread != 0) {
+      WaitForSingleObject(warmThread, INFINITE);
+      CloseHandle(warmThread);
+      warmThread = 0;
+    }
+    if (warmDone != 0) {
+      CloseHandle(warmDone);
+      warmDone = 0;
+    }
+  }
+
   // Every failure frees all GPU objects (so GDI can paint into the window) and
   // is counted; a repeated failure disables the GPU path for the session.
   void fail(const TCHAR *what, HRESULT hr)
@@ -129,22 +195,28 @@ struct GpuPresenter::Impl
     if (ctx) {
       return true;
     }
+    bool haveWarm = false;
+    if (warmDone != 0) {
+      if (WaitForSingleObject(warmDone, 0) != WAIT_OBJECT_0) {
+        return false; // still warming up: GDI paints this frame, not a failure
+      }
+      finishWarmUp();
+      haveWarm = true;
+    }
     if (!loadLibraries()) {
       disabled = true;
       return false;
     }
 
-    const D3D_FEATURE_LEVEL levels[] = {
-      D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0,
-      D3D_FEATURE_LEVEL_10_1, D3D_FEATURE_LEVEL_10_0
-    };
     D3D_FEATURE_LEVEL obtained = D3D_FEATURE_LEVEL_10_0;
-    HRESULT hr = createDevice(0, D3D_DRIVER_TYPE_HARDWARE, 0, D3D11_CREATE_DEVICE_BGRA_SUPPORT,
-                              levels, 4, D3D11_SDK_VERSION, &d3d, &obtained, 0);
-    if (hr == E_INVALIDARG) {
-      // Older runtimes do not know feature level 11.1.
-      hr = createDevice(0, D3D_DRIVER_TYPE_HARDWARE, 0, D3D11_CREATE_DEVICE_BGRA_SUPPORT,
-                        levels + 1, 3, D3D11_SDK_VERSION, &d3d, &obtained, 0);
+    HRESULT hr;
+    if (haveWarm) {
+      hr = warmHr;
+      d3d = warmDevice;
+      obtained = warmLevel;
+      warmDevice.Reset();
+    } else {
+      hr = createD3dDevice(&d3d, &obtained);
     }
     if (FAILED(hr)) {
       fail(_T("creating the Direct3D 11 device"), hr);
@@ -414,6 +486,14 @@ struct GpuPresenter::Impl
   int bitmapW, bitmapH;
   DXGI_FORMAT bitmapFormat;
 
+  // Background device creation (see startWarmUp). warmDone is signalled by the
+  // worker; its results may only be read after that.
+  HANDLE warmThread;
+  HANDLE warmDone;
+  ComPtr<ID3D11Device> warmDevice;
+  D3D_FEATURE_LEVEL warmLevel;
+  HRESULT warmHr;
+
   LocalMutex dirtyLock;
   Region dirty;
   bool fullUpload;
@@ -427,6 +507,11 @@ GpuPresenter::GpuPresenter(LogWriter *logWriter)
 GpuPresenter::~GpuPresenter()
 {
   delete m_impl;
+}
+
+void GpuPresenter::warmUp()
+{
+  m_impl->startWarmUp();
 }
 
 void GpuPresenter::markDirty(const Rect *rect)

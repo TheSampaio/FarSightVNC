@@ -63,6 +63,12 @@ public:
     unsigned redMax, greenMax, blueMax;
   };
 
+  // Optional, UI thread, call once before the first present(): loads the
+  // libraries and creates the hardware device on a worker thread. Until it has
+  // finished present() returns false (GDI paints), so the window thread never
+  // stalls for the several hundred milliseconds device creation can take.
+  void warmUp();
+
   // Tells that a rectangle of the DIB changed (thread safe).
   void markDirty(const Rect *rect);
 

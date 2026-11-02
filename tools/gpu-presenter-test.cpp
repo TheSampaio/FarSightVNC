@@ -88,7 +88,13 @@ void exercise(HWND window) {
   frame.redShift = 16; frame.greenShift = 8; frame.blueShift = 0;
   frame.redMax = frame.greenMax = frame.blueMax = 255;
   Rect source(0, 0, 65, 33), destination(24, 20, 284, 152);
+  LARGE_INTEGER t0, t1, freq;
+  QueryPerformanceFrequency(&freq);
+  QueryPerformanceCounter(&t0);
   bool shown = gpu.present(window, frame, source, destination);
+  QueryPerformanceCounter(&t1);
+  printf("INFO: first present (device creation included) took %.0f ms\n",
+         1000.0 * (t1.QuadPart - t0.QuadPart) / freq.QuadPart);
   check(shown, "initial GPU presentation on available hardware");
   if (!shown) return;
   check(displayedPixel(window, 100, 70, RGB(255, 0, 0)), "32-bit BGRA pixels");
@@ -128,6 +134,29 @@ void exercise(HWND window) {
   check(gdiFallback(window), "GDI remains usable after invalid frame");
   gpu.shutdown();
 }
+
+// Background device creation: present() must not block for it, must report
+// "GDI" while it runs and must start presenting once it has finished.
+void exerciseWarmUp(HWND window) {
+  LogWriter log(0);
+  GpuPresenter gpu(&log);
+  std::vector<unsigned> pixels(64 * 32, 0x00FF0000);
+  GpuPresenter::Frame frame = {};
+  frame.bits = &pixels[0]; frame.width = 64; frame.height = 32;
+  frame.stride = 64 * 4; frame.bitsPerPixel = 32;
+  frame.redShift = 16; frame.greenShift = 8; frame.blueShift = 0;
+  frame.redMax = frame.greenMax = frame.blueMax = 255;
+  Rect source(0, 0, 64, 32), destination(0, 0, 128, 64);
+  gpu.warmUp();
+  bool presented = false;
+  for (int attempt = 0; attempt < 200 && !presented; ++attempt) {
+    presented = gpu.present(window, frame, source, destination);
+    if (!presented) Sleep(25);
+  }
+  check(presented, "GPU presents after background device creation");
+  check(displayedPixel(window, 60, 30, RGB(255, 0, 0)), "content after background device creation");
+  gpu.shutdown();
+}
 }
 int main() {
   typedef BOOL (WINAPI *SetDpiAware)();
@@ -153,7 +182,7 @@ int main() {
     return 1;
   }
   pump();
-  try { exercise(window); }
+  try { exercise(window); exerciseWarmUp(window); }
   catch (...) { check(false, "unexpected exception"); }
   DestroyWindow(window);
   UnregisterClassW(cls.lpszClassName, instance);
