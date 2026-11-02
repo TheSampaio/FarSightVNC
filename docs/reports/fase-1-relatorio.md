@@ -81,3 +81,30 @@ dispatch, ToUnicodeEx com flags 0) e a camada ABNT2/US/US-Intl real:
 | H3 Shift direito como Shift_L | Sim | Shift direito (scan 0x36, VK_SHIFT genérico): `+ffe1 -ffe1` (Shift_L) em vez de Shift_R |
 | H5 foco perdido com tecla comum | Sim | `+61` sem release; com Shift: `+Shift_L +A -Shift_L` (A presa) |
 | H4 máscara de scancode | Só por leitura de código | `(scanCode & 0xf) << 16`: 0x73 vira 0x03, 0x36 vira 0x06. O código antigo ignorava o scancode, portanto era latente; seria fatal para a detecção do Shift direito (0x36) |
+
+### Validação das pendências
+
+- `viewer-keyboard-test`: 200 testes (188 + R1-R3), zero falhas em Release/Debug
+  x64/Win32. `tvnviewer` compila nas quatro configurações.
+- Teste ponta a ponta: `tools/keyboard-e2e-test.ps1` com
+  `tools/fake-rfb-keyrecorder.py` (RFB 3.8 sem autenticação, 127.0.0.1:5921, grava
+  KeyEvent). O `tvnviewer.exe` real conecta, a camada ABNT2 é pedida só para a
+  thread do viewer e as teclas entram por `PostMessage` de WM_KEYDOWN/WM_KEYUP
+  na janela do desktop do próprio viewer (mesmo caminho do hook em tela cheia), sem
+  SendInput. Resultado: 10 casos, zero falhas: `?` com Shift esquerdo e direito
+  nas duas ordens de release (`+ffe1/+ffe2 +3f ...`), Shift genérico com scan
+  0x36, autorepeat, Shift+a e dead acute + a (`+e1 -e1`); todo press tem release do
+  mesmo keysym. Nenhuma entrada de histórico foi deixada em
+  `HKCU\Software\TightVNC\Viewer\History`; todos os processos foram encerrados.
+
+### Continua não verificado
+
+- Hook `WH_KEYBOARD_LL` real sob carga e em tela cheia (o e2e posta mensagens,
+  não passa pelo hook; os testes do hook cobrem só as funções puras e a posse).
+- IME (japonês/chinês), VK_PROCESSKEY, AltGr com o Ctrl falso em hardware real.
+- Servidores de terceiros (somente o servidor falso e a leitura do protocolo).
+- Estado de teclado da thread após perda de foco (suspeita acima).
+- Windows anterior ao 10 1607 (bit 2 de ToUnicodeEx).
+- A emulação do loop antigo no fail-before reproduz H1, H3 e H5 e parte de H2; a
+  forma de H2 com mensagens do hook (sem modificadores no TranslateMessage) e H4
+  são só por leitura de código.
