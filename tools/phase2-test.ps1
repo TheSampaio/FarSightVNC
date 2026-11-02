@@ -29,6 +29,17 @@
       extended-mouse-buttons pseudo-encoding (-316) in SetEncodings.
   It also reports the viewer's DPI awareness and window DPI (INFO rows).
 
+  With -DisplayModes (FarSightVNC viewers only) the first scale of each size
+  also drives the viewer's own "Display" system-menu commands with
+  WM_SYSCOMMAND/WM_COMMAND posted to its windows and checks:
+    - the initial window lies inside the monitor work area (tall desktops),
+    - Fit to window (0xA830) and Original (0xA820) change the pointer model,
+    - "Fullscreen across all monitors" (0xA800) covers the virtual screen,
+      "Fullscreen on current monitor" (0xA810) covers the monitor while fullscreen,
+      and leaving fullscreen restores a captioned window.
+  The fullscreen steps briefly show a topmost window of the viewer and install
+  its keyboard hook for about a second.
+
   Coordinates are read and sent in the viewer window's own DPI context
   (SetThreadDpiAwarenessContext), so DPI-unaware viewers are handled.
 
@@ -52,6 +63,7 @@ param(
   [int]$Port = 5932,
   [string[]]$Sizes = @('1920x1080', '1080x1920'),
   [string[]]$Scales = @('100', '50', 'auto'),
+  [switch]$DisplayModes,
   [int]$ConnectTimeoutSeconds = 25,
   [string]$WorkDir = (Join-Path $env:TEMP 'farsightvnc-phase2')
 )
@@ -84,6 +96,10 @@ public static class FsvNative
   [DllImport("user32.dll")] static extern bool GetClientRect(IntPtr h, out RECT r);
   [DllImport("user32.dll")] static extern bool ClientToScreen(IntPtr h, ref POINT p);
   [DllImport("user32.dll")] static extern bool PostMessage(IntPtr h, uint m, IntPtr w, IntPtr l);
+  [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h, out RECT r);
+  [DllImport("user32.dll")] static extern int GetWindowLong(IntPtr h, int index);
+  [DllImport("user32.dll")] static extern bool SystemParametersInfo(uint action, uint param, out RECT r, uint flags);
+  [DllImport("user32.dll")] static extern int GetSystemMetrics(int index);
   [DllImport("user32.dll")] static extern IntPtr GetWindowDpiAwarenessContext(IntPtr h);
   [DllImport("user32.dll")] static extern int GetAwarenessFromDpiAwarenessContext(IntPtr c);
   [DllImport("user32.dll")] static extern bool AreDpiAwarenessContextsEqual(IntPtr a, IntPtr b);
@@ -136,6 +152,31 @@ public static class FsvNative
     try { POINT p; p.X = x; p.Y = y; ClientToScreen(h, ref p); return new int[] { p.X, p.Y }; }
     finally { if (old != IntPtr.Zero) SetThreadDpiAwarenessContext(old); }
   }
+
+  // Window rectangle L,T,R,B and style in the window's own DPI context.
+  public static int[] WindowRect(IntPtr h)
+  {
+    IntPtr old = SetThreadDpiAwarenessContext(GetWindowDpiAwarenessContext(h));
+    try { RECT r; GetWindowRect(h, out r); return new int[] { r.L, r.T, r.R, r.B }; }
+    finally { if (old != IntPtr.Zero) SetThreadDpiAwarenessContext(old); }
+  }
+
+  public static int[] WorkArea(IntPtr h)
+  {
+    IntPtr old = SetThreadDpiAwarenessContext(GetWindowDpiAwarenessContext(h));
+    try { RECT r; SystemParametersInfo(0x30, 0, out r, 0); return new int[] { r.L, r.T, r.R, r.B }; }
+    finally { if (old != IntPtr.Zero) SetThreadDpiAwarenessContext(old); }
+  }
+
+  // Virtual screen L,T,R,B (SM_*VIRTUALSCREEN) in the window's own DPI context.
+  public static int[] VirtualScreen(IntPtr h)
+  {
+    IntPtr old = SetThreadDpiAwarenessContext(GetWindowDpiAwarenessContext(h));
+    try { int l = GetSystemMetrics(76), t = GetSystemMetrics(77); return new int[] { l, t, l + GetSystemMetrics(78), t + GetSystemMetrics(79) }; }
+    finally { if (old != IntPtr.Zero) SetThreadDpiAwarenessContext(old); }
+  }
+
+  public static long Style(IntPtr h, int index) { return (uint)GetWindowLong(h, index); }
 
   public static bool Post(IntPtr h, uint msg, long w, long l)
   {
@@ -253,6 +294,76 @@ function Test-Sequence([string]$size, [string]$scale, [string]$name, [int[]]$exp
   $actual = @($events | Where-Object { $_ } | ForEach-Object { [int]$_.mask })
   $ok = ($actual -join ',') -eq ($expectedMasks -join ',')
   Add-Result $size $scale $name ($expectedMasks -join ',') $(if ($actual.Count) { $actual -join ',' } else { 'no events' }) $(if ($ok) { 'PASS' } else { 'FAIL' })
+}
+
+# Pointer corners for the current window state. $mode is '100' or 'auto'.
+function Test-Corners([string]$size, [string]$label, $child, [int]$w, [int]$h, [string]$mode) {
+  Start-Sleep -Milliseconds 1500
+  $cs = [FsvNative]::ClientSize($child)
+  if ($mode -eq 'auto') {
+    if ($cs[0] * $h -le $cs[1] * $w) { $num = $cs[0]; $den = $w } else { $num = $cs[1]; $den = $h }
+  } else { $num = 100; $den = 100 }
+  $ax = Get-Axis $cs[0] $w $num $den
+  $ay = Get-Axis $cs[1] $h $num $den
+  $tol = if ($num -eq $den) { 0 } else { [int][math]::Max(1, [math]::Ceiling($den / [double]$num)) }
+  $mx = $ax.First + [int][math]::Floor(($ax.Last - $ax.First) / 2)
+  $my = $ay.First + [int][math]::Floor(($ay.Last - $ay.First) / 2)
+  Test-Point $size $label "$label mid" $child $ax $ay $mx $my (Get-Expected $ax $mx) (Get-Expected $ay $my) ([math]::Max($tol, 1))
+  Test-Point $size $label "$label top-left" $child $ax $ay $ax.First $ay.First 0 0 $tol
+  $elx = if ($ax.Fits) { $w - 1 } else { Get-Expected $ax $ax.Last }
+  $ely = if ($ay.Fits) { $h - 1 } else { Get-Expected $ay $ay.Last }
+  Test-Point $size $label "$label bottom-right" $child $ax $ay $ax.Last $ay.Last $elx $ely $tol
+}
+
+# Waits until the window caption state is the expected one (the viewer changes the
+# style asynchronously and may be slow right after start-up).
+function Wait-Caption($wnd, [bool]$expected, [int]$seconds = 10) {
+  $deadline = (Get-Date).AddSeconds($seconds)
+  do {
+    $has = ([FsvNative]::Style($wnd, -16) -band 0xC00000) -eq 0xC00000
+    if ($has -eq $expected) { break }
+    Start-Sleep -Milliseconds 200
+  } while ((Get-Date) -lt $deadline)
+  Start-Sleep -Milliseconds 700
+}
+
+# Drives the Display menu commands of the viewer (see .DESCRIPTION).
+function Test-DisplayModes([string]$size, $mainWnd, $child, [int]$w, [int]$h) {
+  $tag = 'display'
+  # Initial placement: the frame may extend by the invisible resize border (up to 16 px).
+  $wa = [FsvNative]::WorkArea($mainWnd); $wr = [FsvNative]::WindowRect($mainWnd)
+  $inside = ($wr[0] -ge $wa[0] - 16) -and ($wr[1] -ge $wa[1] - 16) -and ($wr[2] -le $wa[2] + 16) -and ($wr[3] -le $wa[3] + 16)
+  Add-Result $size $tag 'initial window inside work area' "work=$($wa -join ',') (+/-16)" "window=$($wr -join ',')" $(if ($inside) { 'PASS' } else { 'FAIL' })
+
+  [void][FsvNative]::Post($mainWnd, 0x112, 0xA830, 0)       # WM_SYSCOMMAND: Fit to window
+  Test-Corners $size 'Fit to window' $child $w $h 'auto'
+  [void][FsvNative]::Post($mainWnd, 0x112, 0xA820, 0)       # Original (100%)
+  Test-Corners $size 'Original' $child $w $h '100'
+
+  $vs = [FsvNative]::VirtualScreen($mainWnd)
+  foreach ($fs in @(@('Fullscreen across all monitors', 0xA800), @('Fullscreen on current monitor', 0xA810))) {
+    [void][FsvNative]::Post($mainWnd, 0x112, $fs[1], 0)
+    Wait-Caption $mainWnd $false
+    $others = @([FsvNative]::TopWindows([uint32]$viewerProc.Id) | ForEach-Object { [FsvNative]::ClassName($_) + '=' + (([FsvNative]::WindowRect($_)) -join ',') })
+    Add-Result $size $tag "$($fs[0]) visible windows" 'info' ($others -join ' ; ') 'INFO'
+    $wr = [FsvNative]::WindowRect($mainWnd)
+    $style = [FsvNative]::Style($mainWnd, -16)
+    $caption = ($style -band 0xC00000) -ne 0
+    if ($fs[1] -eq 0xA800) {
+      $ok = ($wr -join ',') -eq ($vs -join ',')
+      Add-Result $size $tag $fs[0] "window = virtual screen $($vs -join ',')" "window=$($wr -join ',') caption=$caption" $(if ($ok -and -not $caption) { 'PASS' } else { 'FAIL' })
+    } else {
+      $mon = ($wr[2] - $wr[0] -le $vs[2] - $vs[0]) -and ($wr[0] -ge $vs[0]) -and ($wr[2] -le $vs[2])
+      Add-Result $size $tag $fs[0] "window inside virtual screen, no caption" "window=$($wr -join ',') caption=$caption" $(if ($mon -and -not $caption) { 'PASS' } else { 'FAIL' })
+    }
+    Test-Corners $size $fs[0] $child $w $h '100'
+    [void][FsvNative]::Post($mainWnd, 0x111, 215, 0)         # WM_COMMAND IDS_TB_FULLSCREEN: leave fullscreen
+    Wait-Caption $mainWnd $true
+    $style = [FsvNative]::Style($mainWnd, -16)
+    $caption = ($style -band 0xC00000) -eq 0xC00000
+    $wr = [FsvNative]::WindowRect($mainWnd)
+    Add-Result $size $tag "leave $($fs[0])" 'captioned window restored' "style caption=$caption window=$($wr -join ',')" $(if ($caption) { 'PASS' } else { 'FAIL' })
+  }
 }
 
 # --- main ------------------------------------------------------------------
@@ -376,6 +487,9 @@ try {
           $bad = @($masks | Where-Object { $_ -ne 0 })
           Add-Result $size $scale 'X1/X2 send no undefined mask bits' 'all masks 0 (no ext encoding)' $(if ($masks.Count) { "masks: $($masks -join ',')" } else { 'no events' }) $(if ($bad.Count -eq 0) { 'PASS' } else { 'FAIL' })
         }
+        if ($DisplayModes -and $scale -eq $Scales[0]) {
+          Test-DisplayModes $size $mainWnd $child $w $h
+        }
       } finally {
         if ($viewerProc) { Stop-Process -Id $viewerProc.Id -Force -ErrorAction SilentlyContinue; $viewerProc.WaitForExit(3000) | Out-Null }
         Wait-Log { $_.event -eq 'disconnected' } 5 | Out-Null
@@ -398,5 +512,6 @@ try {
 Write-Host "Viewer under test: $Viewer"
 $results | Format-Table Size, Scale, Check, Expected, Actual, Result -AutoSize -Wrap | Out-String -Width 250 | Write-Host
 $fail = @($results | Where-Object Result -eq 'FAIL')
+foreach ($f in $fail) { Write-Host ("FAIL: {0} {1} | {2} | expected {3} | actual {4}" -f $f.Size, $f.Scale, $f.Check, $f.Expected, $f.Actual) }
 Write-Host ("PASS: {0}  FAIL: {1}" -f @($results | Where-Object Result -eq 'PASS').Count, $fail.Count)
 if ($fail.Count -gt 0) { exit 1 }
