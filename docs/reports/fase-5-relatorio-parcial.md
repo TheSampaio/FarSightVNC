@@ -41,4 +41,4 @@
 1. Refazer as verificações do zlib, compilar as 4 configurações e o `tightvnc2017.sln` em Release|x64, atualizar `MODIFICATIONS.md` e commitar.
 2. Fuzzing com servidor RFB falso (Tight, ZRLE, Hextile, RRE e mensagens malformadas). Não use `tools/test-server.ps1` nem `HKCU\Software\TightVNC\Server`, compartilhados com outras sessões; use porta própria.
 3. Teste de sessão longa (memória e handles) reutilizando o servidor falso.
-4. Integrar `develop`, que já avançou com a Fase 1 (`8307444`). O plano também espera um Codex assumir o restante, mas esse handoff **não foi feito**.
+4. Integrar `develop`, que já avançou com a Fase 1 (`8307444`). O dono pediu que o Codex assumisse o restante, mas esse handoff **não foi feito**.
