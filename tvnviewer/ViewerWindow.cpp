@@ -1141,14 +1141,16 @@ Rect ViewerWindow::calculateDefaultSize()
   int serverWidth = viewerRect.getWidth();
   int serverHeight = viewerRect.getHeight();
 
-  if (serverWidth < widthDesktop && serverHeight < heightDesktop) {
-    int borderWidth, borderHeight;
-    getBorderSize(&borderWidth, &borderHeight);
-    int totalWidth     = serverWidth  + borderWidth;
-    int totalHeight    = serverHeight + borderHeight + 1;
-    if (m_toolbar.isVisible()) {
-      totalHeight += m_toolbar.getHeight();
-    }
+  int borderWidth, borderHeight;
+  getBorderSize(&borderWidth, &borderHeight);
+  int totalWidth     = serverWidth  + borderWidth;
+  int totalHeight    = serverHeight + borderHeight + 1;
+  if (m_toolbar.isVisible()) {
+    totalHeight += m_toolbar.getHeight();
+  }
+  // The whole window (frame and toolbar included) must fit in the work area,
+  // otherwise tall desktops would be placed partly outside of the screen.
+  if (totalWidth <= widthDesktop && totalHeight <= heightDesktop) {
     defaultRect.setHeight(totalHeight);
     defaultRect.setWidth(totalWidth);
     defaultRect.move((widthDesktop - totalWidth) / 2,
