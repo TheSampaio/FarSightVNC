@@ -23,10 +23,12 @@
 //
 // Modified for FarSightVNC on 2026-11-02: keyboard state kept in sync for hook-posted keys, also in view-only mode.
 // Modified for FarSightVNC on 2026-11-02: pointer mapping and drawing use the real server size, not the 4-aligned DIB.
+// Modified for FarSightVNC on 2026-11-02: optional Direct3D 11 / Direct2D presentation (GpuPresenter) with GDI as the automatic fallback.
 //
 
 #include "DesktopWindow.h"
 #include "win-system/WinHooks.h"
+#include "RenderSettings.h"
 
 DesktopWindow::DesktopWindow(LogWriter *logWriter, ConnectionConfig *conConf)
 : m_logWriter(logWriter),
@@ -47,6 +49,9 @@ DesktopWindow::DesktopWindow(LogWriter *logWriter, ConnectionConfig *conConf)
   m_isConnected(false)
 {
   m_rfbKeySym = std::auto_ptr<RfbKeySym>(new RfbKeySym(this, m_logWriter));
+  if (RenderSettings::isGpuAllowed()) {
+    m_gpu.reset(new GpuPresenter(m_logWriter));
+  }
 }
 
 DesktopWindow::~DesktopWindow()
@@ -344,6 +349,10 @@ void DesktopWindow::doDraw(DeviceContext *dc)
   int fbHeight = m_serverDimension.height;
 
   if (!fbWidth || !fbHeight) {
+    if (m_gpu.get() != 0) {
+      // GDI paints the empty desktop: the window must be free of the swap chain.
+      m_gpu->shutdown();
+    }
     Graphics graphics(dc);
 
     graphics.fillRect(m_clientArea.left, m_clientArea.top,
@@ -369,6 +378,30 @@ void DesktopWindow::doDraw(DeviceContext *dc)
   Rect src, dst;
   m_scManager.getSourceRect(&src);
   m_scManager.getDestinationRect(&dst);
+
+  // GPU path: the GPU scales the frame buffer into the window. When it can not
+  // (disabled, unsupported pixel format, device lost, ...) it returns false and
+  // the GDI code below paints the frame.
+  if (m_gpu.get() != 0 && !m_gpu->isDisabled()) {
+    GpuPresenter::Frame frame;
+    Dimension dim = m_framebuffer.getDimension();
+    PixelFormat pf = m_framebuffer.getPixelFormat();
+    frame.bits = m_framebuffer.getBuffer();
+    frame.width = dim.width;
+    frame.height = dim.height;
+    frame.stride = m_framebuffer.getBytesPerRow();
+    frame.bitsPerPixel = pf.bitsPerPixel;
+    frame.bigEndian = pf.bigEndian;
+    frame.redShift = pf.redShift;
+    frame.greenShift = pf.greenShift;
+    frame.blueShift = pf.blueShift;
+    frame.redMax = pf.redMax;
+    frame.greenMax = pf.greenMax;
+    frame.blueMax = pf.blueMax;
+    if (m_gpu->present(getHWnd(), frame, src, dst)) {
+      return;
+    }
+  }
 
   int iWidth = m_clientArea.getWidth() - dst.getWidth();
   int iHeight = m_clientArea.getHeight() - dst.getHeight();
@@ -513,6 +546,10 @@ bool DesktopWindow::onSize(WPARAM wParam, LPARAM lParam)
 
 bool DesktopWindow::onDestroy()
 {
+  if (m_gpu.get() != 0) {
+    // Release the swap chain while the window still exists.
+    m_gpu->shutdown();
+  }
   RemoveProp(getHWnd(), _T("FarSightVNC.RemoteKeyboard"));
   return true;
 }
@@ -533,6 +570,8 @@ void DesktopWindow::updateFramebuffer(const FrameBuffer *framebuffer,
     m_logWriter->error(_T("Possible invalide region. (%d, %d), (%d, %d)"),
                        dstRect->left, dstRect->top, dstRect->right, dstRect->bottom);
     m_logWriter->interror(_T("Error in updateFramebuffer (ViewerWindow)"));
+  } else if (m_gpu.get() != 0) {
+    m_gpu->markDirty(dstRect);
   }
   repaint(dstRect);
 }
@@ -552,6 +591,9 @@ void DesktopWindow::setNewFramebuffer(const FrameBuffer *framebuffer)
     AutoLock al(&m_bufferLock);
 
     m_serverDimension = dimension;
+    if (m_gpu.get() != 0) {
+      m_gpu->invalidateAll();
+    }
     if (!dimension.isEmpty()) {
       // the width and height should be aligned to 4
       int alignWidth = (dimension.width + 3) / 4;

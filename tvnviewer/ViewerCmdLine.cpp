@@ -21,10 +21,13 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-02: -renderer=gdi|auto|gpu option.
+//
 
 #include "ViewerCmdLine.h"
 #include "config-lib/IniFileSettingsManager.h"
 #include "win-system/SystemException.h"
+#include "RenderSettings.h"
 
 const TCHAR ViewerCmdLine::HELP[] = _T("help");
 const TCHAR ViewerCmdLine::HELP_SHORT[] = _T("h");
@@ -41,6 +44,7 @@ const TCHAR ViewerCmdLine::SHOW_CONTROLS[] = _T("showcontrols");
 const TCHAR ViewerCmdLine::VIEW_ONLY[] = _T("viewonly");
 const TCHAR ViewerCmdLine::USE_CLIPBOARD[] = _T("useclipboard");
 const TCHAR ViewerCmdLine::SCALE[] = _T("scale");
+const TCHAR ViewerCmdLine::RENDERER[] = _T("renderer");
 const TCHAR ViewerCmdLine::FULL_SCREEN[] = _T("fullscreen");
 const TCHAR ViewerCmdLine::WARN_FULL_SCREEN[] = _T("warnfullscr");
 const TCHAR ViewerCmdLine::ENCODING[] = _T("encoding");
@@ -115,6 +119,7 @@ void ViewerCmdLine::parse()
     VIEW_ONLY,
     USE_CLIPBOARD,
     SCALE,
+    RENDERER,
     FULL_SCREEN,
     WARN_FULL_SCREEN,
     ENCODING,
@@ -161,6 +166,7 @@ void ViewerCmdLine::parse()
   parseMouseShape();
   parseMouseCursor();
   parseScale();
+  parseRenderer();
   parseFullScreen();
   parseCompressionLevel();
   parseWarnFullScr();
@@ -392,6 +398,17 @@ void ViewerCmdLine::parseCopyRect()
       isCopyRect = true;
     }
     m_conConf->allowCopyRect(isCopyRect);
+  }
+}
+
+void ViewerCmdLine::parseRenderer()
+{
+  if (isPresent(RENDERER)) {
+    RenderSettings::Mode mode;
+    if (!RenderSettings::parse(m_options[RENDERER].getString(), &mode)) {
+      throw CommandLineFormatException(StringTable::getString(IDS_ERROR_COMMAND_LINE));
+    }
+    RenderSettings::setFromCommandLine(mode);
   }
 }
 
