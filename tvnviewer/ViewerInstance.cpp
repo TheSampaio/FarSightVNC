@@ -61,11 +61,8 @@ ViewerInstance::ViewerInstance(WindowsApplication *application,
 
 ViewerInstance::~ViewerInstance()
 {
-  if (m_socket != 0) {
-    m_socket->shutdown(SD_BOTH);
-    m_socket->close();
-  }
-
+  // Modified for FarSightVNC on 2026-11-02: let the core drain input before
+  // it shuts down outbound or accepted reverse sockets.
   m_viewerCore.stop();
   m_viewerCore.waitTermination();
 
