@@ -39,7 +39,8 @@ DesktopWindow::DesktopWindow(LogWriter *logWriter, ConnectionConfig *conConf)
   m_altDown(false),
   m_previousMousePos(-1, -1),
   m_previousMouseState(0),
-  m_isBackgroundDirty(false)
+  m_isBackgroundDirty(false),
+  m_isConnected(false)
 {
   m_rfbKeySym = std::auto_ptr<RfbKeySym>(new RfbKeySym(this, m_logWriter));
 }
@@ -233,7 +234,7 @@ bool DesktopWindow::onMouse(unsigned char mouseButtons, unsigned short wheelSpee
 
     // If posititon of mouse isn't change, then don't send event to server.
     if (buttons != m_previousMouseState || !pos.isEqualTo(&m_previousMousePos)) {
-      int wheelMask = MOUSE_WUP | MOUSE_WDOWN;
+      int wheelMask = MOUSE_WUP | MOUSE_WDOWN | MOUSE_WLEFT | MOUSE_WRIGHT;
 
       // Update previously position of mouse.
       m_previousMouseState = buttons & ~wheelMask;
@@ -345,8 +346,8 @@ void DesktopWindow::setClipboardData(const StringStorage * strText)
 void DesktopWindow::doDraw(DeviceContext *dc)
 {
   AutoLock al(&m_bufferLock);
-  int fbWidth  = m_framebuffer.getDimension().width;
-  int fbHeight = m_framebuffer.getDimension().height;
+  int fbWidth  = m_serverDimension.width;
+  int fbHeight = m_serverDimension.height;
 
   if (!fbWidth || !fbHeight) {
     Graphics graphics(dc);
@@ -566,7 +567,7 @@ void DesktopWindow::setNewFramebuffer(const FrameBuffer *framebuffer)
                                   &framebuffer->getPixelFormat(),
                                   getHWnd());
       m_framebuffer.setColor(0, 0, 0);
-      m_scManager.setScreenResolution(dimension.width, dimension.height);
+      m_scManager.setScreenResolution(m_serverDimension.width, m_serverDimension.height);
     } else {
       // If size of remote frame buffer is (0, 0), then fill viewer.
       // Otherwise user might think that everything hangs.
@@ -636,6 +637,8 @@ POINTS DesktopWindow::getViewerCoord(long xPos, long yPos)
     return p;
   }
   p = m_scManager.transformDispToScr(xPos, yPos);
+  p.x = static_cast<SHORT>(max(0, min((int)p.x, m_serverDimension.width - 1)));
+  p.y = static_cast<SHORT>(max(0, min((int)p.y, m_serverDimension.height - 1)));
   return p;
 }
 
@@ -645,8 +648,8 @@ Rect DesktopWindow::getViewerGeometry()
   viewerRect.setHeight(m_scManager.getVertPoints());
   viewerRect.setWidth(m_scManager.getHorzPoints());
   if (viewerRect.area() == 0) {
-    viewerRect.setWidth(m_framebuffer.getDimension().width);
-    viewerRect.setHeight(m_framebuffer.getDimension().height);
+    viewerRect.setWidth(m_serverDimension.width);
+    viewerRect.setHeight(m_serverDimension.height);
   }
   return viewerRect;
 }
@@ -654,7 +657,7 @@ Rect DesktopWindow::getViewerGeometry()
 Rect DesktopWindow::getFrameBufferGeometry()
 {
   AutoLock al(&m_bufferLock);
-  return m_framebuffer.getDimension().getRect();
+  return m_serverDimension.getRect();
 }
 
 void DesktopWindow::getServerGeometry(Rect *rect, int *pixelsize)

@@ -1,5 +1,6 @@
 // Copyright (C) 2011,2012 GlavSoft LLC.
 // All rights reserved.
+// Modified for FarSightVNC on 2026-11-02: phase 2 display/input corrections.
 //
 //-------------------------------------------------------------------------
 // This file is part of the TightVNC software.  Please visit our Web site:
@@ -104,6 +105,8 @@ public:
   static const int MOUSE_RDOWN  = 4;
   static const int MOUSE_WUP    = 8;
   static const int MOUSE_WDOWN  = 16;
+  static const int MOUSE_WLEFT  = 32;
+  static const int MOUSE_WRIGHT = 64;
 
 private:
   // This function may be implement in child class.

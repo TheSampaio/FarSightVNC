@@ -1,5 +1,6 @@
 // Copyright (C) 2012 GlavSoft LLC.
 // All rights reserved.
+// Modified for FarSightVNC on 2026-11-02: phase 2 display/input corrections.
 //
 //-------------------------------------------------------------------------
 // This file is part of the TightVNC software.  Please visit our Web site:
@@ -44,6 +45,9 @@ int ScaleManager::sDiv(int x, int y) const
 
 void ScaleManager::setScreenResolution(int maxWidth, int maxHeight)
 {
+  // Modified for FarSightVNC on 2026-11-01: reject empty geometry.
+  maxWidth = max(1, maxWidth);
+  maxHeight = max(1, maxHeight);
   m_scrWidth = maxWidth;
   m_scrHeight = maxHeight;
 
@@ -74,13 +78,15 @@ void ScaleManager::keepAspectRatio(Rect *rc) const
 
 void ScaleManager::setScale(int scale)
 {
-  m_scale = scale;
+  m_scale = scale == -1 ? -1 : max(1, scale);
   setStartPoint(m_xStart, m_yStart);
 }
 
 void ScaleManager::setWindow(Rect *rcWnd)
 {
   m_rcWindow = rcWnd;
+  m_rcWindow.setWidth(max(1, m_rcWindow.getWidth()));
+  m_rcWindow.setHeight(max(1, m_rcWindow.getHeight()));
   setStartPoint(m_xStart, m_yStart);
 }
 
@@ -92,7 +98,7 @@ Rect ScaleManager::calcScaled(const Rect *rcViewed, bool bCent)
   int scale = m_scale;
   int denomeratorScale = DEFAULT_SCALE_DENOMERATOR;
   if (m_scale == -1) {
-    if (m_rcWindow.getWidth() * m_scrHeight <= m_rcWindow.getHeight() * m_scrWidth) {
+    if (static_cast<__int64>(m_rcWindow.getWidth()) * m_scrHeight <= static_cast<__int64>(m_rcWindow.getHeight()) * m_scrWidth) {
       scale = m_rcWindow.getWidth();
       denomeratorScale = m_scrWidth;
     } else {
@@ -247,7 +253,7 @@ POINTS ScaleManager::transformDispToScr(int xPoint, int yPoint) const
   int scale = m_scale;
   int denomeratorScale = DEFAULT_SCALE_DENOMERATOR;
   if (m_scale == -1) {
-    if (m_rcWindow.getWidth() * m_scrHeight <= m_rcWindow.getHeight() * m_scrWidth) {
+    if (static_cast<__int64>(m_rcWindow.getWidth()) * m_scrHeight <= static_cast<__int64>(m_rcWindow.getHeight()) * m_scrWidth) {
       scale = m_rcWindow.getWidth();
       denomeratorScale = m_scrWidth;
     } else {

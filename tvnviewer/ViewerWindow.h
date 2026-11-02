@@ -21,6 +21,8 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-01: DPI changes, display modes and fullscreen monitor selection.
+//
 
 #ifndef _VIEWER_WINDOW_H_
 #define _VIEWER_WINDOW_H_
@@ -84,6 +86,7 @@ protected:
 
   bool onFsWarning();
   bool onSize(WPARAM wParam, LPARAM lParam);
+  bool onDpiChanged(WPARAM wParam, LPARAM lParam);
   bool onCreate(LPCREATESTRUCT lps);
   bool onCommand(WPARAM wParam, LPARAM lParam);
   bool onNotify(int idCtrl, LPNMHDR pnmh);
@@ -177,6 +180,11 @@ protected:
   bool m_stopped;
 private:
   vector<int> m_standardScale;
+  vector<HMONITOR> m_fullscreenMonitors;
+  HMONITOR m_fullscreenMonitor;
+  bool m_spanMonitors;
+  void addDisplayMenus();
+  static BOOL CALLBACK collectMonitor(HMONITOR monitor, HDC, LPRECT, LPARAM data);
   void changeCursor(int type);
   void applySettings();
   void setSizeFullScreenWindow();

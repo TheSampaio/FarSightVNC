@@ -18,3 +18,4 @@ TightVNC 2.8.90 source tree.
 | 2026-10-29 | `rfb/RfbKeySym.h` | Added missing `<string>` include. No behavior change. |
 | 2026-10-29 | `.gitignore`, `tools/*.ps1`, `docs/` | New files: build, test and measurement scripts and project documentation. |
 | 2026-11-01 | `rfb/RfbKeySym.*`, `win-system/WinHooks.*`, `tvnviewer/{DesktopWindow,TvnViewer,ViewerWindow}.cpp`, `viewer-keyboard-test/`, `tightvnc2017.sln` | Symmetric physical key tracking, ordered dead-key translation, hook focus/filtering, full focus release and deterministic keyboard regression harness. |
+| 2026-11-02 | `gui/{BaseWindow,ScrollBar,ToolBar,DpiUtils}.*`, GUI projects, viewer DPI manifest/project, `tvnviewer/{DesktopWindow,FileInfoListView,ScaleManager,ViewerWindow}.*`, `tools/{fake-rfb-server,phase2-test}.ps1` | Phase 2 review snapshot: per-monitor DPI, real framebuffer coordinates, horizontal wheel and display/fullscreen monitor controls. |

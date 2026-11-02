@@ -21,10 +21,11 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
-// Modified for FarSightVNC on 2026-11-01: hook-driven key routing in onHookProc.
+// Modified for FarSightVNC on 2026-11-01: ordered keyboard input, DPI and monitor selection.
 //
 
 #include "config-lib/IniFileSettingsManager.h"
+#include "gui/DpiUtils.h"
 #include "util/Exception.h"
 #include "util/ResourceLoader.h"
 #include "rfb/StandardPixelFormatFactory.h"
@@ -54,7 +55,9 @@ ViewerWindow::ViewerWindow(WindowsApplication *application,
   m_sizeIsChanged(false),
   m_hooksEnabledFirstTime(true),
   m_requiresReconnect(false),
-  m_stopped(false)
+  m_stopped(false),
+  m_fullscreenMonitor(0),
+  m_spanMonitors(false)
 {
   m_standardScale.push_back(10);
   m_standardScale.push_back(15);
@@ -122,8 +125,13 @@ bool ViewerWindow::onCreate(LPCREATESTRUCT lps)
   m_toolbar.setViewAutoButtons(11, ToolBar::TB_Style_sep);
   m_toolbar.setViewAutoButtons(15, ToolBar::TB_Style_sep);
   m_toolbar.attachToolBar(getHWnd());
+  UINT dpi = DpiUtils::getDpiForWindow(getHWnd());
+  if (dpi != DpiUtils::DEFAULT_DPI) {
+    m_toolbar.setDpi(dpi);
+  }
   m_menu.getSystemMenu(getHWnd());
   m_menu.loadMenu();
+  addDisplayMenus();
   applySettings();
 
   ViewerConfig *config = ViewerConfig::getInstance();
@@ -277,6 +285,8 @@ bool ViewerWindow::onMessage(UINT message, WPARAM wParam, LPARAM lParam)
     return onCreate((LPCREATESTRUCT) lParam);
   case WM_SIZE:
     return onSize(wParam, lParam);
+  case WM_DPICHANGED:
+    return onDpiChanged(wParam, lParam);
   case WM_USER_AUTH_ERROR:
     return onAuthError(wParam);
   case WM_USER_ERROR:
@@ -698,6 +708,30 @@ bool ViewerWindow::onCommand(WPARAM wParam, LPARAM lParam)
       wParam = transl;
     }
   }
+  UINT command = LOWORD(wParam);
+  if (command >= 0xA000 && command < 0xA800 && (command & 15) == 0) {
+    size_t index = (command - 0xA000) / 16;
+    if (index < m_fullscreenMonitors.size()) {
+      m_fullscreenMonitor = m_fullscreenMonitors[index];
+      m_spanMonitors = false;
+      if (m_isFullScr) { setSizeFullScreenWindow(); doSize(); }
+    }
+    return true;
+  }
+  if (command == 0xA800 || command == 0xA810) {
+    m_spanMonitors = command == 0xA800;
+    m_fullscreenMonitor = 0;
+    if (m_isFullScr) { setSizeFullScreenWindow(); doSize(); }
+    return true;
+  }
+  if (command == 0xA820) { commandScale100(); return true; }
+  if (command == 0xA830) {
+    m_conConf->fitWindow(true);
+    m_conConf->saveToStorage(&m_ccsm);
+    applySettings();
+    return true;
+  }
+  if (command == 0xA840) { dialogConnectionOptions(); return true; }
   switch(wParam) {
     case IDS_ABOUT_VIEWER:
       onAbout();
@@ -793,16 +827,21 @@ void ViewerWindow::applyScreenChanges(bool isFullScreen)
 
 void ViewerWindow::setSizeFullScreenWindow()
 {
-  // Save position of window.
-  GetWindowPlacement(m_hWnd, &m_workArea);
+  // Preserve the windowed placement while changing fullscreen monitors.
+  if (!m_isFullScr) GetWindowPlacement(m_hWnd, &m_workArea);
 
   // Get size of desktop.
-  HMONITOR hmon = MonitorFromWindow(m_hWnd, MONITOR_DEFAULTTONEAREST);
+  HMONITOR hmon = m_fullscreenMonitor ? m_fullscreenMonitor : MonitorFromWindow(m_hWnd, MONITOR_DEFAULTTONEAREST);
   MONITORINFO mi;
   mi.cbSize = sizeof(mi);
 
   RECT fullScreenWindowsRect;
-  if (!!GetMonitorInfo(hmon, &mi)) {
+  if (m_spanMonitors) {
+    fullScreenWindowsRect.left = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    fullScreenWindowsRect.top = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    fullScreenWindowsRect.right = fullScreenWindowsRect.left + GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    fullScreenWindowsRect.bottom = fullScreenWindowsRect.top + GetSystemMetrics(SM_CYVIRTUALSCREEN);
+  } else if (!!GetMonitorInfo(hmon, &mi)) {
     fullScreenWindowsRect = mi.rcMonitor;
   } else {
     m_logWriter.warning(_T("Get monitor info is failed. Use second method (no multi-screen)."));
@@ -965,6 +1004,25 @@ bool ViewerWindow::onSize(WPARAM wParam, LPARAM lParam)
       m_dsktWnd.setSize(w, h);
     }
   }
+  return true;
+}
+
+bool ViewerWindow::onDpiChanged(WPARAM wParam, LPARAM lParam)
+{
+  m_toolbar.setDpi(LOWORD(wParam));
+  if (!m_isFullScr) {
+    // The window is being moved between monitors: keep the size suggested by
+    // the system and don't let adjustWindowSize() move it back to the center.
+    m_sizeIsChanged = true;
+    const RECT *suggested = reinterpret_cast<const RECT *>(lParam);
+    SetWindowPos(m_hWnd, 0, suggested->left, suggested->top,
+                 suggested->right - suggested->left,
+                 suggested->bottom - suggested->top,
+                 SWP_NOZORDER | SWP_NOACTIVATE);
+  }
+  // Size of the scroll bars has been changed.
+  m_dsktWnd.setScale(m_scale);
+  doSize();
   return true;
 }
 
@@ -1253,4 +1311,34 @@ LRESULT ViewerWindow::onHookProc(int code, WPARAM wParam, LPARAM lParam)
     PostMessage(m_dsktWnd.getHWnd(), wParam, str->vkCode, newLParam);
   }
   return true;
+}
+
+BOOL CALLBACK ViewerWindow::collectMonitor(HMONITOR monitor, HDC, LPRECT, LPARAM data)
+{
+  ViewerWindow *viewer = reinterpret_cast<ViewerWindow *>(data);
+  viewer->m_fullscreenMonitors.push_back(monitor);
+  return viewer->m_fullscreenMonitors.size() < 64;
+}
+
+void ViewerWindow::addDisplayMenus()
+{
+  HMENU display = CreatePopupMenu();
+  AppendMenu(display, MF_STRING, 0xA820, _T("Original (100%)"));
+  AppendMenu(display, MF_STRING, 0xA830, _T("Fit to window"));
+  AppendMenu(display, MF_STRING, 0xA840, _T("Custom scale..."));
+  AppendMenu(display, MF_SEPARATOR, 0, 0);
+  AppendMenu(display, MF_STRING, 0xA810, _T("Fullscreen on current monitor"));
+  AppendMenu(display, MF_STRING, 0xA800, _T("Fullscreen across all monitors"));
+  EnumDisplayMonitors(0, 0, collectMonitor, reinterpret_cast<LPARAM>(this));
+  for (size_t i = 0; i < m_fullscreenMonitors.size(); i++) {
+    MONITORINFOEX info;
+    info.cbSize = sizeof(info);
+    if (GetMonitorInfo(m_fullscreenMonitors[i], &info)) {
+      StringStorage label;
+      label.format(_T("Fullscreen monitor %u (%s)"), (unsigned)i + 1, info.szDevice);
+      AppendMenu(display, MF_STRING, 0xA000 + i * 16, label.getString());
+    }
+  }
+  InsertMenu(m_menu.getMenu(), 0, MF_BYPOSITION | MF_POPUP,
+             reinterpret_cast<UINT_PTR>(display), _T("Display"));
 }

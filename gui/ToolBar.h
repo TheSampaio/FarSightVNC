@@ -21,6 +21,8 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-01: toolbar images follow the monitor DPI.
+//
 
 #ifndef _TOOL_BAR_H_
 #define _TOOL_BAR_H_
@@ -61,6 +63,11 @@ public:
   // This one will create and attach toolbar window to 
   // which handle is passed in hwnd. Only for toolbar from bitmap.
   void attachToolBar(HWND hwnd);
+
+  // setDpi()
+  // Rescales the images of a toolbar loaded by loadToolBarfromRes()
+  // and attached by attachToolBar().
+  void setDpi(UINT dpi);
 
   ///////////////////////////////////////////////////////// 
   // Manual mode procedures
@@ -141,6 +148,7 @@ private:
   DWORD m_id;
   int m_width, m_height;
   HWND m_hWndToolbar;
+  HIMAGELIST m_scaledImages;
 
   std::map<int, int> m_autoButtons;
 };

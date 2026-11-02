@@ -21,8 +21,11 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-01: toolbar images follow the monitor DPI.
+//
 
 #include "ToolBar.h"
+#include "DpiUtils.h"
 #include <CommCtrl.h>
 
 ToolBar::ToolBar()
@@ -34,6 +37,7 @@ ToolBar::ToolBar()
   InitCommonControlsEx(&initCtrlEx);
 
   m_hWndToolbar = 0;
+  m_scaledImages = 0;
   m_initialStr = -1;
 }
 
@@ -41,6 +45,9 @@ ToolBar::~ToolBar()
 {
   if (m_hWndToolbar) {
     DestroyWindow(m_hWndToolbar);
+  }
+  if (m_scaledImages) {
+    ImageList_Destroy(m_scaledImages);
   }
 }
 
@@ -131,6 +138,58 @@ void ToolBar::attachToolBar(HWND hwnd)
      0, 0, 0, 0,
      sizeof(TBBUTTON));
   SendMessage(m_hWndToolbar, TB_SETINDENT, 4, 0);
+}
+
+void ToolBar::setDpi(UINT dpi)
+{
+  int imageSize = max(1, DpiUtils::scale(m_height, dpi));
+
+  HBITMAP source = LoadBitmap(GetModuleHandle(NULL), MAKEINTRESOURCE(m_id));
+  HDC screenDC = GetDC(0);
+  HDC sourceDC = CreateCompatibleDC(screenDC);
+  HDC scaledDC = CreateCompatibleDC(screenDC);
+  HBITMAP scaled = CreateCompatibleBitmap(screenDC, imageSize * m_numberTB, imageSize);
+  ReleaseDC(0, screenDC);
+
+  if (!source || !sourceDC || !scaledDC || !scaled) {
+    if (source) DeleteObject(source);
+    if (scaled) DeleteObject(scaled);
+    if (sourceDC) DeleteDC(sourceDC);
+    if (scaledDC) DeleteDC(scaledDC);
+    return;
+  }
+  HGDIOBJ oldSource = SelectObject(sourceDC, source);
+  HGDIOBJ oldScaled = SelectObject(scaledDC, scaled);
+  // COLORONCOLOR keeps the background color exact, it is used as the mask.
+  SetStretchBltMode(scaledDC, COLORONCOLOR);
+  StretchBlt(scaledDC, 0, 0, imageSize * m_numberTB, imageSize,
+             sourceDC, 0, 0, m_width, m_height, SRCCOPY);
+  COLORREF background = GetPixel(scaledDC, 0, 0);
+  SelectObject(sourceDC, oldSource);
+  SelectObject(scaledDC, oldScaled);
+  DeleteDC(sourceDC);
+  DeleteDC(scaledDC);
+
+  HIMAGELIST images = ImageList_Create(imageSize, imageSize, ILC_COLOR24 | ILC_MASK,
+                                       m_numberTB, 0);
+  int added = images ? ImageList_AddMasked(images, scaled, background) : -1;
+  DeleteObject(scaled);
+  DeleteObject(source);
+
+  if (added < 0) {
+    if (images) ImageList_Destroy(images);
+    return;
+  }
+  SendMessage(m_hWndToolbar, TB_SETIMAGELIST, 0, reinterpret_cast<LPARAM>(images));
+  SendMessage(m_hWndToolbar, TB_SETBITMAPSIZE, 0, MAKELONG(imageSize, imageSize));
+  // 7 and 6 are the default paddings of toolbar buttons.
+  SendMessage(m_hWndToolbar, TB_SETBUTTONSIZE, 0, MAKELONG(imageSize + 7, imageSize + 6));
+  SendMessage(m_hWndToolbar, TB_AUTOSIZE, 0, 0);
+
+  if (m_scaledImages) {
+    ImageList_Destroy(m_scaledImages);
+  }
+  m_scaledImages = images;
 }
 
 bool ToolBar::enableButton(int idButton, bool enable)

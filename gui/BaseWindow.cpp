@@ -21,9 +21,12 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-01: per-monitor DPI, horizontal wheel and X buttons.
+//
 
 #include "util/CommonHeader.h"
 #include "BaseWindow.h"
+#include "DpiUtils.h"
 
 BaseWindow::BaseWindow()
 : m_hWnd(0),
@@ -228,12 +231,17 @@ bool BaseWindow::wndProc(UINT message, WPARAM wParam, LPARAM lParam)
       return onNotify((int)wParam, (LPNMHDR)lParam);
     case WM_SYSCOMMAND:
       return onSysCommand(wParam, lParam);
+    // No extended pointer negotiation exists: do not alias X1/X2 to wheel bits.
+    case WM_XBUTTONDOWN:
+    case WM_XBUTTONUP:
+      return true;
     case WM_LBUTTONDOWN:
     case WM_LBUTTONUP:
     case WM_MBUTTONDOWN:
     case WM_MBUTTONUP:
     case WM_RBUTTONDOWN:
     case WM_RBUTTONUP:
+    case WM_MOUSEHWHEEL:
     case WM_MOUSEWHEEL:
     case WM_MOUSEMOVE:
     {
@@ -250,14 +258,14 @@ bool BaseWindow::wndProc(UINT message, WPARAM wParam, LPARAM lParam)
       point.y = points.y;
 
       unsigned short wheelSpeed = 0; 
-      if (message == WM_MOUSEWHEEL) {
+      if (message == WM_MOUSEWHEEL || message == WM_MOUSEHWHEEL) {
         // Get speed wheel and set mouse button.
         signed short wheelSignedSpeed = static_cast<signed short>(HIWORD(wParam));
         if (wheelSignedSpeed < 0) {
-          mouseButtons |= MOUSE_WDOWN;
+          mouseButtons |= message == WM_MOUSEHWHEEL ? MOUSE_WLEFT : MOUSE_WDOWN;
           wheelSpeed = - wheelSignedSpeed / WHEEL_DELTA;
         } else {
-          mouseButtons |= MOUSE_WUP;
+          mouseButtons |= message == WM_MOUSEHWHEEL ? MOUSE_WRIGHT : MOUSE_WUP;
           wheelSpeed = wheelSignedSpeed / WHEEL_DELTA;
         }
 
@@ -338,7 +346,14 @@ void BaseWindow::getBorderSize(int *width, int *height)
 {
   _ASSERT(m_hWnd != 0);
 
-  *width = 2 * GetSystemMetrics(SM_CXSIZEFRAME);
-  *height = GetSystemMetrics(SM_CYSIZE) +
-            2 * GetSystemMetrics(SM_CYSIZEFRAME);
+  RECT frame = {0, 0, 0, 0};
+  if (DpiUtils::adjustWindowRect(&frame, getStyle(), getExStyle(),
+                                 DpiUtils::getDpiForWindow(m_hWnd))) {
+    *width = frame.right - frame.left;
+    *height = frame.bottom - frame.top;
+  } else {
+    *width = 2 * GetSystemMetrics(SM_CXSIZEFRAME);
+    *height = GetSystemMetrics(SM_CYSIZE) +
+              2 * GetSystemMetrics(SM_CYSIZEFRAME);
+  }
 }
