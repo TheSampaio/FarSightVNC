@@ -21,6 +21,8 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-01: hook-driven key routing in onHookProc.
+//
 
 #include "config-lib/IniFileSettingsManager.h"
 #include "util/Exception.h"
@@ -320,7 +322,7 @@ bool ViewerWindow::onMessage(UINT message, WPARAM wParam, LPARAM lParam)
   return false;
 }
 
-bool ViewerWindow::onEraseBackground(HDC hdc) 
+bool ViewerWindow::onEraseBackground(HDC hdc)
 {
   return true;
 }
@@ -346,7 +348,7 @@ bool ViewerWindow::onTimer(WPARAM idTimer)
   }
 }
 
-void ViewerWindow::dialogConnectionOptions() 
+void ViewerWindow::dialogConnectionOptions()
 {
   OptionsDialog dialog;
 
@@ -362,16 +364,16 @@ void ViewerWindow::dialogConnectionOptions()
   }
 }
 
-void ViewerWindow::dialogConnectionInfo() 
+void ViewerWindow::dialogConnectionInfo()
 {
   StringStorage host = m_conData->getHost();
   std::vector<TCHAR> kbdName;
   kbdName.resize(KL_NAMELENGTH);
   memset(&kbdName[0], 0, sizeof(TCHAR) * KL_NAMELENGTH);
   if (!GetKeyboardLayoutName( &kbdName[0] )) {
-    kbdName[0] = _T('?'); 
-    kbdName[1] = _T('?'); 
-    kbdName[2] = _T('?'); 
+    kbdName[0] = _T('?');
+    kbdName[1] = _T('?');
+    kbdName[2] = _T('?');
   }
 
   Rect geometry;
@@ -403,7 +405,7 @@ void ViewerWindow::switchFullScreenMode()
   }
 }
 
-void ViewerWindow::dialogConfiguration() 
+void ViewerWindow::dialogConfiguration()
 {
   m_application->postMessage(TvnViewer::WM_USER_CONFIGURATION);
 }
@@ -417,7 +419,7 @@ void ViewerWindow::desktopStateUpdate()
   updateKeyState();
 }
 
-void ViewerWindow::commandCtrlAltDel() 
+void ViewerWindow::commandCtrlAltDel()
 {
   LRESULT iState = m_toolbar.getState(IDS_TB_CTRLALTDEL);
   if (iState) {
@@ -582,7 +584,7 @@ void ViewerWindow::commandScaleIn()
     _ASSERT(false);
     return;
   }
-    
+
   int scale = m_conConf->getScaleNumerator() * 100 / m_conConf->getScaleDenominator();
   size_t indexNewScale = 0;
   while (indexNewScale < m_standardScale.size() && m_standardScale[indexNewScale] <= scale + 5)
@@ -613,7 +615,7 @@ void ViewerWindow::commandScaleOut()
   do {
     indexNewScale--;
   } while (indexNewScale < m_standardScale.size() && m_standardScale[indexNewScale] >= scale - 5);
-  
+
   if (indexNewScale > m_standardScale.size())
     indexNewScale = 0;
 
@@ -661,13 +663,13 @@ void ViewerWindow::commandScaleAuto()
   }
 }
 
-int ViewerWindow::translateAccelToTB(int val) 
+int ViewerWindow::translateAccelToTB(int val)
 {
   static const std::pair<int, int> accelerators[] = {
     make_pair(ID_CONN_OPTIONS,    IDS_TB_CONNOPTIONS),
-    make_pair(ID_CONN_INFO,       IDS_TB_CONNINFO), 
+    make_pair(ID_CONN_INFO,       IDS_TB_CONNINFO),
     make_pair(ID_SHOW_TOOLBAR,    IDS_TB_TOOLBAR),
-    make_pair(ID_FULL_SCR,        IDS_TB_FULLSCREEN), 
+    make_pair(ID_FULL_SCR,        IDS_TB_FULLSCREEN),
     make_pair(ID_REQ_SCR_REFRESH, IDS_TB_REFRESH),
     make_pair(ID_CTRL_ALT_DEL,    IDS_TB_CTRLALTDEL),
     make_pair(ID_TRANSF_FILES,    IDS_TB_TRANSFER)
@@ -748,7 +750,7 @@ bool ViewerWindow::onCommand(WPARAM wParam, LPARAM lParam)
     case IDS_TB_SCALEAUTO:
       commandScaleAuto();
       return true;
-    case IDS_TB_FULLSCREEN: 
+    case IDS_TB_FULLSCREEN:
       switchFullScreenMode();
       return true;
     case IDS_TB_CONFIGURATION:
@@ -846,7 +848,7 @@ void ViewerWindow::doFullScr()
   if (config->isPromptOnFullscreenEnabled()) {
     postMessage(WM_USER_FS_WARNING);
   }
-  
+
   try {
     // Registration of keyboard hook.
     m_winHooks.registerKeyboardHook(this);
@@ -894,7 +896,7 @@ void ViewerWindow::doUnFullScr()
 
   m_dsktWnd.setScale(m_scale);
   applyScreenChanges(false);
-  
+
   // Unregistration of keyboard hook.
   m_winHooks.unregisterKeyboardHook(this);
   // Switching on ignoring win key.
@@ -937,7 +939,7 @@ void ViewerWindow::doSize()
   postMessage(WM_SIZE);
 }
 
-bool ViewerWindow::onSize(WPARAM wParam, LPARAM lParam) 
+bool ViewerWindow::onSize(WPARAM wParam, LPARAM lParam)
 {
   RECT rc;
   int x, y;
@@ -962,7 +964,7 @@ bool ViewerWindow::onSize(WPARAM wParam, LPARAM lParam)
       m_dsktWnd.setPosition(x, y);
       m_dsktWnd.setSize(w, h);
     }
-  } 
+  }
   return true;
 }
 
@@ -1236,29 +1238,19 @@ StringStorage ViewerWindow::formatWindowName() const
 
 LRESULT ViewerWindow::onHookProc(int code, WPARAM wParam, LPARAM lParam)
 {
-  KBDLLHOOKSTRUCT *str = (KBDLLHOOKSTRUCT*) lParam;
-  // Ignoring of CapsLock, NumLock, ScrollLock, Control (Ctrl key), Menu (Alt key), Shift (shift key).
-  if (str->vkCode != VK_CAPITAL && str->vkCode != VK_NUMLOCK && str->vkCode != VK_SCROLL &&
-      str->vkCode != VK_LCONTROL && str->vkCode != VK_RCONTROL &&
-      str->vkCode != VK_LMENU && str->vkCode != VK_RMENU &&
-      str->vkCode != VK_LSHIFT && str->vkCode != VK_RSHIFT) {
-    // Set the repeat count for the current message bits.
-    LPARAM newLParam = 1;
-    // Set the scan code bits. 
-    newLParam |= (str->scanCode & 0xf) << 16;
-    // Set the extended key bit.
-    newLParam |= (str->flags & LLKHF_EXTENDED) << 24;
-    // Set the context code bit.
-    newLParam |= ((str->flags & LLKHF_ALTDOWN) > 0) << 29;
-    // Set the transition state bit.
-    newLParam |= ((str->flags & LLKHF_UP) > 0) << 31;
-    if (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN) {
-      PostMessage(m_dsktWnd.getHWnd(), wParam, str->vkCode, newLParam);
-    } else if (wParam == WM_KEYUP || wParam == WM_SYSKEYUP) {
-      PostMessage(m_dsktWnd.getHWnd(), wParam, str->vkCode, newLParam);
-    }
-    return true;
-  } else {
+  HWND focus = GetFocus();
+  if (GetForegroundWindow() != getHWnd() ||
+      (focus != m_dsktWnd.getHWnd() && !IsChild(m_dsktWnd.getHWnd(), focus))) {
     return false;
   }
+  KBDLLHOOKSTRUCT *str = (KBDLLHOOKSTRUCT*) lParam;
+  if (WinHooks::decideKeyAction(str->vkCode, str->flags) == WinHooks::HOOK_KEY_PASS) {
+    return false;
+  }
+  LPARAM newLParam = WinHooks::makeKeyMessageLParam(str->scanCode, str->flags);
+  if (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN ||
+      wParam == WM_KEYUP || wParam == WM_SYSKEYUP) {
+    PostMessage(m_dsktWnd.getHWnd(), wParam, str->vkCode, newLParam);
+  }
+  return true;
 }

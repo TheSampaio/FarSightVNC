@@ -273,8 +273,25 @@ int TvnViewer::processMessages()
     }
 
     if (!processDialogMessage(&msg)) {
-      TranslateMessage(&msg);
-      DispatchMessage(&msg);
+      // Modified for FarSightVNC on 2026-11-01: probe before TranslateMessage
+      // consumes the pending dead key. Controls retain the usual order.
+      if (GetProp(msg.hwnd, _T("FarSightVNC.RemoteKeyboard")) &&
+          (msg.message == WM_KEYDOWN || msg.message == WM_SYSKEYDOWN)) {
+        DispatchMessage(&msg);
+        TranslateMessage(&msg);
+        // A burst of hook-posted keys can already be in the queue. Deliver
+        // this key's text before the next key changes composition state.
+        MSG text;
+        while (PeekMessage(&text, msg.hwnd, WM_CHAR, WM_DEADCHAR, PM_REMOVE)) {
+          DispatchMessage(&text);
+        }
+        while (PeekMessage(&text, msg.hwnd, WM_SYSCHAR, WM_SYSDEADCHAR, PM_REMOVE)) {
+          DispatchMessage(&text);
+        }
+      } else {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+      }
     }
   }
 
@@ -310,7 +327,7 @@ bool TvnViewer::onTimer(WPARAM idTimer)
   switch (idTimer) {
   case TIMER_DELETE_DEAD_INSTANCE:
     m_instances.deleteDeadInstances();
-    if (m_instances.empty() && 
+    if (m_instances.empty() &&
         !isVisibleLoginDialog() &&
         !m_isListening) {
       shutdown();

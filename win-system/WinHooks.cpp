@@ -21,6 +21,8 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-01: pure helpers for the low level keyboard hook.
+//
 
 #include "WinHooks.h"
 #include "win-system/SystemException.h"
@@ -30,7 +32,7 @@ HookEventListener *WinHooks::s_eventListener = 0;
 
 WinHooks::WinHooks()
 {
-  
+
 }
 
 WinHooks::~WinHooks()
@@ -70,4 +72,30 @@ void WinHooks::unregisterKeyboardHook(HookEventListener *hookEventListener)
   }
   s_hooks = 0;
   s_eventListener = 0;
+}
+
+WinHooks::HookKeyAction WinHooks::decideKeyAction(DWORD vkCode, DWORD flags)
+{
+  if ((flags & LLKHF_INJECTED) || vkCode == VK_CAPITAL ||
+      vkCode == VK_NUMLOCK || vkCode == VK_SCROLL) {
+    return HOOK_KEY_PASS;
+  }
+  // Post every physical key to the same queue, then swallow the source event.
+  return HOOK_KEY_POST;
+}
+
+LPARAM WinHooks::makeKeyMessageLParam(DWORD scanCode, DWORD flags)
+{
+  // Set the repeat count for the current message bits.
+  LPARAM newLParam = 1;
+  // Set the scan code bits.
+  newLParam |= (scanCode & 0xff) << 16;
+  // Set the extended key bit.
+  newLParam |= (flags & LLKHF_EXTENDED) << 24;
+  // Set the context code bit.
+  newLParam |= ((flags & LLKHF_ALTDOWN) > 0) << 29;
+  // Set the transition state bit.
+  newLParam |= ((flags & LLKHF_UP) > 0) << 31;
+  if (flags & LLKHF_UP) newLParam |= 0x40000000;
+  return newLParam;
 }

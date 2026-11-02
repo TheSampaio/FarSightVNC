@@ -60,6 +60,8 @@ void DesktopWindow::setViewerCore(RemoteViewerCore *viewerCore)
 
 bool DesktopWindow::onCreate(LPCREATESTRUCT pcs)
 {
+  // Modified for FarSightVNC on 2026-11-01: ordered keyboard translation.
+  SetProp(getHWnd(), _T("FarSightVNC.RemoteKeyboard"), (HANDLE)1);
   m_sbar.setWindow(getHWnd());
   m_clipboard.setHWnd(getHWnd());
   return true;
@@ -138,7 +140,7 @@ bool DesktopWindow::onEraseBackground(HDC hdc) {
   return true;
 }
 
-bool DesktopWindow::onHScroll(WPARAM wParam, LPARAM lParam) 
+bool DesktopWindow::onHScroll(WPARAM wParam, LPARAM lParam)
 {
   switch(LOWORD(wParam)) {
     case SB_THUMBTRACK:
@@ -150,7 +152,7 @@ bool DesktopWindow::onHScroll(WPARAM wParam, LPARAM lParam)
       m_sbar.moveLeftHorz(ScrollBar::SCROLL_STEP);
       redraw();
       break;
-    case SB_PAGELEFT:   
+    case SB_PAGELEFT:
       m_sbar.moveLeftHorz();
       redraw();
       break;
@@ -158,7 +160,7 @@ bool DesktopWindow::onHScroll(WPARAM wParam, LPARAM lParam)
       m_sbar.moveRightHorz(ScrollBar::SCROLL_STEP);
       redraw();
       break;
-    case SB_PAGERIGHT:    
+    case SB_PAGERIGHT:
       m_sbar.moveRightHorz();
       redraw();
       break;
@@ -166,7 +168,7 @@ bool DesktopWindow::onHScroll(WPARAM wParam, LPARAM lParam)
   return true;
 }
 
-bool DesktopWindow::onVScroll(WPARAM wParam, LPARAM lParam) 
+bool DesktopWindow::onVScroll(WPARAM wParam, LPARAM lParam)
 {
   switch(LOWORD(wParam)) {
     case SB_THUMBTRACK:
@@ -211,7 +213,7 @@ bool DesktopWindow::onMouse(unsigned char mouseButtons, unsigned short wheelSpee
     bool bSecond = !!(mouseButtons & MOUSE_MDOWN);
     bool bThird  = !!(mouseButtons & MOUSE_RDOWN);
     mouseButtons &= ~(MOUSE_MDOWN | MOUSE_RDOWN);
-    if (bSecond) {  
+    if (bSecond) {
       mouseButtons |= MOUSE_RDOWN;
     }
     if (bThird) {
@@ -252,7 +254,7 @@ bool DesktopWindow::onMouse(unsigned char mouseButtons, unsigned short wheelSpee
   return true;
 }
 
-bool DesktopWindow::onKey(WPARAM wParam, LPARAM lParam) 
+bool DesktopWindow::onKey(WPARAM wParam, LPARAM lParam)
 {
   if (!m_conConf->isViewOnly()) {
     unsigned short virtualKey = static_cast<unsigned short>(wParam);
@@ -277,22 +279,38 @@ bool DesktopWindow::onKey(WPARAM wParam, LPARAM lParam)
       m_altDown = isDown;
     }
 
+    // Posted fullscreen keys do not update the thread state used by
+    // TranslateMessage. This changes only this UI thread's keyboard state.
+    BYTE keys[256];
+    if (GetKeyboardState(keys)) {
+      unsigned key = virtualKey;
+      if (key == VK_SHIFT) key = ((additionalInfo >> 16) & 0xff) == 0x36 ? VK_RSHIFT : VK_LSHIFT;
+      if (key == VK_CONTROL) key = (additionalInfo & 0x1000000) ? VK_RCONTROL : VK_LCONTROL;
+      if (key == VK_MENU) key = (additionalInfo & 0x1000000) ? VK_RMENU : VK_LMENU;
+      keys[key & 255] = (keys[key & 255] & 1) | (isDown ? 0x80 : 0);
+      keys[VK_SHIFT] = keys[VK_LSHIFT] | keys[VK_RSHIFT];
+      keys[VK_CONTROL] = keys[VK_LCONTROL] | keys[VK_RCONTROL];
+      keys[VK_MENU] = keys[VK_LMENU] | keys[VK_RMENU];
+      SetKeyboardState(keys);
+      m_ctrlDown = (keys[VK_CONTROL] & 0x80) != 0;
+      m_altDown = (keys[VK_MENU] & 0x80) != 0;
+    }
     m_rfbKeySym->processKeyEvent(virtualKey,
                                  additionalInfo);
   }
   return true;
 }
 
-bool DesktopWindow::onChar(WPARAM wParam, LPARAM lParam) 
+bool DesktopWindow::onChar(WPARAM wParam, LPARAM lParam)
 {
   if (!m_conConf->isViewOnly()) {
-    m_rfbKeySym->processCharEvent(static_cast<WCHAR>(wParam), 
+    m_rfbKeySym->processCharEvent(static_cast<WCHAR>(wParam),
                                   static_cast<unsigned int>(lParam));
   }
   return true;
 }
 
-bool DesktopWindow::onDeadChar(WPARAM wParam, LPARAM lParam) 
+bool DesktopWindow::onDeadChar(WPARAM wParam, LPARAM lParam)
 {
   return true;
 }
@@ -333,17 +351,17 @@ void DesktopWindow::doDraw(DeviceContext *dc)
   if (!fbWidth || !fbHeight) {
     Graphics graphics(dc);
 
-    graphics.fillRect(m_clientArea.left, m_clientArea.top, 
+    graphics.fillRect(m_clientArea.left, m_clientArea.top,
                       m_clientArea.right, m_clientArea.bottom, &m_brush);
     return;
   }
 
   scrollProcessing(fbWidth, fbHeight);
 
-  int iHorzPos = 0; 
-  int iVertPos = 0; 
+  int iHorzPos = 0;
+  int iVertPos = 0;
 
-  if (m_showHorz) { 
+  if (m_showHorz) {
     iHorzPos = m_sbar.getHorzPos();
   }
 
@@ -478,7 +496,7 @@ void DesktopWindow::drawImage(const RECT *src, const RECT *dst)
   Rect rc_dest(dst);
 
   AutoLock al(&m_bufferLock);
-  
+
   if ((src->right - src->left) == (dst->right - dst->left) &&
      (src->bottom - src->top) == (dst->bottom - dst->top) &&
      src->left == dst->left &&
@@ -491,15 +509,16 @@ void DesktopWindow::drawImage(const RECT *src, const RECT *dst)
   }
 }
 
-bool DesktopWindow::onSize(WPARAM wParam, LPARAM lParam) 
+bool DesktopWindow::onSize(WPARAM wParam, LPARAM lParam)
 {
   calcClientArea();
-  m_winResize = true; 
+  m_winResize = true;
   return true;
 }
 
 bool DesktopWindow::onDestroy()
 {
+  RemoveProp(getHWnd(), _T("FarSightVNC.RemoteKeyboard"));
   return true;
 }
 
@@ -528,7 +547,7 @@ void DesktopWindow::setNewFramebuffer(const FrameBuffer *framebuffer)
   Dimension dimension = framebuffer->getDimension();
   Dimension olddimension = m_framebuffer.getDimension();
 
-  bool isBackgroundDirty = dimension.width < olddimension.width || 
+  bool isBackgroundDirty = dimension.width < olddimension.width ||
                            dimension.height < olddimension.height;
 
   m_logWriter->detail(_T("Desktop size: %d, %d"),  dimension.width, dimension.height);
@@ -543,8 +562,8 @@ void DesktopWindow::setNewFramebuffer(const FrameBuffer *framebuffer)
       dimension.width = alignWidth * 4;
       int alignHeight = (dimension.height + 3) / 4;
       dimension.height = alignHeight * 4;
-      m_framebuffer.setProperties(&dimension, 
-                                  &framebuffer->getPixelFormat(), 
+      m_framebuffer.setProperties(&dimension,
+                                  &framebuffer->getPixelFormat(),
                                   getHWnd());
       m_framebuffer.setColor(0, 0, 0);
       m_scManager.setScreenResolution(dimension.width, dimension.height);

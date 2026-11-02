@@ -21,6 +21,8 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-01: symmetric key press/release, scancode aware translation, Left/Right Shift.
+//
 
 #include "RfbKeySym.h"
 #include "util/CommonHeader.h"
@@ -36,7 +38,11 @@ RfbKeySym::RfbKeySym(RfbKeySymListener *extKeySymListener, LogWriter *log)
   m_leftMetaIsPressed(false),
   m_rightMetaIsPressed(false),
   m_log(log),
-  m_winKeyIgnore(true)
+  m_winKeyIgnore(true),
+  m_layoutOverride(0),
+  m_toggleKeysOverridden(false),
+  m_capsLockOverride(false),
+  m_scrollLockOverride(false)
 {
   clearKeyState();
 }
@@ -47,107 +53,86 @@ RfbKeySym::~RfbKeySym()
 
 void RfbKeySym::sendModifier(unsigned char virtKey, bool down)
 {
-  UINT32 rfbSym;
-  bool success = m_keyMap.virtualCodeToKeySym(&rfbSym, virtKey);
-  _ASSERT(success);
-  sendKeySymEvent(rfbSym, down);
-
-  m_viewerKeyState[virtKey] = down ? 128 : 0;
   virtKey = distinguishLeftRightModifier(virtKey, false);
-  m_serverKeyState[virtKey] = down ? 128 : 0;
+  UINT scan = MapVirtualKeyEx(virtKey, MAPVK_VK_TO_VSC, getKeyboardLayout()) & 0xff;
+  unsigned data = scan << 16;
+  if (virtKey == VK_RCONTROL || virtKey == VK_RMENU) data |= 0x1000000;
+  if (!down) data |= 0x80000000;
+  processKeyEvent(virtKey, data);
 }
 
 void RfbKeySym::processKeyEvent(unsigned short virtKey,
                                 unsigned int addKeyData)
 {
-  m_log->debug(_T("processKeyEvent() function called: virtKey = %#4.4x, addKeyData")
-             _T(" = %#x"), (unsigned int)virtKey, addKeyData);
-  // Ignoring win key (when fullscreen mode is off).
-  if (m_winKeyIgnore) {
-    if (virtKey == VK_LWIN || virtKey == VK_RWIN) { // Ignoring the Win key
-      m_log->debug(_T("Ignoring the Win key event"));
-      return;
+  m_log->debug(_T("Keyboard VK=%04x data=%08x"), virtKey, addKeyData);
+  if (m_winKeyIgnore && (virtKey == VK_LWIN || virtKey == VK_RWIN)) return;
+  bool down = (addKeyData & 0x80000000) == 0;
+  unsigned int scanCode = (addKeyData >> 16) & 0xff;
+  bool extended = (addKeyData & 0x1000000) != 0; // 24 bit
+  unsigned int physicalKey = scanCode ? (scanCode | (extended ? 0x100 : 0)) :
+                                        (0x200 | virtKey);
+  std::map<unsigned int, std::vector<UINT32> >::iterator old = m_pressedKeys.find(physicalKey);
+  if (!down) {
+    if (old == m_pressedKeys.end()) return;
+    UINT32 ignoredSym;
+    bool ctrlAlt = (isPressed(VK_LCONTROL) || isPressed(VK_RCONTROL)) &&
+                   (isPressed(VK_LMENU) || isPressed(VK_RMENU));
+    bool releaseCtrlAlt = ctrlAlt && !old->second.empty() &&
+                          !m_keyMap.virtualCodeToKeySym(&ignoredSym, virtKey & 255);
+    if (releaseCtrlAlt) releaseModifiers();
+    for (size_t i = 0; i < old->second.size(); i++)
+      sendKeySymEvent(old->second[i], false);
+    if (releaseCtrlAlt) restoreModifiers();
+    m_pressedKeys.erase(old);
+  } else if (old != m_pressedKeys.end()) {
+    // Repeat the cached printable/special key without translating it again.
+    // Modifiers are state transitions and must not repeat.
+    bool modifier = virtKey == VK_SHIFT || virtKey == VK_CONTROL || virtKey == VK_MENU ||
+      (virtKey >= VK_LSHIFT && virtKey <= VK_RMENU) || virtKey == VK_LWIN || virtKey == VK_RWIN;
+    if (!modifier) {
+      for (size_t i = 0; i < old->second.size(); i++) sendKeySymEvent(old->second[i], true);
     }
+    return;
   }
 
-  bool down = (addKeyData & 0x80000000) == 0;
-  m_log->debug(_T("down = %u"), (unsigned int)down);
+  unsigned char key = distinguishLeftRightModifier((unsigned char)virtKey,
+                            virtKey == VK_SHIFT ? scanCode == 0x36 : extended);
+  m_viewerKeyState[key] = down ? 128 : 0;
+  m_viewerKeyState[VK_SHIFT] = m_viewerKeyState[VK_LSHIFT] | m_viewerKeyState[VK_RSHIFT];
+  m_viewerKeyState[VK_CONTROL] = m_viewerKeyState[VK_LCONTROL] | m_viewerKeyState[VK_RCONTROL];
+  m_viewerKeyState[VK_MENU] = m_viewerKeyState[VK_LMENU] | m_viewerKeyState[VK_RMENU];
+  m_viewerKeyState[VK_CAPITAL] = isToggled(VK_CAPITAL) ? 1 : 0;
+  m_serverKeyState[key] = down ? 128 : 0;
+  if (!down) return;
 
-  bool ctrlPressed = isPressed(VK_LCONTROL) || isPressed(VK_RCONTROL);
-  bool altPressed = isPressed(VK_LMENU) || isPressed(VK_RMENU);
-  bool shiftPressed = isPressed(VK_LSHIFT) || isPressed(VK_RSHIFT);
-  bool capsToggled = (GetKeyState(VK_CAPITAL) & 1) != 0;
-  m_log->debug(_T("ctrl = %u, alt = %u, shift = %u, caps toggled = %u"),
-    (unsigned int)ctrlPressed,
-    (unsigned int)altPressed,
-    (unsigned int)shiftPressed,
-    (unsigned int)capsToggled);
-
-  // Without distinguishing between left and right modifiers.
-  m_viewerKeyState[virtKey & 255] = down ? 128 : 0;
-  m_viewerKeyState[VK_CAPITAL & 255] = capsToggled ? 1 : 0;
-
-  bool extended = (addKeyData & 0x1000000) != 0; // 24 bit
-  virtKey = distinguishLeftRightModifier((unsigned char)virtKey, extended);
-
-  // With distinguishing between left and right modifiers.
-  m_serverKeyState[virtKey & 255] = down ? 128 : 0;
+  std::vector<UINT32> symbols;
   UINT32 rfbSym;
-  if (m_keyMap.virtualCodeToKeySym(&rfbSym, virtKey & 255)) {
-    // Special case for VK_RETURN that have no self numpad code.
-    // FIXME: May be replace this code to the virtualCodeToKeySym() function?
+  if (m_keyMap.virtualCodeToKeySym(&rfbSym, key)) {
     if (rfbSym == XK_Return && extended) {
       rfbSym = XK_KP_Enter;
     }
-
-    m_log->debug(_T("The key has been mapped to the %#4.4x rfb symbol"),
-      rfbSym);
-    sendKeySymEvent(rfbSym, down);
+    symbols.push_back(rfbSym);
   } else {
     std::wstring chars;
-    bool needReleaseModifiers = vkCodeToString(virtKey, down, &chars);
-    if (ctrlPressed && altPressed && needReleaseModifiers) {
-      m_log->debug(_T("Release the ctrl and alt")
-        _T(" modifiers before send the key event(s)"));
-      releaseModifiers();
-    }
-
-    for (int i = 0; i < chars.size(); i++) {
+    bool needReleaseModifiers = vkCodeToString(key, scanCode | (extended ? 0xe000 : 0), &chars);
+    bool ctrlAlt = (isPressed(VK_LCONTROL) || isPressed(VK_RCONTROL)) &&
+                   (isPressed(VK_LMENU) || isPressed(VK_RMENU));
+    if (ctrlAlt && needReleaseModifiers) releaseModifiers();
+    for (size_t i = 0; i < chars.size(); i++) {
       if (m_keyMap.unicodeCharToKeySym(chars[i], &rfbSym)) {
-        sendKeySymEvent(rfbSym, down);
+        symbols.push_back(rfbSym);
       } else {
         m_log->error(_T("Can't translate the %#4.4x unicode character to an")
           _T(" rfb symbol to send it"), (unsigned int)chars[i]);
       }
     }
-    if (ctrlPressed && altPressed && needReleaseModifiers) {
-      m_log->debug(_T("Restore the ctrl and alt")
-        _T(" modifiers after send the key event(s)"));
-      restoreModifiers();
-    }
+    for (size_t i = 0; i < symbols.size(); i++) sendKeySymEvent(symbols[i], true);
+    if (ctrlAlt && needReleaseModifiers) restoreModifiers();
+    m_pressedKeys[physicalKey] = symbols;
+    return;
   }
-}
-
-bool isDeadCharacter(WCHAR ch)
-{
-  return (ch == '^'    || 
-          ch == 0x00a8 || // 
-          ch == '~'    || 
-          ch == 0x00b4 || // 
-          ch == '`'    ||
-          ch == 0x02c7 || // 
-          ch == 0x02d8 || // 
-          ch == 0x00b0 || // 
-          ch == 0x02d9 || // 
-          ch == 0x02dd || //
-          ch == 0x00b8 || // 
-          ch == 0x02db    //
-    );
-}
-
-bool isDoubleDeadCharacters(WCHAR *buff)
-{
-  return (isDeadCharacter(buff[0]) && buff[0] == buff[1]);
+  for (size_t i = 0; i < symbols.size(); i++) sendKeySymEvent(symbols[i], true);
+  m_pressedKeys[physicalKey] = symbols;
 }
 
 WCHAR RfbKeySym::GettingCharFromCtrlSymbol(WCHAR ch)
@@ -170,7 +155,7 @@ WCHAR RfbKeySym::GettingCharFromCtrlSymbol(WCHAR ch)
   return ch;
 }
 
-bool RfbKeySym::TryTranslateNotPrintableToUnicode(unsigned short virtKey, HKL currentLayout, WCHAR *unicodeChar)
+bool RfbKeySym::TryTranslateNotPrintableToUnicode(unsigned short virtKey, unsigned int scanCode, HKL currentLayout, WCHAR *unicodeChar)
 {
   WCHAR outBuff[20];
   m_log->debug(_T("Was get a not printable symbol then try get a printable")
@@ -185,9 +170,9 @@ bool RfbKeySym::TryTranslateNotPrintableToUnicode(unsigned short virtKey, HKL cu
   withoutCtrlAltKbdState[VK_LMENU] = 0;
   withoutCtrlAltKbdState[VK_RMENU] = 0;
   withoutCtrlAltKbdState[VK_MENU] = 0;
-  int count = ToUnicodeEx(virtKey, 0, withoutCtrlAltKbdState, outBuff,
+  int count = ToUnicodeEx(virtKey, scanCode, withoutCtrlAltKbdState, outBuff,
     sizeof(outBuff) / sizeof(WCHAR),
-    0, currentLayout);
+    0x4, currentLayout);
   if (count > 0) {
     outBuff[count] = 0;
   }
@@ -203,82 +188,37 @@ bool RfbKeySym::TryTranslateNotPrintableToUnicode(unsigned short virtKey, HKL cu
   return false;
 }
 
-bool RfbKeySym::vkCodeToString(unsigned short virtKey, bool down, std::wstring *res) 
+bool RfbKeySym::vkCodeToString(unsigned short virtKey, unsigned int scanCode, std::wstring *res)
 {
-  bool needReleaseModifiers = false;
   WCHAR outBuff[20];
-
-  HKL currentLayout = GetKeyboardLayout(0);
-
-  int count = ToUnicodeEx(virtKey, 0, m_viewerKeyState, outBuff,
-      sizeof(outBuff) / sizeof(WCHAR),
-      0, currentLayout);
-
-  // For keyboards with dead keys
-  if (m_doubleDeadCatched && !down && !m_allowProcessDoubleChar) {
-    m_log->debug(_T("Disable process char event"));
-    m_allowProcessCharEvent = false;
-    m_doubleDeadCatched = false;
+  HKL currentLayout = getKeyboardLayout();
+  // Bit 2 probes without changing the layout's dead-key buffer.
+  int count = ToUnicodeEx(virtKey, scanCode, m_viewerKeyState, outBuff,
+                          sizeof(outBuff) / sizeof(WCHAR), 0x4, currentLayout);
+  if (count == -1) {
+    // Some layouts (US International apostrophe) return a dead-key result
+    // for the second accent, yet TranslateMessage emits two WM_CHARs.
+    m_allowProcessDoubleChar = m_allowProcessCharEvent;
+    m_allowProcessCharEvent = true;
+    return false;
   }
-
-  // For keyboards with dead keys
-  if (count == 2 && (isDoubleDeadCharacters(outBuff))) {
-    m_log->debug(_T("Extra double dead key catched."));
-    if (down) {
-      m_log->debug(_T("Enable process char event. Enable process double char."));
+  if (m_allowProcessCharEvent) {
+    if (count > 1)
       m_allowProcessDoubleChar = true;
-      m_allowProcessCharEvent = true;
-      m_doubleDeadCatched = true;
-      count = ToUnicodeEx(virtKey, 0, m_viewerKeyState, outBuff,
-          sizeof(outBuff) / sizeof(WCHAR),
-          0, currentLayout);
-      if (count > 0) {
-        outBuff[count] = 0;
-      } else {
-        outBuff[0] = 0;
-      }
-      //ToUnicodeEx can return without null termination
-      m_log->debug(_T("ToUnicodeEx() function called second. Returned: %d. Output buff: %S"), count, outBuff);
-      res->erase();
-      return false;
-    } else if (!m_allowProcessCharEvent) {
-      m_log->debug(_T("Disable second calling ToUnicodeEx()"));
-      res->erase();
-      return false;
-    }
-  }
-
-  if (count > 0) {
-    count = ToUnicodeEx(virtKey, 0, m_viewerKeyState, outBuff,
-          sizeof(outBuff) / sizeof(WCHAR), 0, currentLayout);
+    return false;
   }
   if (count > 0) {
-    outBuff[count] = 0;
-  } else {
-    outBuff[0] = 0;
-  }
-  m_log->debug(_T("ToUnicodeEx() returned %d, output buff : %S"), count, outBuff);
-
-  if (count == 1 && !m_allowProcessCharEvent) {
-    res->push_back(GettingCharFromCtrlSymbol(outBuff[0]));
-    needReleaseModifiers = true;
-  }
-  // Two or more (only two of them is relevant?)
-  else if (count > 1) {
-    for (int i = 0; i < count; i++) {
+    for (int i = 0; i < count; i++)
       res->push_back(GettingCharFromCtrlSymbol(outBuff[i]));
-    }
-    needReleaseModifiers = true;
-  } else if (count == 0) {
+    return true;
+  }
+  if (count == 0) {
     WCHAR unicodeChar;
-    if (TryTranslateNotPrintableToUnicode(virtKey, currentLayout, &unicodeChar)) { 
+    if (TryTranslateNotPrintableToUnicode(virtKey, scanCode, currentLayout, &unicodeChar)) {
       res->push_back(unicodeChar);
     }
-  } else if (count == -1 && down) {
-      m_log->debug(_T("Dead key pressed, wait for a char event"));
-      m_allowProcessCharEvent = true;
   }
-  return needReleaseModifiers;
+  return false;
 }
 
 void RfbKeySym::processCharEvent(WCHAR charCode,
@@ -291,21 +231,18 @@ void RfbKeySym::processCharEvent(WCHAR charCode,
     // For keyboards with dead keys
     if (m_allowProcessDoubleChar) {
       m_allowProcessDoubleChar = false;
-      bool ctrlPressed = isPressed(VK_LCONTROL) || isPressed(VK_RCONTROL);
-      bool altPressed = isPressed(VK_LMENU) || isPressed(VK_RMENU);
-      if (ctrlPressed && altPressed) {
-        m_log->debug(_T("Release the ctrl and alt")
-          _T(" modifiers before send dead combination"));
-        releaseModifiers();
-      }
     } else {
       m_allowProcessCharEvent = false;
     }
 
     UINT32 rfbSym;
     if (m_keyMap.unicodeCharToKeySym(charCode, &rfbSym)) {
+      bool ctrlAlt = (isPressed(VK_LCONTROL) || isPressed(VK_RCONTROL)) &&
+                     (isPressed(VK_LMENU) || isPressed(VK_RMENU));
+      if (ctrlAlt) releaseModifiers();
       sendKeySymEvent(rfbSym, true);
       sendKeySymEvent(rfbSym, false);
+      if (ctrlAlt) restoreModifiers();
     } else {
       m_log->error(_T("Can't translate the %#4.4x unicode character to an")
                  _T(" rfb symbol to send it"), (unsigned int)charCode);
@@ -318,32 +255,30 @@ void RfbKeySym::processFocusRestoration()
   m_log->info(_T("Process focus restoration in the RfbKeySym class"));
 
   // Send a modifier key state based on physical keyboard state, not thread key message queue.
-  unsigned char keys[9] = {VK_CONTROL, VK_RCONTROL, VK_LCONTROL,
-                           VK_MENU, VK_RMENU, VK_LMENU, 
-                           VK_SHIFT, VK_RSHIFT, VK_LSHIFT};
-  for (int i = 0; i < 9 ; i++) {
+  unsigned char keys[] = {VK_LCONTROL, VK_RCONTROL, VK_LMENU, VK_RMENU,
+                          VK_LSHIFT, VK_RSHIFT};
+  for (int i = 0; i < sizeof(keys); i++) {
     unsigned char key = keys[i];
-    unsigned char state = GetAsyncKeyState(key) >> 8;
-    checkAndSendDiff(key, state);
+    if ((GetAsyncKeyState(key) & 0x8000) && !isPressed(key)) {
+      sendModifier(key, true);
+    }
   }
 }
 
 void RfbKeySym::processFocusLoss()
 {
-  m_log->info(_T("Process focus loss in the RfbKeySym class"));
-
-  // Send a modifier key up only if the key is down.
-  checkAndSendDiff(VK_CONTROL, 0);
-  checkAndSendDiff(VK_RCONTROL, 0);
-  checkAndSendDiff(VK_LCONTROL, 0);
-  checkAndSendDiff(VK_MENU, 0);
-  checkAndSendDiff(VK_LMENU, 0);
-  checkAndSendDiff(VK_RMENU, 0);
-  checkAndSendDiff(VK_SHIFT, 0);
-  checkAndSendDiff(VK_RSHIFT, 0);
-  checkAndSendDiff(VK_LSHIFT, 0);
-  checkAndSendDiff(VK_LWIN, 0);
-  checkAndSendDiff(VK_RWIN, 0);
+  for (std::map<unsigned int, std::vector<UINT32> >::iterator it = m_pressedKeys.begin();
+       it != m_pressedKeys.end(); ++it) {
+    for (size_t i = 0; i < it->second.size(); i++)
+      sendKeySymEvent(it->second[i], false);
+  }
+  m_pressedKeys.clear();
+  m_leftMetaIsPressed = false;
+  m_rightMetaIsPressed = false;
+  clearKeyState();
+  m_allowProcessCharEvent = false;
+  m_allowProcessDoubleChar = false;
+  m_doubleDeadCatched = false;
 }
 
 void RfbKeySym::sendCtrlAltDel()
@@ -438,7 +373,7 @@ void RfbKeySym::checkAndSendDiff(unsigned char virtKey, unsigned char state)
   bool srvState = (m_serverKeyState[virtKey] & 128) != 0;
   m_serverKeyState[virtKey] = testedState ? 128 : 0;
 
-  if (testedState != srvState) { 
+  if (testedState != srvState) {
     UINT32 rfbSym;
     bool success = m_keyMap.virtualCodeToKeySym(&rfbSym, virtKey);
     _ASSERT(success);
@@ -461,7 +396,8 @@ void RfbKeySym::sendKeySymEvent(unsigned int rfbKeySym, bool down)
 {
   // Translate Alt to Meta if Scroll Lock is on.
   if (rfbKeySym == XK_Alt_L || rfbKeySym == XK_Alt_R) {
-    bool scrollLockOn = (GetKeyState(VK_SCROLL) & 1) != 0;
+    bool scrollLockOn = down ? isToggled(VK_SCROLL) :
+      (rfbKeySym == XK_Alt_L ? m_leftMetaIsPressed : m_rightMetaIsPressed);
     if (scrollLockOn) {
       if (rfbKeySym == XK_Alt_L) {
         rfbKeySym = XK_Meta_L;
@@ -495,4 +431,29 @@ unsigned char RfbKeySym::distinguishLeftRightModifier(unsigned char virtKey,
     virtKey = isRightHint ? VK_RSHIFT : VK_LSHIFT;
   }
   return virtKey;
+}
+
+void RfbKeySym::setKeyboardLayout(HKL layout)
+{
+  m_layoutOverride = layout;
+}
+
+void RfbKeySym::setToggleKeysOverride(bool capsLockOn, bool scrollLockOn)
+{
+  m_toggleKeysOverridden = true;
+  m_capsLockOverride = capsLockOn;
+  m_scrollLockOverride = scrollLockOn;
+}
+
+HKL RfbKeySym::getKeyboardLayout()
+{
+  return m_layoutOverride != 0 ? m_layoutOverride : GetKeyboardLayout(0);
+}
+
+bool RfbKeySym::isToggled(int virtKey)
+{
+  if (m_toggleKeysOverridden) {
+    return virtKey == VK_CAPITAL ? m_capsLockOverride : m_scrollLockOverride;
+  }
+  return (GetKeyState(virtKey) & 1) != 0;
 }
