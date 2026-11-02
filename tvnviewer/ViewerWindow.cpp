@@ -21,7 +21,7 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
-// Modified for FarSightVNC on 2026-11-01: ordered keyboard input, DPI and monitor selection.
+// Modified for FarSightVNC on 2026-11-01: ordered keyboard input, DPI changes, display menu, fullscreen monitor selection, default window size within the work area.
 //
 
 #include "config-lib/IniFileSettingsManager.h"
@@ -57,7 +57,9 @@ ViewerWindow::ViewerWindow(WindowsApplication *application,
   m_requiresReconnect(false),
   m_stopped(false),
   m_fullscreenMonitor(0),
-  m_spanMonitors(false)
+  m_spanMonitors(false),
+  m_displayMenu(0),
+  m_fixedDisplayMenuItems(0)
 {
   m_standardScale.push_back(10);
   m_standardScale.push_back(15);
@@ -326,6 +328,7 @@ bool ViewerWindow::onMessage(UINT message, WPARAM wParam, LPARAM lParam)
   case WM_TIMER:
     return onTimer(wParam);
   case WM_DISPLAYCHANGE:
+    onDisplayChange();
     adjustWindowSize();
 
   }
@@ -714,14 +717,14 @@ bool ViewerWindow::onCommand(WPARAM wParam, LPARAM lParam)
     if (index < m_fullscreenMonitors.size()) {
       m_fullscreenMonitor = m_fullscreenMonitors[index];
       m_spanMonitors = false;
-      if (m_isFullScr) { setSizeFullScreenWindow(); doSize(); }
+      applyFullscreenTarget();
     }
     return true;
   }
   if (command == 0xA800 || command == 0xA810) {
     m_spanMonitors = command == 0xA800;
     m_fullscreenMonitor = 0;
-    if (m_isFullScr) { setSizeFullScreenWindow(); doSize(); }
+    applyFullscreenTarget();
     return true;
   }
   if (command == 0xA820) { commandScale100(); return true; }
@@ -1019,11 +1022,11 @@ bool ViewerWindow::onDpiChanged(WPARAM wParam, LPARAM lParam)
                  suggested->right - suggested->left,
                  suggested->bottom - suggested->top,
                  SWP_NOZORDER | SWP_NOACTIVATE);
+    // The size restored after fullscreen must follow the new DPI as well.
+    m_rcNormal.fromWindowsRect(suggested);
   }
   // Size of the scroll bars has been changed.
   m_dsktWnd.setScale(m_scale);
-    // The size restored after fullscreen must follow the new DPI as well.
-    m_rcNormal.fromWindowsRect(suggested);
   doSize();
   return true;
 }
@@ -1326,23 +1329,61 @@ BOOL CALLBACK ViewerWindow::collectMonitor(HMONITOR monitor, HDC, LPRECT, LPARAM
 
 void ViewerWindow::addDisplayMenus()
 {
-  HMENU display = CreatePopupMenu();
-  AppendMenu(display, MF_STRING, 0xA820, _T("Original (100%)"));
-  AppendMenu(display, MF_STRING, 0xA830, _T("Fit to window"));
-  AppendMenu(display, MF_STRING, 0xA840, _T("Custom scale..."));
-  AppendMenu(display, MF_SEPARATOR, 0, 0);
-  AppendMenu(display, MF_STRING, 0xA810, _T("Fullscreen on current monitor"));
-  AppendMenu(display, MF_STRING, 0xA800, _T("Fullscreen across all monitors"));
+  m_displayMenu = CreatePopupMenu();
+  AppendMenu(m_displayMenu, MF_STRING, 0xA820, _T("Original (100%)"));
+  AppendMenu(m_displayMenu, MF_STRING, 0xA830, _T("Fit to window"));
+  AppendMenu(m_displayMenu, MF_STRING, 0xA840, _T("Custom scale..."));
+  AppendMenu(m_displayMenu, MF_SEPARATOR, 0, 0);
+  AppendMenu(m_displayMenu, MF_STRING, 0xA810, _T("Fullscreen on current monitor"));
+  AppendMenu(m_displayMenu, MF_STRING, 0xA800, _T("Fullscreen across all monitors"));
+  m_fixedDisplayMenuItems = GetMenuItemCount(m_displayMenu);
+  refreshMonitorMenu();
+  InsertMenu(m_menu.getMenu(), 0, MF_BYPOSITION | MF_POPUP,
+             reinterpret_cast<UINT_PTR>(m_displayMenu), _T("Display"));
+}
+
+void ViewerWindow::refreshMonitorMenu()
+{
+  // The list of monitors changes when a monitor is plugged or unplugged.
+  while (GetMenuItemCount(m_displayMenu) > m_fixedDisplayMenuItems) {
+    DeleteMenu(m_displayMenu, m_fixedDisplayMenuItems, MF_BYPOSITION);
+  }
+  m_fullscreenMonitors.clear();
   EnumDisplayMonitors(0, 0, collectMonitor, reinterpret_cast<LPARAM>(this));
+  bool selectedMonitorExists = false;
   for (size_t i = 0; i < m_fullscreenMonitors.size(); i++) {
     MONITORINFOEX info;
     info.cbSize = sizeof(info);
     if (GetMonitorInfo(m_fullscreenMonitors[i], &info)) {
       StringStorage label;
       label.format(_T("Fullscreen monitor %u (%s)"), (unsigned)i + 1, info.szDevice);
-      AppendMenu(display, MF_STRING, 0xA000 + i * 16, label.getString());
+      AppendMenu(m_displayMenu, MF_STRING, 0xA000 + i * 16, label.getString());
     }
+    selectedMonitorExists = selectedMonitorExists || m_fullscreenMonitors[i] == m_fullscreenMonitor;
   }
-  InsertMenu(m_menu.getMenu(), 0, MF_BYPOSITION | MF_POPUP,
-             reinterpret_cast<UINT_PTR>(display), _T("Display"));
+  if (!selectedMonitorExists) {
+    m_fullscreenMonitor = 0;
+  }
+}
+
+void ViewerWindow::applyFullscreenTarget()
+{
+  if (m_isFullScr) {
+    setSizeFullScreenWindow();
+    doSize();
+  } else {
+    doFullScr();
+  }
+}
+
+void ViewerWindow::onDisplayChange()
+{
+  if (m_displayMenu != 0) {
+    refreshMonitorMenu();
+  }
+  if (m_isFullScr) {
+    // Keep covering the selected monitor(s) after a resolution or layout change.
+    setSizeFullScreenWindow();
+    doSize();
+  }
 }
