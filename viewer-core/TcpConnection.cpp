@@ -21,6 +21,9 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-01: TCP_NODELAY is now enabled for
+// every viewer socket, including sockets accepted in listening mode.
+//
 
 #include "thread/AutoLock.h"
 
@@ -107,10 +110,18 @@ void TcpConnection::connect()
         m_socket = new SocketIPv4;
         m_socketOwner = true;
         m_socket->connect(ipAddress);
-        m_socket->enableNaggleAlgorithm(false);
       } else {
         throw Exception(_T("Connection parameters (host, port, socket, gates) is empty."));
       }
+    }
+
+    // Input events are small and latency sensitive: disable the Nagle
+    // algorithm for every viewer socket, including sockets accepted in
+    // listening mode (they are bound with bind(SocketIPv4 *)).
+    try {
+      m_socket->enableNaggleAlgorithm(false);
+    } catch (const Exception &ex) {
+      m_logWriter->error(_T("Cannot disable the Nagle algorithm: %s"), ex.getMessage());
     }
 
     m_logWriter->detail(_T("Initialization of socket stream and input/output gates..."));

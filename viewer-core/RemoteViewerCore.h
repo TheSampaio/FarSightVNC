@@ -21,6 +21,10 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-01: client input events (keyboard,
+// pointer, cut text) are queued and written by a dedicated thread
+// (InputEventSender) instead of the UI thread.
+//
 
 #ifndef _REMOTE_VIEWER_CORE_H_
 #define _REMOTE_VIEWER_CORE_H_
@@ -39,6 +43,7 @@
 #include "CoreEventsAdapter.h"
 #include "DecoderStore.h"
 #include "FbUpdateNotifier.h"
+#include "InputEventSender.h"
 #include "ServerMessageListener.h"
 #include "TcpConnection.h"
 #include "WatermarksController.h"
@@ -70,7 +75,8 @@
 // explicitly stated that it will never do so.
 //
 class RemoteViewerCore : public CapabilitiesManager,
-                         protected Thread
+                         protected Thread,
+                         private InputEventSender::FailureHandler
 {
 public:
   //
@@ -655,6 +661,15 @@ private:
   int m_updateTimeout;
 
   UpdateRequestSender m_updateRequestSender;
+
+  // Queue and thread that write keyboard, pointer and cut text messages.
+  // Declared after m_tcpConnection and m_logWriter, which it depends on.
+  InputEventSender m_inputSender;
+
+  // Inherited from InputEventSender::FailureHandler. Called from the sender
+  // thread after a write failed: closes the connection, so that the protocol
+  // thread reports the disconnect through the usual adapter callbacks.
+  virtual void onInputSendFailed(const TCHAR *message);
 
 private:
   // Do not allow copying objects.

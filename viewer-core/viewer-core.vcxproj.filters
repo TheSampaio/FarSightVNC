@@ -129,6 +129,9 @@
     <ClCompile Include="UpdateRequestSender.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="InputEventSender.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="AuthHandler.h">
@@ -246,6 +249,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="UpdateRequestSender.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="InputEventSender.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
