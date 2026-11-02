@@ -1010,11 +1010,11 @@ bool ViewerWindow::onSize(WPARAM wParam, LPARAM lParam)
 bool ViewerWindow::onDpiChanged(WPARAM wParam, LPARAM lParam)
 {
   m_toolbar.setDpi(LOWORD(wParam));
-  if (!m_isFullScr) {
+  const RECT *suggested = reinterpret_cast<const RECT *>(lParam);
+  if (!m_isFullScr && suggested != 0) {
     // The window is being moved between monitors: keep the size suggested by
     // the system and don't let adjustWindowSize() move it back to the center.
     m_sizeIsChanged = true;
-    const RECT *suggested = reinterpret_cast<const RECT *>(lParam);
     SetWindowPos(m_hWnd, 0, suggested->left, suggested->top,
                  suggested->right - suggested->left,
                  suggested->bottom - suggested->top,
@@ -1022,6 +1022,8 @@ bool ViewerWindow::onDpiChanged(WPARAM wParam, LPARAM lParam)
   }
   // Size of the scroll bars has been changed.
   m_dsktWnd.setScale(m_scale);
+    // The size restored after fullscreen must follow the new DPI as well.
+    m_rcNormal.fromWindowsRect(suggested);
   doSize();
   return true;
 }
