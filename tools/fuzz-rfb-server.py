@@ -13,6 +13,8 @@ truncated or garbage zlib data, bad palettes, oversized cursors) and pure
 random bytes.
 
 Encodings: tight, zrle, hextile, rre, copyrect, richcursor, desktopsize.
+--scenario sends a fixed, hand-written sequence instead (regression cases for
+defects found by fuzzing).
 
 One connection is served. The server stops when the client disconnects, after
 --messages updates plus --linger seconds, or after --duration seconds. It
@@ -23,8 +25,9 @@ that breaks the viewer can be triaged and replayed.
 The bytes depend only on the seed and on the pixel format the client asks for
 (SetPixelFormat), so a given viewer build replays the same session.
 
-Example:
+Examples:
   python -I tools/fuzz-rfb-server.py --port 5933 --encoding tight --seed 7
+  python -I tools/fuzz-rfb-server.py --port 5933 --scenario fillrect-rre-bottom-edge
 """
 import argparse
 import random
@@ -711,6 +714,47 @@ class Fuzzer:
             ('/' + mut if mut else '')
 
 
+class Scenario:
+    """Hand-written regression sequence with the Fuzzer interface.
+
+    Each builder returns the list of updates for the current pixel format and
+    frame buffer size; the last update is repeated up to --messages.
+    """
+
+    BUILDERS = {}
+
+    def __init__(self, name, width, height, pf):
+        self.name, self.w, self.h, self.pf = name, width, height, pf
+        self.descs = []
+
+    def next_message(self, index):
+        messages = self.BUILDERS[self.name](self)
+        self.descs.append('m%d:%s' % (index, self.name))
+        return messages[min(index, len(messages) - 1)]
+
+    @staticmethod
+    def update(*rects):
+        return b'\x00\x00' + struct.pack('>H', len(rects)) + b''.join(rects)
+
+    def fillrect_rre_bottom_edge(self):
+        # RRE subrectangle of height 0 starting on the bottom edge of the frame buffer.
+        sub = self.pf.pixel((255, 0, 0)) + struct.pack('>HHHH', 0, self.h, self.w, 0)
+        body = struct.pack('>I', 1) + self.pf.pixel((0, 0, 255)) + sub
+        return [self.update(header(0, 0, self.w, self.h, ENCODINGS['rre']) + body)]
+
+    def fillrect_tight_bottom_edge(self):
+        # Tight fill rectangle of height 0 on the bottom edge (it passes the bounds check).
+        body = b'\x80' + self.pf.tight_cpixel((0, 255, 0))
+        return [self.update(header(0, self.h, self.w, 0, ENCODINGS['tight']) + body)]
+
+
+Scenario.BUILDERS = {
+    'fillrect-rre-bottom-edge': Scenario.fillrect_rre_bottom_edge,
+    'fillrect-tight-bottom-edge': Scenario.fillrect_tight_bottom_edge,
+}
+SCENARIO_FB = (64, 48)
+
+
 def recv_exact(sock, count):
     chunks = []
     while count:
@@ -778,8 +822,10 @@ def handshake(sock, width, height, pf):
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     parser.add_argument('--port', type=int, required=True)
-    parser.add_argument('--encoding', choices=FUZZ_ENCODINGS, required=True)
-    parser.add_argument('--seed', type=int, required=True)
+    parser.add_argument('--encoding', choices=FUZZ_ENCODINGS)
+    parser.add_argument('--seed', type=int)
+    parser.add_argument('--scenario', choices=sorted(Scenario.BUILDERS),
+                        help='send a fixed regression sequence instead of --encoding/--seed')
     parser.add_argument('--messages', type=int, default=25, help='updates to send (default 25)')
     parser.add_argument('--wait', type=float, default=0.3, help='max seconds to wait for each update request')
     parser.add_argument('--linger', type=float, default=0.8, help='seconds to keep the socket open at the end')
@@ -788,19 +834,28 @@ def main():
     if not 1024 <= args.port <= 65535:
         parser.error('invalid port')
 
-    setup = random.Random('setup:%s:%d' % (args.encoding, args.seed))
-    width, height = setup.choice(((320, 240), (320, 240), (640, 480), (64, 64), (100, 37), (13, 7),
-                                  (1, 1), (2048, 16), (17, 300)))
-    pf = SERVER_PIXEL_FORMATS[0] if setup.random() < 0.7 else setup.choice(SERVER_PIXEL_FORMATS)
-    fuzzer = Fuzzer(args.encoding, args.seed, width, height, pf)
+    if args.scenario:
+        width, height = SCENARIO_FB
+        pf = SERVER_PIXEL_FORMATS[0]
+        fuzzer = Scenario(args.scenario, width, height, pf)
+        label = 'scenario=%s' % args.scenario
+    else:
+        if args.encoding is None or args.seed is None:
+            parser.error('--encoding and --seed are required without --scenario')
+        setup = random.Random('setup:%s:%d' % (args.encoding, args.seed))
+        width, height = setup.choice(((320, 240), (320, 240), (640, 480), (64, 64), (100, 37), (13, 7),
+                                      (1, 1), (2048, 16), (17, 300)))
+        pf = SERVER_PIXEL_FORMATS[0] if setup.random() < 0.7 else setup.choice(SERVER_PIXEL_FORMATS)
+        fuzzer = Fuzzer(args.encoding, args.seed, width, height, pf)
+        label = '%s seed=%d' % (args.encoding, args.seed)
     deadline = time.monotonic() + args.duration
 
     listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     listener.bind(('127.0.0.1', args.port))   # loopback only, never 0.0.0.0
     listener.listen(1)
     listener.settimeout(0.2)
-    print('LISTENING 127.0.0.1:%d %s seed=%d fb=%dx%d pf=%s' % (args.port, args.encoding, args.seed,
-                                                                width, height, pf.describe()), flush=True)
+    print('LISTENING 127.0.0.1:%d %s fb=%dx%d pf=%s' % (args.port, label, width, height, pf.describe()),
+          flush=True)
     sock = None
     while sock is None and time.monotonic() < deadline:
         try:

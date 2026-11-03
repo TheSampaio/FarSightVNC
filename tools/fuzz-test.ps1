@@ -60,7 +60,17 @@ $serverScript = Join-Path $PSScriptRoot 'fuzz-rfb-server.py'
 if (-not $Python) { $Python = (Get-Command python -ErrorAction Stop).Source }
 
 # Fixed cases that reproduced confirmed defects; every one must end OK.
+# Scenario cases are hand-written sequences (fuzz-rfb-server.py --scenario);
+# seed cases replay the original fuzzer finding and are tied to the generator
+# version of fuzz-rfb-server.py that found them.
 $regressionCases = @(
+  # FrameBuffer::fillRect filled one row past the buffer for a zero-height
+  # rectangle on the bottom edge (heap overflow, 2026-11-03).
+  @{ Encoding = 'rre'; Scenario = 'fillrect-rre-bottom-edge' }
+  @{ Encoding = 'tight'; Scenario = 'fillrect-tight-bottom-edge' }
+  @{ Encoding = 'rre'; Seed = 17 }, @{ Encoding = 'rre'; Seed = 21 }, @{ Encoding = 'rre'; Seed = 30 }
+  @{ Encoding = 'rre'; Seed = 31 }, @{ Encoding = 'rre'; Seed = 41 }
+  @{ Encoding = 'hextile'; Seed = 17 }, @{ Encoding = 'tight'; Seed = 34 }
 )
 
 Add-Type -TypeDefinition @'
@@ -169,12 +179,19 @@ if ($Regression) {
 function Format-ExitCode([int]$code) { '0x{0:X8}' -f $code }
 
 function Start-Case($case, [int]$port) {
-  $tag = "$($case.Encoding)-$($case.Seed)-$port"
+  if ($case.Scenario) {
+    $label = $case.Scenario
+    $caseArgs = @('--scenario', $case.Scenario)
+  } else {
+    $label = $case.Seed
+    $caseArgs = @('--encoding', $case.Encoding, '--seed', $case.Seed)
+  }
+  $tag = "$($case.Encoding)-$label-$port"
   $out = Join-Path $workDir "$tag.out"
   $err = Join-Path $workDir "$tag.err"
   $server = Start-Process -FilePath $Python -PassThru -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err `
-    -ArgumentList @('-I', "`"$serverScript`"", '--port', $port, '--encoding', $case.Encoding, '--seed', $case.Seed, '--messages', $Messages)
-  [pscustomobject]@{ Encoding = $case.Encoding; Seed = $case.Seed; Port = $port; Server = $server; Viewer = $null
+    -ArgumentList (@('-I', "`"$serverScript`"", '--port', $port) + $caseArgs + @('--messages', $Messages))
+  [pscustomobject]@{ Encoding = $case.Encoding; Seed = $label; Port = $port; Server = $server; Viewer = $null
     Out = $out; Err = $err; Phase = 'listen'; Started = [DateTime]::UtcNow; Mark = [DateTime]::UtcNow
     Result = ''; Detail = '' }
 }
