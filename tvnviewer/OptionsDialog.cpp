@@ -21,12 +21,48 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-03: Options dialog split into Display,
+// Input and Network tab pages, with Ctrl+Tab switching between them.
+//
 
 #include "OptionsDialog.h"
 
+#include <uxtheme.h>
+#pragma comment(lib, "uxtheme.lib")
+
+OptionsPage::OptionsPage(DWORD resourceId, OptionsDialog *owner)
+: BaseDialog(resourceId),
+  m_owner(owner)
+{
+}
+
+BOOL OptionsPage::onInitDialog()
+{
+  // Paint the page background like the tab body.
+  EnableThemeDialogTexture(m_ctrlThis.getWindow(), ETDT_ENABLETAB);
+  return FALSE;
+}
+
+BOOL OptionsPage::onCommand(UINT controlID, UINT notificationID)
+{
+  return m_owner->onControlCommand(controlID, notificationID);
+}
+
+void OptionsPage::onMessageReceived(UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+  m_owner->onMessageReceived(uMsg, wParam, lParam);
+}
+
+OptionsDialog *OptionsDialog::s_activeDialog = NULL;
+
 OptionsDialog::OptionsDialog()
 : BaseDialog(IDD_OPTIONS),
-  m_connected(false)
+  m_connected(false),
+  m_displayPage(IDD_OPTIONS_DISPLAY, this),
+  m_inputPage(IDD_OPTIONS_INPUT, this),
+  m_networkPage(IDD_OPTIONS_NETWORK, this),
+  m_msgHook(NULL),
+  m_previousDialog(NULL)
 {
 }
 
@@ -52,6 +88,11 @@ BOOL OptionsDialog::onCommand(UINT controlID, UINT notificationID)
     kill(0);
     return TRUE;
   }
+  return FALSE;
+}
+
+BOOL OptionsDialog::onControlCommand(UINT controlID, UINT notificationID)
+{
   if (controlID == IDC_CVIEWONLY) {
     if (notificationID == BN_CLICKED) {
       onViewOnlyClick();
@@ -91,31 +132,170 @@ BOOL OptionsDialog::onCommand(UINT controlID, UINT notificationID)
   return FALSE;
 }
 
+BOOL OptionsDialog::onNotify(UINT controlID, LPARAM data)
+{
+  if (controlID == IDC_OPTIONS_TAB) {
+    Tab *tab = m_tabControl.getTab(m_tabControl.getSelectedTabIndex());
+    switch (reinterpret_cast<LPNMHDR>(data)->code) {
+    case TCN_SELCHANGING:
+      tab->setVisible(false);
+      break;
+    case TCN_SELCHANGE:
+      tab->setVisible(true);
+      break;
+    }
+  }
+  return FALSE;
+}
+
+void OptionsDialog::createPage(OptionsPage *page, const TCHAR *caption)
+{
+  page->setParent(&m_ctrlThis);
+  page->create();
+
+  // Fit the page into the display area of the tab control.
+  RECT rect;
+  m_tabControl.adjustRect(&rect);
+  MapWindowPoints(m_tabControl.getWindow(), m_ctrlThis.getWindow(),
+                  reinterpret_cast<POINT *>(&rect), 2);
+  MoveWindow(page->getControl()->getWindow(), rect.left, rect.top,
+             rect.right - rect.left, rect.bottom - rect.top, TRUE);
+
+  // Put the page right after the tab control in the Z order, so that Tab
+  // goes from the tab control to the page controls and then to OK and Cancel.
+  SetWindowPos(page->getControl()->getWindow(), m_tabControl.getWindow(),
+               0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+
+  m_tabControl.addTab(page, caption);
+}
+
+HWND OptionsDialog::findControl(UINT controlID)
+{
+  OptionsPage *pages[] = {&m_displayPage, &m_inputPage, &m_networkPage};
+  for (int i = 0; i < sizeof(pages) / sizeof(pages[0]); i++) {
+    HWND control = GetDlgItem(pages[i]->getControl()->getWindow(), controlID);
+    if (control != NULL) {
+      return control;
+    }
+  }
+  return NULL;
+}
+
+void OptionsDialog::setPageControl(Control &control, DWORD controlID)
+{
+  control = findControl(controlID);
+}
+
+// Ctrl+Tab, Ctrl+Shift+Tab, Ctrl+PgDn and Ctrl+PgUp switch the tab. A dialog
+// does this only for property sheets, so it is done here.
+bool OptionsDialog::onTabSwitchKey(const MSG *msg)
+{
+  HWND dialog = m_ctrlThis.getWindow();
+  if (msg->hwnd != dialog && !IsChild(dialog, msg->hwnd)) {
+    return false;
+  }
+  if (GetKeyState(VK_CONTROL) >= 0 || GetKeyState(VK_MENU) < 0) {
+    return false;
+  }
+  int step;
+  if (msg->wParam == VK_TAB) {
+    step = (GetKeyState(VK_SHIFT) < 0) ? -1 : 1;
+  } else if (msg->wParam == VK_NEXT) {
+    step = 1;
+  } else if (msg->wParam == VK_PRIOR) {
+    step = -1;
+  } else {
+    return false;
+  }
+
+  int count = static_cast<int>(m_tabControl.getTabs().size());
+  int index = (m_tabControl.getSelectedTabIndex() + step + count) % count;
+  bool tabHadFocus = (GetFocus() == m_tabControl.getWindow());
+  m_tabControl.showTab(index);
+  if (!tabHadFocus) {
+    HWND page = m_tabControl.getTab(index)->getDialog()->getControl()->getWindow();
+    HWND first = GetNextDlgTabItem(page, NULL, FALSE);
+    if (first != NULL) {
+      SetFocus(first);
+    }
+  }
+  return true;
+}
+
+LRESULT CALLBACK OptionsDialog::msgFilterProc(int code, WPARAM wParam, LPARAM lParam)
+{
+  if (code == MSGF_DIALOGBOX) {
+    const MSG *msg = reinterpret_cast<const MSG *>(lParam);
+    if (msg->message == WM_KEYDOWN) {
+      for (OptionsDialog *dialog = s_activeDialog; dialog != NULL;
+           dialog = dialog->m_previousDialog) {
+        if (dialog->onTabSwitchKey(msg)) {
+          return 1;
+        }
+      }
+    }
+  }
+  return CallNextHookEx(NULL, code, wParam, lParam);
+}
+
+BOOL OptionsDialog::onDestroy()
+{
+  if (m_msgHook != NULL) {
+    UnhookWindowsHookEx(m_msgHook);
+    m_msgHook = NULL;
+    for (OptionsDialog **link = &s_activeDialog; *link != NULL;
+         link = &(*link)->m_previousDialog) {
+      if (*link == this) {
+        *link = m_previousDialog;
+        break;
+      }
+    }
+    m_previousDialog = NULL;
+  }
+  m_tabControl.deleteAllTabs();
+  return TRUE;
+}
+
 BOOL OptionsDialog::onInitDialog()
 {
-  setControlById(m_useEnc, IDC_CUSEENC);
-  setControlById(m_eightBit, IDC_CEIGHTBIT);
-  setControlById(m_compLvl, IDC_CCOMPRLVL);
-  setControlById(m_tcompLvl, IDC_SCOMP);
-  setControlById(m_quality, IDC_SQUALITY);
-  setControlById(m_jpeg, IDC_CJPEG);
-  setControlById(m_tjpeg, IDC_SJPEG);
-  setControlById(m_quality2, IDC_SQUALITY2);
-  setControlById(m_copyrect, IDC_CCOPYRECT);
-  setControlById(m_viewonly, IDC_CVIEWONLY);
-  setControlById(m_disclip, IDC_CDISCLIP);
-  setControlById(m_sharedses, IDC_CSHAREDSES);
-  setControlById(m_scale, IDC_CSCALE);
-  setControlById(m_fullscr, IDC_CFULLSCR);
-  setControlById(m_deiconfy, IDC_CDEICONFY);
-  setControlById(m_swapmouse, IDC_CSWAPMOUSE);
-  setControlById(m_track, IDC_RTRACK);
-  setControlById(m_cursor, IDC_RCURSOR);
-  setControlById(m_ncursor, IDC_RNCURSOR);
-  setControlById(m_dot, IDC_RDOT);
-  setControlById(m_smalldot, IDC_RSMALLDOT);
-  setControlById(m_arrow, IDC_RARROW);
-  setControlById(m_nlocal, IDC_RNLOCAL);
+  m_tabControl.setWindow(GetDlgItem(m_ctrlThis.getWindow(), IDC_OPTIONS_TAB));
+  createPage(&m_displayPage, StringTable::getString(IDS_OPTIONS_TAB_DISPLAY));
+  createPage(&m_inputPage, StringTable::getString(IDS_OPTIONS_TAB_INPUT));
+  createPage(&m_networkPage, StringTable::getString(IDS_OPTIONS_TAB_NETWORK));
+  m_tabControl.showTab(0);
+
+  if (m_msgHook == NULL) {
+    m_msgHook = SetWindowsHookEx(WH_MSGFILTER, msgFilterProc, NULL,
+                                 GetCurrentThreadId());
+    if (m_msgHook != NULL) {
+      m_previousDialog = s_activeDialog;
+      s_activeDialog = this;
+    }
+  }
+
+  setPageControl(m_useEnc, IDC_CUSEENC);
+  setPageControl(m_eightBit, IDC_CEIGHTBIT);
+  setPageControl(m_compLvl, IDC_CCOMPRLVL);
+  setPageControl(m_tcompLvl, IDC_SCOMP);
+  setPageControl(m_quality, IDC_SQUALITY);
+  setPageControl(m_jpeg, IDC_CJPEG);
+  setPageControl(m_tjpeg, IDC_SJPEG);
+  setPageControl(m_quality2, IDC_SQUALITY2);
+  setPageControl(m_copyrect, IDC_CCOPYRECT);
+  setPageControl(m_viewonly, IDC_CVIEWONLY);
+  setPageControl(m_disclip, IDC_CDISCLIP);
+  setPageControl(m_sharedses, IDC_CSHAREDSES);
+  setPageControl(m_scale, IDC_CSCALE);
+  setPageControl(m_fullscr, IDC_CFULLSCR);
+  setPageControl(m_deiconfy, IDC_CDEICONFY);
+  setPageControl(m_swapmouse, IDC_CSWAPMOUSE);
+  setPageControl(m_track, IDC_RTRACK);
+  setPageControl(m_cursor, IDC_RCURSOR);
+  setPageControl(m_ncursor, IDC_RNCURSOR);
+  setPageControl(m_dot, IDC_RDOT);
+  setPageControl(m_smalldot, IDC_RSMALLDOT);
+  setPageControl(m_arrow, IDC_RARROW);
+  setPageControl(m_nlocal, IDC_RNLOCAL);
 
   m_useEnc.addItem(_T("Raw"), reinterpret_cast<void *>(EncodingDefs::RAW));
   m_useEnc.addItem(_T("Hextile"), reinterpret_cast<void *>(EncodingDefs::HEXTILE));
@@ -134,6 +314,7 @@ BOOL OptionsDialog::onInitDialog()
   m_tjpeg.setRange(0, 9);
   m_tcompLvl.setRange(0, 9);
   updateControlValues();
+  m_tabControl.setFocus();
   return FALSE;
 }
 
@@ -264,9 +445,9 @@ void OptionsDialog::enableJpegCompression(bool enable)
 {
   m_tjpeg.setEnabled(enable);
   m_quality2.setEnabled(enable);
-  EnableWindow(GetDlgItem(getControl()->getWindow(), IDC_SPOOR), enable);
-  EnableWindow(GetDlgItem(getControl()->getWindow(), IDC_SBEST2), enable);
-  EnableWindow(GetDlgItem(getControl()->getWindow(), IDC_STQUALITY2), enable);
+  EnableWindow(findControl(IDC_SPOOR), enable);
+  EnableWindow(findControl(IDC_SBEST2), enable);
+  EnableWindow(findControl(IDC_STQUALITY2), enable);
 }
 void OptionsDialog::onAllowCustomCompressionClick()
 {
@@ -277,9 +458,9 @@ void OptionsDialog::enableCustomCompression(bool enable)
 {
   m_tcompLvl.setEnabled(enable);
   m_quality.setEnabled(enable);
-  EnableWindow(GetDlgItem(getControl()->getWindow(), IDC_SBEST), enable);
-  EnableWindow(GetDlgItem(getControl()->getWindow(), IDC_SFAST), enable);
-  EnableWindow(GetDlgItem(getControl()->getWindow(), IDC_STQUALITY), enable);
+  EnableWindow(findControl(IDC_SBEST), enable);
+  EnableWindow(findControl(IDC_SFAST), enable);
+  EnableWindow(findControl(IDC_STQUALITY), enable);
 }
 
 void OptionsDialog::onAllowJpegCompressionClick()
@@ -358,6 +539,12 @@ void OptionsDialog::onScaleKillFocus()
   m_scale.setText(scaleText.getString());
 }
 
+void OptionsDialog::showScaleField()
+{
+  m_tabControl.showTab(&m_displayPage);
+  m_scale.setFocus();
+}
+
 bool OptionsDialog::isInputValid()
 {
   int scaleInt;
@@ -370,6 +557,7 @@ bool OptionsDialog::isInputValid()
   }
 
   if (!StringParser::parseInt(scaleText.getString(), &scaleInt)) {
+    showScaleField();
     StringStorage error;
     error.format(StringTable::getString(IDS_ERROR_VALUE_FIELD_ONLY_NUMERIC),
                  StringTable::getString(IDS_OPTIONS_SCALE));
@@ -381,6 +569,7 @@ bool OptionsDialog::isInputValid()
   }
 
   if (scaleInt < 0) {
+    showScaleField();
     StringStorage error;
     error.format(StringTable::getString(IDS_ERROR_VALUE_FIELD_ONLY_POSITIVE_NUMERIC),
                  StringTable::getString(IDS_OPTIONS_SCALE));
