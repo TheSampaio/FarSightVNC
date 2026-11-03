@@ -31,6 +31,9 @@
     <ClCompile Include="DesktopWindow.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="FullScreenToolbar.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="FileExistDialog.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -121,6 +124,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="DesktopWindow.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="FullScreenToolbar.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="FullScreenToolbarLogic.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="FileExistDialog.h">

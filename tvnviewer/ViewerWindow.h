@@ -22,6 +22,7 @@
 //-------------------------------------------------------------------------
 //
 // Modified for FarSightVNC on 2026-11-01: DPI changes, display modes and fullscreen monitor selection.
+// Modified for FarSightVNC on 2026-11-03: floating auto-hide toolbar in full screen.
 //
 
 #ifndef _VIEWER_WINDOW_H_
@@ -30,6 +31,7 @@
 #include "ConnectionData.h"
 #include "DesktopWindow.h"
 #include "FileTransferMainDialog.h"
+#include "FullScreenToolbar.h"
 #include "NamingDefs.h"
 #include "OptionsDialog.h"
 #include "ScaleManager.h"
@@ -46,7 +48,8 @@
 
 class ViewerWindow : public BaseWindow,
                      public CoreEventsAdapter,
-                     private HookEventListener
+                     private HookEventListener,
+                     private DesktopPointerListener
 {
 public:
   ViewerWindow(WindowsApplication *application,
@@ -213,6 +216,12 @@ private:
   virtual LRESULT onHookProc(int code, WPARAM wParam, LPARAM lParam);
   WinHooks m_winHooks;
   bool m_hooksEnabledFirstTime;
+
+  // Floating toolbar of the full screen mode; it exists only in full screen.
+  FullScreenToolbar m_fsToolbar;
+  HMONITOR fullScreenToolbarMonitor();
+  // Implementation of DesktopPointerListener.
+  virtual void onDesktopPointerMove(POINT clientPoint);
 };
 
 #endif

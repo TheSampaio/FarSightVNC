@@ -22,6 +22,7 @@
 //-------------------------------------------------------------------------
 //
 // Modified for FarSightVNC on 2026-11-01: ordered keyboard input, DPI changes, display menu, fullscreen monitor selection, default window size within the work area.
+// Modified for FarSightVNC on 2026-11-03: floating auto-hide toolbar in full screen.
 //
 
 #include "config-lib/IniFileSettingsManager.h"
@@ -83,6 +84,7 @@ ViewerWindow::ViewerWindow(WindowsApplication *application,
   m_dsktWnd.createWindow(&subTitleName,
                          WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_CHILD,
                          getHWnd());
+  m_dsktWnd.setPointerListener(this);
 
   SetTimer(m_hWnd, TIMER_DESKTOP_STATE, TIMER_DESKTOP_STATE_DELAY, (TIMERPROC)NULL);
 }
@@ -154,6 +156,7 @@ void ViewerWindow::enableUserElements()
   m_toolbar.enableButton(IDS_TB_CTRL, isEnable);
   m_toolbar.enableButton(IDS_TB_CTRLESC, isEnable);
   m_toolbar.enableButton(IDS_TB_CTRLALTDEL, isEnable);
+  m_fsToolbar.enableButton(IDS_TB_CTRLALTDEL, isEnable);
 
   UINT enableMenu = static_cast<UINT>(!isEnable);
   m_menu.enableMenuItem(IDS_TB_CTRLALTDEL, enableMenu);
@@ -887,6 +890,9 @@ void ViewerWindow::doFullScr()
   SetFocus(m_dsktWnd.getHWnd());
   applyScreenChanges(true);
 
+  m_fsToolbar.create(m_hWnd, fullScreenToolbarMonitor());
+  m_fsToolbar.enableButton(IDS_TB_CTRLALTDEL, !m_conConf->isViewOnly());
+
   if (config->isPromptOnFullscreenEnabled()) {
     postMessage(WM_USER_FS_WARNING);
   }
@@ -906,6 +912,8 @@ void ViewerWindow::doUnFullScr()
   if (!m_isFullScr) {
     return;
   }
+
+  m_fsToolbar.destroy();
 
   m_conConf->enableFullscreen(false);
   m_conConf->saveToStorage(&m_ccsm);
@@ -1371,6 +1379,7 @@ void ViewerWindow::applyFullscreenTarget()
   if (m_isFullScr) {
     setSizeFullScreenWindow();
     doSize();
+    m_fsToolbar.showOn(fullScreenToolbarMonitor());
   } else {
     doFullScr();
   }
@@ -1385,5 +1394,30 @@ void ViewerWindow::onDisplayChange()
     // Keep covering the selected monitor(s) after a resolution or layout change.
     setSizeFullScreenWindow();
     doSize();
+    m_fsToolbar.showOn(fullScreenToolbarMonitor());
+  }
+}
+
+HMONITOR ViewerWindow::fullScreenToolbarMonitor()
+{
+  // Across all monitors the toolbar starts on the monitor of the pointer;
+  // the hot strip of any monitor brings it there later.
+  if (m_spanMonitors) {
+    POINT pt;
+    if (GetCursorPos(&pt)) {
+      return MonitorFromPoint(pt, MONITOR_DEFAULTTOPRIMARY);
+    }
+  }
+  return MonitorFromWindow(m_hWnd, MONITOR_DEFAULTTONEAREST);
+}
+
+void ViewerWindow::onDesktopPointerMove(POINT clientPoint)
+{
+  if (!m_isFullScr || !m_fsToolbar.isCreated()) {
+    return;
+  }
+  POINT screenPoint = clientPoint;
+  if (ClientToScreen(m_dsktWnd.getHWnd(), &screenPoint)) {
+    m_fsToolbar.onPointerMove(screenPoint);
   }
 }

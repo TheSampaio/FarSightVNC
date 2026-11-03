@@ -22,6 +22,7 @@
 //-------------------------------------------------------------------------
 //
 // Modified for FarSightVNC on 2026-11-02: optional Direct3D 11 / Direct2D presenter member.
+// Modified for FarSightVNC on 2026-11-03: listener for local pointer movement (full screen toolbar).
 //
 
 #ifndef _DESKTOP_WINDOW_H_
@@ -42,6 +43,16 @@
 #include "GpuPresenter.h"
 
 #include <memory>
+
+// Receives the local pointer position over the desktop window (client
+// coordinates), also in view-only mode and before it is sent to the server.
+class DesktopPointerListener
+{
+public:
+  virtual void onDesktopPointerMove(POINT clientPoint) = 0;
+protected:
+  ~DesktopPointerListener() {}
+};
 
 class DesktopWindow : public PaintWindow,
                       protected RfbKeySymListener
@@ -87,6 +98,8 @@ public:
 
   // Set function for m_winKeyIgnore.
   void setWinKeyIgnore(bool winKeyIgnore) { m_rfbKeySym->setWinKeyIgnore(winKeyIgnore); }
+
+  void setPointerListener(DesktopPointerListener *listener) { m_pointerListener = listener; }
 
 protected:
   //
@@ -169,6 +182,7 @@ protected:
   RemoteViewerCore *m_viewerCore;
   ConnectionConfig *m_conConf;
   bool m_isBackgroundDirty;
+  DesktopPointerListener *m_pointerListener;
 
 private:
   void doDraw(DeviceContext *dc);
