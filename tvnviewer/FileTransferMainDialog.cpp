@@ -21,6 +21,8 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-03: FarSightVNC message box caption.
+//
 
 #include "FileTransferMainDialog.h"
 
@@ -232,7 +234,7 @@ bool FileTransferMainDialog::tryClose()
   }
   if (MessageBox(m_ctrlThis.getWindow(),
                  _T("Do you want to close file transfers and terminate current operation?"),
-                 _T("TightVNC File Transfers"),
+                 _T("FarSightVNC File Transfers"),
                  MB_YESNO | MB_ICONQUESTION) == IDYES) {
     // Set flag
     m_isClosing = true;
