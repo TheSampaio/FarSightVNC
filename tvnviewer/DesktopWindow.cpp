@@ -22,6 +22,7 @@
 //-------------------------------------------------------------------------
 //
 // Modified for FarSightVNC on 2026-11-02: keyboard state kept in sync for hook-posted keys, also in view-only mode.
+// Modified for FarSightVNC on 2026-11-02: pointer mapping and drawing use the real server size, not the 4-aligned DIB.
 //
 
 #include "DesktopWindow.h"
@@ -539,7 +540,8 @@ void DesktopWindow::updateFramebuffer(const FrameBuffer *framebuffer,
 void DesktopWindow::setNewFramebuffer(const FrameBuffer *framebuffer)
 {
   Dimension dimension = framebuffer->getDimension();
-  Dimension olddimension = m_framebuffer.getDimension();
+  // Compare the real server sizes, not the DIB which is aligned to 4.
+  Dimension olddimension = m_serverDimension;
 
   bool isBackgroundDirty = dimension.width < olddimension.width ||
                            dimension.height < olddimension.height;

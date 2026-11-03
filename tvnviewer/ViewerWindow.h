@@ -87,6 +87,7 @@ protected:
   bool onFsWarning();
   bool onSize(WPARAM wParam, LPARAM lParam);
   bool onDpiChanged(WPARAM wParam, LPARAM lParam);
+  void onDisplayChange();
   bool onCreate(LPCREATESTRUCT lps);
   bool onCommand(WPARAM wParam, LPARAM lParam);
   bool onNotify(int idCtrl, LPNMHDR pnmh);
@@ -183,7 +184,11 @@ private:
   vector<HMONITOR> m_fullscreenMonitors;
   HMONITOR m_fullscreenMonitor;
   bool m_spanMonitors;
+  HMENU m_displayMenu;
+  int m_fixedDisplayMenuItems;
   void addDisplayMenus();
+  void refreshMonitorMenu();
+  void applyFullscreenTarget();
   static BOOL CALLBACK collectMonitor(HMONITOR monitor, HDC, LPRECT, LPARAM data);
   void changeCursor(int type);
   void applySettings();
