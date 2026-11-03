@@ -65,13 +65,16 @@ void RfbKeySym::processKeyEvent(unsigned short virtKey,
                                 unsigned int addKeyData)
 {
   m_log->debug(_T("Keyboard VK=%04x data=%08x"), virtKey, addKeyData);
-  if (m_winKeyIgnore && (virtKey == VK_LWIN || virtKey == VK_RWIN)) return;
   bool down = (addKeyData & 0x80000000) == 0;
   unsigned int scanCode = (addKeyData >> 16) & 0xff;
   bool extended = (addKeyData & 0x1000000) != 0; // 24 bit
   unsigned int physicalKey = scanCode ? (scanCode | (extended ? 0x100 : 0)) :
                                         (0x200 | virtKey);
   std::map<unsigned int, std::vector<UINT32> >::iterator old = m_pressedKeys.find(physicalKey);
+  // The Win key is ignored while the keyboard hook is off, but a Win key that
+  // is already held on the server must still be released.
+  if (m_winKeyIgnore && (virtKey == VK_LWIN || virtKey == VK_RWIN) &&
+      (down || old == m_pressedKeys.end())) return;
   if (!down) {
     if (old == m_pressedKeys.end()) return;
     UINT32 ignoredSym;
