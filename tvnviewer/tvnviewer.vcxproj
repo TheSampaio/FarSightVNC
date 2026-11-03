@@ -1,4 +1,5 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
+<!-- Modified for FarSightVNC on 2026-11-02: optional GPU presenter sources. -->
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="DebugNoUnicode|Win32">
@@ -328,6 +329,7 @@
     <ClCompile Include="ConnectionListener.cpp" />
     <ClCompile Include="ControlTrayIcon.cpp" />
     <ClCompile Include="DesktopWindow.cpp" />
+    <ClCompile Include="GpuPresenter.cpp" />
     <ClCompile Include="FileExistDialog.cpp" />
     <ClCompile Include="FileInfoListView.cpp" />
     <ClCompile Include="FileRenameDialog.cpp" />
@@ -358,6 +360,8 @@
     <ClInclude Include="ConnectionListener.h" />
     <ClInclude Include="ControlTrayIcon.h" />
     <ClInclude Include="DesktopWindow.h" />
+    <ClInclude Include="GpuPresenter.h" />
+    <ClInclude Include="RenderSettings.h" />
     <ClInclude Include="FileExistDialog.h" />
     <ClInclude Include="FileInfoListView.h" />
     <ClInclude Include="FileRenameDialog.h" />

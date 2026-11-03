@@ -256,6 +256,7 @@
     <ClCompile Include="RfbSetEncodingsClientMessage.cpp" />
     <ClCompile Include="RfbSetPixelFormatClientMessage.cpp" />
     <ClCompile Include="TcpConnection.cpp" />
+    <ClCompile Include="InputEventSender.cpp" />
     <ClCompile Include="UpdateRequestSender.cpp" />
     <ClCompile Include="VncAuthentication.cpp" />
     <ClCompile Include="CompressionLevel.cpp" />
@@ -296,6 +297,7 @@
     <ClInclude Include="RfbSetEncodingsClientMessage.h" />
     <ClInclude Include="RfbSetPixelFormatClientMessage.h" />
     <ClInclude Include="TcpConnection.h" />
+    <ClInclude Include="InputEventSender.h" />
     <ClInclude Include="UpdateRequestSender.h" />
     <ClInclude Include="VncAuthentication.h" />
     <ClInclude Include="CompressionLevel.h" />

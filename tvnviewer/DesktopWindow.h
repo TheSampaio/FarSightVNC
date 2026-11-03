@@ -21,6 +21,8 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-02: optional Direct3D 11 / Direct2D presenter member.
+//
 
 #ifndef _DESKTOP_WINDOW_H_
 #define _DESKTOP_WINDOW_H_
@@ -37,6 +39,9 @@
 #include "gui/drawing/Graphics.h"
 #include "rfb/RfbKeySym.h"
 #include "viewer-core/RemoteViewerCore.h"
+#include "GpuPresenter.h"
+
+#include <memory>
 
 class DesktopWindow : public PaintWindow,
                       protected RfbKeySymListener
@@ -147,6 +152,8 @@ protected:
   // frame buffer
   LocalMutex m_bufferLock;
   DibFrameBuffer m_framebuffer;
+  // Direct3D 11 / Direct2D presenter; null when the GDI renderer is forced.
+  std::unique_ptr<GpuPresenter> m_gpu;
   // This variable save server dimension.
   // Dimension of m_framebuffer can be large m_serverDimension.
   Dimension m_serverDimension;

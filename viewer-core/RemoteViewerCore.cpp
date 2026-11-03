@@ -21,6 +21,11 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-01: client input events (keyboard,
+// pointer, cut text) are queued and written by a dedicated thread
+// (InputEventSender) instead of the UI thread; stop() waits briefly for
+// queued key releases before closing the connection (2026-11-02).
+//
 
 #include "RemoteViewerCore.h"
 
@@ -67,6 +72,7 @@ RemoteViewerCore::RemoteViewerCore(Logger *logger)
   m_fbUpdateNotifier(&m_frameBuffer, &m_fbLock, &m_logWriter, &m_watermarksController),
   m_decoderStore(&m_logWriter),
   m_updateRequestSender(&m_fbLock, &m_frameBuffer, &m_logWriter),
+  m_inputSender(&m_logWriter),
   m_isTightEnabled(true),
   m_isUtf8ClipboardEnabled(false)
 {
@@ -82,6 +88,7 @@ RemoteViewerCore::RemoteViewerCore(const TCHAR *host, UINT16 port,
   m_fbUpdateNotifier(&m_frameBuffer, &m_fbLock, &m_logWriter, &m_watermarksController),
   m_decoderStore(&m_logWriter),
   m_updateRequestSender(&m_fbLock, &m_frameBuffer, &m_logWriter),
+  m_inputSender(&m_logWriter),
   m_isTightEnabled(true),
   m_isUtf8ClipboardEnabled(false)
 {
@@ -99,6 +106,7 @@ RemoteViewerCore::RemoteViewerCore(SocketIPv4 *socket,
   m_fbUpdateNotifier(&m_frameBuffer, &m_fbLock, &m_logWriter, &m_watermarksController),
   m_decoderStore(&m_logWriter),
   m_updateRequestSender(&m_fbLock, &m_frameBuffer, &m_logWriter),
+  m_inputSender(&m_logWriter),
   m_isTightEnabled(true),
   m_isUtf8ClipboardEnabled(false)
 {
@@ -116,6 +124,7 @@ RemoteViewerCore::RemoteViewerCore(RfbInputGate *input, RfbOutputGate *output,
   m_fbUpdateNotifier(&m_frameBuffer, &m_fbLock, &m_logWriter, &m_watermarksController),
   m_decoderStore(&m_logWriter),
   m_updateRequestSender(&m_fbLock, &m_frameBuffer, &m_logWriter),
+  m_inputSender(&m_logWriter),
   m_isTightEnabled(true),
   m_isUtf8ClipboardEnabled(false)
 {
@@ -139,6 +148,7 @@ void RemoteViewerCore::init()
   m_decoderStore.addDecoder(new RichCursorDecoder(&m_logWriter), -1);
   m_input = 0;
   m_output = 0;
+  m_inputSender.setFailureHandler(this);
 
   m_wasStarted = false;
   m_wasConnected = false;
@@ -173,6 +183,7 @@ RemoteViewerCore::~RemoteViewerCore()
     } else {
       m_fbUpdateNotifier.wait();
 	  m_updateRequestSender.wait();
+      m_inputSender.wait();
     }
   } catch (...) {
   }
@@ -243,10 +254,23 @@ bool RemoteViewerCore::wasConnected() const
   return m_wasConnected;
 }
 
+void RemoteViewerCore::onInputSendFailed(const TCHAR *message)
+{
+  // Called from the input sender thread. Closing the connection makes the
+  // protocol thread fail its read and report the disconnect via the adapter.
+  m_logWriter.error(_T("Input event sender failed (%s), closing connection"), message);
+  m_tcpConnection.close();
+}
+
 void RemoteViewerCore::stop()
 {
+  // Modified for FarSightVNC on 2026-11-02: allow queued releases to drain,
+  // with a bounded wait so a stalled peer cannot hold the UI indefinitely.
+  m_inputSender.terminate();
   m_updateRequestSender.terminate();
-
+  if (!m_inputSender.waitForDrain(250)) {
+    m_logWriter.debug(_T("Input drain timed out; closing the connection"));
+  }
   m_tcpConnection.close();
   m_fbUpdateNotifier.terminate();
   terminate();
@@ -256,6 +280,7 @@ void RemoteViewerCore::waitTermination()
 {
   m_fbUpdateNotifier.wait();
   m_updateRequestSender.wait();
+  m_inputSender.wait();
   wait();
 }
 
@@ -379,10 +404,9 @@ void RemoteViewerCore::sendKeyboardEvent(bool downFlag, UINT32 key)
     return;
   }
 
-  m_logWriter.detail(_T("Sending key event: %d, %d..."), downFlag, key);
-  RfbKeyEventClientMessage keyMessage(downFlag, key);
-  keyMessage.send(m_output);
-  m_logWriter.debug(_T("Key event: %d, %d is sent"), downFlag, key);
+  // The message is written by the input sender thread (FIFO).
+  m_logWriter.detail(_T("Queueing key event: %d, %d..."), downFlag, key);
+  m_inputSender.postKeyEvent(downFlag, key);
 }
 
 void RemoteViewerCore::sendPointerEvent(UINT8 buttonMask,
@@ -394,16 +418,12 @@ void RemoteViewerCore::sendPointerEvent(UINT8 buttonMask,
     return;
   }
 
-  m_logWriter.detail(_T("Sending pointer event 0x%X, (%d, %d)..."),
+  m_logWriter.detail(_T("Queueing pointer event 0x%X, (%d, %d)..."),
                      static_cast<int>(buttonMask), position->x, position->y);
-  // send position to server
-  RfbPointerEventClientMessage pointerMessage(buttonMask, position);
-  pointerMessage.send(m_output);
+  // The message is written by the input sender thread (FIFO).
+  m_inputSender.postPointerEvent(buttonMask, position);
   // update position
   m_fbUpdateNotifier.updatePointerPos(position);
-
-  m_logWriter.debug(_T("Pointer event: 0x%X, (%d, %d) is sent"),
-                    static_cast<int>(buttonMask), position->x, position->y);
 }
 
 void RemoteViewerCore::sendCutTextEvent(const StringStorage *cutText)
@@ -415,16 +435,10 @@ void RemoteViewerCore::sendCutTextEvent(const StringStorage *cutText)
     return;
   }
 
-  RfbCutTextEventClientMessage cutTextMessage(cutText);
-  if (m_isUtf8ClipboardEnabled) {
-    m_logWriter.detail(_T("Sending UTF-8 clipboard cut text: \"%s\"..."), cutText->getString());
-    cutTextMessage.sendUtf8(m_output);
-  }
-  else {
-    m_logWriter.detail(_T("Sending clipboard cut text: \"%s\"..."), cutText->getString());
-    cutTextMessage.send(m_output);
-  }
-  m_logWriter.debug(_T("Clipboard cut text: \"%s\" is sent"), cutText->getString());
+  // Queued together with key and pointer events to keep their relative order
+  // (e.g. a paste shortcut right after a clipboard change).
+  m_logWriter.detail(_T("Queueing clipboard cut text (utf8: %d)..."), m_isUtf8ClipboardEnabled);
+  m_inputSender.postCutText(cutText, m_isUtf8ClipboardEnabled);
 }
 
 void RemoteViewerCore::setPreferredEncoding(INT32 encodingType)
@@ -561,6 +575,7 @@ void RemoteViewerCore::connectToHost()
   m_output = m_tcpConnection.getOutput();
 
   m_updateRequestSender.setOutput(m_output);
+  m_inputSender.setOutput(m_output);
 
   m_logWriter.detail(_T("Connection is established"));
   try {
