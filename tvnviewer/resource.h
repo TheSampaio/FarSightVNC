@@ -2,6 +2,7 @@
 // Включаемый файл, созданный в Microsoft Visual C++.
 // Используется tvnviewer.rc
 // Modified for FarSightVNC on 2026-11-03: IDs of the Options dialog tab pages.
+// Modified for FarSightVNC on 2026-11-03: IDs of the login dialog favorite and recent controls.
 //
 #define IDB_TOOLBAR                     101
 #define IDI_CNOCURSOR                   102
@@ -169,6 +170,8 @@
 #define IDC_ID_EDIT                     1089
 #define IDC_LABEL_ID                    1090
 #define IDC_OPTIONS_TAB                 1093
+#define IDC_FAVORITE                    1094
+#define IDC_REMOVE_RECENT               1095
 #define ID_CONN_OPTIONS                 40001
 #define ID_CONN_INFO                    40002
 #define ID_SHOW_TOOLBAR                 40004
@@ -183,7 +186,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        235
 #define _APS_NEXT_COMMAND_VALUE         40010
-#define _APS_NEXT_CONTROL_VALUE         1094
+#define _APS_NEXT_CONTROL_VALUE         1096
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

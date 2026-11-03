@@ -21,6 +21,8 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-03: favorite hosts (own registry key)
+// listed before the recent ones, Favorite host check box, Remove recent button.
 
 #include "LoginDialog.h"
 #include "NamingDefs.h"
@@ -44,7 +46,12 @@ BOOL LoginDialog::onInitDialog()
   setControlById(m_server, IDC_CSERVER);
   setControlById(m_listening, IDC_LISTENING);
   setControlById(m_ok, IDOK);
+  setControlById(m_favorite, IDC_FAVORITE);
+  setControlById(m_removeRecent, IDC_REMOVE_RECENT);
   updateHistory();
+  StringStorage server;
+  m_server.getText(&server);
+  updateHostButtons(&server);
   SetForegroundWindow(getControl()->getWindow());
   m_server.setFocus();
   if (m_isListening) {
@@ -65,19 +72,76 @@ void LoginDialog::enableConnect()
   }
 }
 
-void LoginDialog::updateHistory()
+void LoginDialog::fillHostList()
 {
-  ConnectionHistory *conHistory;
+  ConnectionHistory *conHistory = ViewerConfig::getInstance()->getConnectionHistory();
+  conHistory->load();
+  std::vector<StringStorage> recents;
+  for (size_t i = 0; i < conHistory->getHostCount(); i++) {
+    recents.push_back(StringStorage(conHistory->getHost(i)));
+  }
+  m_favorites.load();
+  // Favorites first, then the recents (most recent first, no duplicates).
+  std::vector<StringStorage> hosts;
+  m_favorites.buildHostList(recents, conHistory->getLimit(), &hosts);
 
   StringStorage currentServer;
   m_server.getText(&currentServer);
   m_server.removeAllItems();
-  conHistory = ViewerConfig::getInstance()->getConnectionHistory();
-  conHistory->load();
-  for (size_t i = 0; i < conHistory->getHostCount(); i++) {
-    m_server.insertItem(static_cast<int>(i), conHistory->getHost(i));
+  for (size_t i = 0; i < hosts.size(); i++) {
+    m_server.insertItem(static_cast<int>(i), hosts[i].getString());
   }
   m_server.setText(currentServer.getString());
+}
+
+void LoginDialog::updateHostButtons(const StringStorage *host)
+{
+  bool hasHost = !host->isEmpty();
+  m_favorite.setEnabled(hasHost);
+  m_favorite.check(hasHost && m_favorites.contains(host->getString()));
+
+  bool isRecent = false;
+  ConnectionHistory *conHistory = ViewerConfig::getInstance()->getConnectionHistory();
+  for (size_t i = 0; i < conHistory->getHostCount() && !isRecent; i++) {
+    isRecent = ConnectionFavorites::isSameHost(conHistory->getHost(i),
+                                               host->getString());
+  }
+  m_removeRecent.setEnabled(isRecent);
+}
+
+void LoginDialog::onFavorite()
+{
+  StringStorage host;
+  m_server.getText(&host);
+  if (!host.isEmpty()) {
+    m_favorites.load();
+    bool changed = m_favorite.isChecked() ? m_favorites.add(host.getString())
+                                          : m_favorites.remove(host.getString());
+    if (changed) {
+      m_favorites.save();
+    }
+  }
+  updateHostButtons(&host);
+}
+
+void LoginDialog::onRemoveRecent()
+{
+  StringStorage host;
+  m_server.getText(&host);
+  ConnectionHistory *conHistory = ViewerConfig::getInstance()->getConnectionHistory();
+  m_favorites.load();
+  // A favorite keeps its saved options; other hosts lose them with the entry.
+  conHistory->removeEntry(host.getString(), !m_favorites.contains(host.getString()));
+  fillHostList();
+  updateHostButtons(&host);
+  m_server.setFocus();
+}
+
+void LoginDialog::updateHistory()
+{
+  StringStorage currentServer;
+  m_server.getText(&currentServer);
+  fillHostList();
   if (m_server.getItemsCount()) {
     if (currentServer.isEmpty()) {
       m_server.setSelectedItem(0);
@@ -204,6 +268,30 @@ BOOL LoginDialog::onCommand(UINT controlID, UINT notificationID)
     }
 
     enableConnect();
+    {
+      // On a list selection the edit text is not updated yet.
+      StringStorage host;
+      int selectedItemIndex = m_server.getSelectedItemIndex();
+      if ((notificationID == CBN_SELENDOK || notificationID == CBN_SELCHANGE) &&
+          selectedItemIndex >= 0) {
+        m_server.getItemText(selectedItemIndex, &host);
+      } else {
+        m_server.getText(&host);
+      }
+      updateHostButtons(&host);
+    }
+    break;
+
+  case IDC_FAVORITE:
+    if (notificationID == BN_CLICKED) {
+      onFavorite();
+    }
+    break;
+
+  case IDC_REMOVE_RECENT:
+    if (notificationID == BN_CLICKED) {
+      onRemoveRecent();
+    }
     break;
 
   // click "Connect"
