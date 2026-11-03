@@ -19,6 +19,8 @@
 
 // Modified for FarSightVNC on 2026-11-03: also covers the auto-hide decisions
 // of the full screen toolbar (FullScreenToolbarLogic).
+// Modified for FarSightVNC on 2026-11-03: also covers the assisted reconnect
+// decisions (ReconnectPolicy).
 
 // Deterministic test for the in-memory logic of ConnectionFavorites (the
 // favorite and recent hosts of the login dialog): case-insensitive host
@@ -27,6 +29,7 @@
 
 #include "client-config-lib/ConnectionFavorites.h"
 #include "tvnviewer/FullScreenToolbarLogic.h"
+#include "tvnviewer/ReconnectPolicy.h"
 
 #include <stdio.h>
 #include <vector>
@@ -213,6 +216,57 @@ void testToolbarTickWrap()
   check(logic.onTimer(false, start + 2000u), "wrap: hidden after the delay across the wrap");
 }
 
+void testReconnectOffer()
+{
+  ReconnectPolicy p;
+  check(p.shouldOffer(ReconnectPolicy::CAUSE_CONNECTION_LOST, false, 0), "lost session offers reconnect");
+  check(!p.shouldOffer(ReconnectPolicy::CAUSE_USER_CLOSED, false, 0), "user close never offers");
+  check(!p.shouldOffer(ReconnectPolicy::CAUSE_USER_CLOSED, false, 2), "user close while reconnecting never offers");
+  check(!p.shouldOffer(ReconnectPolicy::CAUSE_AUTH_FAILED, false, 0), "auth failure never offers");
+  check(!p.shouldOffer(ReconnectPolicy::CAUSE_AUTH_FAILED, false, 1), "auth failure while reconnecting never offers");
+  check(!p.shouldOffer(ReconnectPolicy::CAUSE_CONNECT_FAILED, false, 0), "first connection failure keeps the error box");
+  check(p.shouldOffer(ReconnectPolicy::CAUSE_CONNECT_FAILED, false, 1), "failed reconnection attempt offers the next");
+  check(p.shouldOffer(ReconnectPolicy::CAUSE_CONNECT_FAILED, false, 9), "manual reconnect stays offered after the limit");
+  check(!p.shouldOffer(ReconnectPolicy::CAUSE_CONNECTION_LOST, true, 0), "incoming connection never offers");
+  check(!p.shouldOffer(ReconnectPolicy::CAUSE_CONNECT_FAILED, true, 1), "incoming attempt never offers");
+}
+
+void testReconnectBackoff()
+{
+  ReconnectPolicy p;
+  check(p.getMaxAttempts() == 4, "default max attempts");
+  check(p.delayBeforeAttemptMs(0) == 2000, "first attempt after 2 s");
+  check(p.delayBeforeAttemptMs(1) == 4000, "second attempt after 4 s");
+  check(p.delayBeforeAttemptMs(2) == 8000, "third attempt after 8 s");
+  check(p.delayBeforeAttemptMs(3) == 16000, "fourth attempt after 16 s");
+  check(p.delayBeforeAttemptMs(4) == 16000, "delay is capped");
+  check(p.delayBeforeAttemptMs(0xFFFFFFFFu) == 16000, "huge attempt count stays capped");
+  check(p.canRetryAutomatically(0) && p.canRetryAutomatically(3), "automatic attempts below the limit");
+  check(!p.canRetryAutomatically(4) && !p.canRetryAutomatically(5), "no automatic attempt at the limit");
+
+  ReconnectPolicy none(0);
+  check(!none.canRetryAutomatically(0), "zero attempts disables automatic retry");
+  check(none.shouldOffer(ReconnectPolicy::CAUSE_CONNECTION_LOST, false, 0), "manual offer without automatic retry");
+
+  ReconnectPolicy odd(5, 3000, 2000);
+  check(odd.delayBeforeAttemptMs(0) == 3000 && odd.delayBeforeAttemptMs(2) == 3000, "cap below base uses base");
+
+  ReconnectPolicy big(3, 0x90000000u, 0xF0000000u);
+  check(big.delayBeforeAttemptMs(1) == 0xF0000000u, "doubling does not overflow");
+}
+
+void testReconnectCountdown()
+{
+  check(ReconnectPolicy::secondsLeft(2000, 0) == 2, "countdown starts at 2 s");
+  check(ReconnectPolicy::secondsLeft(2000, 1) == 2, "countdown rounds up");
+  check(ReconnectPolicy::secondsLeft(2000, 1000) == 1, "one second left");
+  check(ReconnectPolicy::secondsLeft(2000, 1999) == 1, "last millisecond shows 1 s");
+  check(ReconnectPolicy::secondsLeft(2000, 2000) == 0, "expired at the delay");
+  check(ReconnectPolicy::secondsLeft(2000, 0xFFFFFF00u) == 0, "expired after a long time");
+  unsigned int start = 0xFFFFFC18u; // 1000 ms before the 32-bit tick counter wraps
+  check(ReconnectPolicy::secondsLeft(4000, (start + 1500u) - start) == 3, "countdown across the tick wrap");
+}
+
 } // namespace
 
 int main()
@@ -225,6 +279,9 @@ int main()
   testToolbarAutoHide();
   testToolbarPin();
   testToolbarTickWrap();
+  testReconnectOffer();
+  testReconnectBackoff();
+  testReconnectCountdown();
   printf("viewer-favorites-test: %d passed, %d failed\n", g_passed, g_failed);
   return g_failed == 0 ? 0 : 1;
 }
