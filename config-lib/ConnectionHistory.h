@@ -21,6 +21,7 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-03: removeEntry() removes a single host.
 
 #ifndef _CONNECTION_HISTORY_H_
 #define _CONNECTION_HISTORY_H_
@@ -103,6 +104,14 @@ public:
    * @return host string.
    */
   const TCHAR *getHost(size_t i) const;
+
+  /**
+   * Reloads the history, removes every entry equal to host (case-insensitive)
+   * and saves the remaining entries, keeping their most-recent-first order.
+   * @param deleteOptions if true, the options subkey of the host is deleted too.
+   * @return true if an entry was removed.
+   */
+  bool removeEntry(const TCHAR *host, bool deleteOptions);
 
 protected:
   void releaseHosts();

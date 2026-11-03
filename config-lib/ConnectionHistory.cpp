@@ -21,6 +21,8 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-03: removeEntry() removes a single
+// host from the history (registry values and, optionally, its options).
 
 #include "ConnectionHistory.h"
 
@@ -170,4 +172,39 @@ void ConnectionHistory::removeHost(const TCHAR *host)
       break;
     }
   }
+}
+
+bool ConnectionHistory::removeEntry(const TCHAR *host, bool deleteOptions)
+{
+  if (host == 0 || host[0] == _T('\0')) {
+    return false;
+  }
+
+  load();
+  size_t oldCount = m_hosts.size();
+
+  // Registry key names are case-insensitive, so all case variants of the host
+  // share the same options subkey and are removed together.
+  for (vector<StringStorage>::iterator it = m_hosts.begin(); it != m_hosts.end();) {
+    if (_tcsicmp(it->getString(), host) == 0) {
+      it = m_hosts.erase(it);
+    } else {
+      it++;
+    }
+  }
+  if (m_hosts.size() == oldCount) {
+    return false;
+  }
+
+  StringStorage valueName;
+  for (size_t i = m_hosts.size(); i < oldCount; i++) {
+    valueName.format(_T("%u"), (unsigned int)i);
+    m_key->deleteValue(valueName.getString());
+  }
+  save();
+
+  if (deleteOptions) {
+    m_key->deleteSubKey(host);
+  }
+  return true;
 }
