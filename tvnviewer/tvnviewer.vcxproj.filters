@@ -34,6 +34,9 @@
     <ClCompile Include="FullScreenToolbar.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="ReconnectDialog.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="FileExistDialog.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -130,6 +133,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="FullScreenToolbarLogic.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ReconnectDialog.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ReconnectPolicy.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="FileExistDialog.h">

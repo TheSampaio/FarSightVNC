@@ -16,6 +16,8 @@
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //
+// Modified for FarSightVNC on 2026-11-03: connection state label.
+//
 
 #include "FullScreenToolbar.h"
 #include "gui/DpiUtils.h"
@@ -42,6 +44,7 @@ FullScreenToolbar::FullScreenToolbar()
   m_font(0),
   m_inLayout(false)
 {
+  m_stateText[0] = 0;
 }
 
 FullScreenToolbar::~FullScreenToolbar()
@@ -115,6 +118,8 @@ void FullScreenToolbar::createButtons()
     { 0, false, BTNS_SEP },
     { ID_PIN, false, BTNS_CHECK | BTNS_SHOWTEXT },
     { ID_DISCONNECT, false, BTNS_BUTTON | BTNS_SHOWTEXT },
+    { 0, false, BTNS_SEP },
+    { ID_STATE, false, BTNS_BUTTON | BTNS_SHOWTEXT | BTNS_NOPREFIX },
   };
   for (size_t i = 0; i < sizeof(buttons) / sizeof(buttons[0]); i++) {
     TBBUTTON tbb;
@@ -140,6 +145,7 @@ const TCHAR *FullScreenToolbar::tooltipText(int id) const
   case IDS_TB_CONNOPTIONS: return _T("Connection options");
   case ID_PIN: return _T("Pin");
   case ID_DISCONNECT: return _T("Disconnect");
+  case ID_STATE: return m_stateText;
   }
   return _T("");
 }
@@ -275,6 +281,26 @@ void FullScreenToolbar::enableButton(int id, bool enable)
 {
   if (m_toolbar) {
     m_toolbar->enableButton(id, enable);
+  }
+}
+
+void FullScreenToolbar::setStateText(const TCHAR *text)
+{
+  _tcsncpy_s(m_stateText, sizeof(m_stateText) / sizeof(m_stateText[0]),
+             text != 0 ? text : _T(""), _TRUNCATE);
+  if (m_hwnd == 0 || !m_toolbar) {
+    return;
+  }
+  TBBUTTONINFO info;
+  ZeroMemory(&info, sizeof(info));
+  info.cbSize = sizeof(info);
+  info.dwMask = TBIF_TEXT;
+  info.pszText = m_stateText;
+  HWND bar = toolbarControl();
+  SendMessage(bar, TB_SETBUTTONINFO, ID_STATE, reinterpret_cast<LPARAM>(&info));
+  SendMessage(bar, TB_AUTOSIZE, 0, 0);
+  if (IsWindowVisible(m_hwnd) && m_monitor != 0) {
+    layout(m_monitor);
   }
 }
 

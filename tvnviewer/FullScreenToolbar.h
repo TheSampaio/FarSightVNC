@@ -16,6 +16,8 @@
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //
+// Modified for FarSightVNC on 2026-11-03: connection state label.
+//
 
 #ifndef _FULL_SCREEN_TOOLBAR_H_
 #define _FULL_SCREEN_TOOLBAR_H_
@@ -39,6 +41,8 @@ public:
   // Command ids of the buttons that have no main toolbar counterpart.
   static const int ID_PIN = 0xA850;
   static const int ID_DISCONNECT = 0xA860;
+  // Text-only label with the connection state; it has no action.
+  static const int ID_STATE = 0xA870;
 
   FullScreenToolbar();
   ~FullScreenToolbar();
@@ -55,6 +59,8 @@ public:
   // Pointer position over the remote desktop, in screen coordinates.
   void onPointerMove(POINT screenPoint);
   void enableButton(int id, bool enable);
+  // Sets the connection state label (copied, truncated to 31 characters).
+  void setStateText(const TCHAR *text);
 
 private:
   static LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
@@ -82,6 +88,7 @@ private:
   bool m_inLayout;
   std::unique_ptr<ToolBar> m_toolbar;
   FullScreenToolbarLogic m_logic;
+  TCHAR m_stateText[32];
 };
 
 #endif

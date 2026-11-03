@@ -336,6 +336,7 @@
     <ClCompile Include="FileTransferMainDialog.cpp" />
     <ClCompile Include="FsWarningDialog.cpp" />
     <ClCompile Include="FullScreenToolbar.cpp" />
+    <ClCompile Include="ReconnectDialog.cpp" />
     <ClCompile Include="HelpDialog.cpp" />
     <ClCompile Include="LoginDialog.cpp" />
     <ClCompile Include="main.cpp" />
@@ -370,6 +371,8 @@
     <ClInclude Include="FsWarningDialog.h" />
     <ClInclude Include="FullScreenToolbar.h" />
     <ClInclude Include="FullScreenToolbarLogic.h" />
+    <ClInclude Include="ReconnectDialog.h" />
+    <ClInclude Include="ReconnectPolicy.h" />
     <ClInclude Include="HelpDialog.h" />
     <ClInclude Include="KeyMap.h" />
     <ClInclude Include="LoginDialog.h" />
