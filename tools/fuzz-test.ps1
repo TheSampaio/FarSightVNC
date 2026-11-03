@@ -23,7 +23,9 @@
 
   The message box is dismissed with a posted WM_CLOSE (no synthetic
   input), so the viewer runs its normal teardown and the debug CRT heap checks
-  every freed block. The script sets SEM_NOGPFAULTERRORBOX for itself, which the
+  every freed block. With -Use8Bit the viewer is started through an options
+  file with "8bit=1", so the decoders run on an 8 bpp frame buffer (the server
+  follows the client's SetPixelFormat). The script sets SEM_NOGPFAULTERRORBOX for itself, which the
   viewer inherits, so an access violation ends the process with its exception
   code instead of opening a WER dialog. Only processes started here are
   stopped (by PID); history subkeys 127.0.0.1::<port> created by the runs are
@@ -35,6 +37,7 @@
 .EXAMPLE
   .\tools\fuzz-test.ps1 -Seeds (1..50)
   .\tools\fuzz-test.ps1 -Encodings zrle -Seeds 17 -Parallel 1
+  .\tools\fuzz-test.ps1 -Seeds (1..100) -Use8Bit
   .\tools\fuzz-test.ps1 -Regression
 #>
 param(
@@ -50,6 +53,7 @@ param(
   [int]$TimeoutSeconds = 20,
   [int]$Messages = 25,
   [switch]$Regression,
+  [switch]$Use8Bit,
   [string]$CsvPath = ''
 )
 
@@ -210,7 +214,14 @@ function Start-Viewer($state) {
   $enc = if ($state.Encoding -in @('tight', 'zrle', 'hextile', 'rre')) { $state.Encoding } else { 'raw' }
   $psi = New-Object System.Diagnostics.ProcessStartInfo
   $psi.FileName = $Viewer
-  $psi.Arguments = "-host=127.0.0.1 -port=$($state.Port) -viewonly=yes -encoding=$enc -useclipboard=no"
+  $target = "-host=127.0.0.1 -port=$($state.Port)"
+  if ($Use8Bit) {
+    # The options file replaces -host/-port; command-line options still apply on top of it.
+    $ini = Join-Path $workDir "8bit-$($state.Port).vnc"
+    Set-Content -LiteralPath $ini -Encoding Ascii -Value @('[connection]', 'host=127.0.0.1', "port=$($state.Port)", '[options]', '8bit=1')
+    $target = "-optionsfile=`"$ini`""
+  }
+  $psi.Arguments = "$target -viewonly=yes -encoding=$enc -useclipboard=no"
   $psi.UseShellExecute = $false        # CreateProcess: the error mode is inherited
   $psi.WorkingDirectory = Split-Path $Viewer
   $state.Viewer = [System.Diagnostics.Process]::Start($psi)
