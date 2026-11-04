@@ -21,6 +21,8 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-03: fillRect() returns early for an
+// empty clipped rectangle (heap overflow found by fuzzing).
 
 #include "FrameBuffer.h"
 #include <string.h>
@@ -79,6 +81,11 @@ void FrameBuffer::setColor(UINT8 red, UINT8 green, UINT8 blue)
 void FrameBuffer::fillRect(const Rect *dstRect, UINT32 color)
 {
   Rect clipRect = m_dimension.getRect().intersection(dstRect);
+  // A zero-height rectangle on the bottom edge clips to itself; without this
+  // check its first line would be filled one row past the end of the buffer.
+  if (clipRect.isEmpty()) {
+    return;
+  }
 
   int pixelSize = getBytesPerPixel();
   size_t sizeLineFb = getBytesPerRow();
