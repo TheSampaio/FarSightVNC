@@ -23,6 +23,7 @@
 //
 
 #include "AboutDialog.h"
+#include <vector>
 #include "win-system/Shell.h"
 #include "win-system/VersionInfo.h"
 #include "win-system/Environment.h"
@@ -79,6 +80,19 @@ BOOL AboutDialog::onInitDialog()
     Environment::getCurrentModulePath(&binaryPath);
     VersionInfo productInfo(binaryPath.getString());
     versionString.setString(productInfo.getProductVersionString());
+
+    // Prefer the full ProductVersion string (e.g. "0.1.0a", with the alpha/beta suffix).
+    DWORD handle = 0;
+    DWORD size = GetFileVersionInfoSize(binaryPath.getString(), &handle);
+    std::vector<char> data(size ? size : 1);
+    TCHAR *text = 0;
+    UINT textLength = 0;
+    if (size != 0 &&
+        GetFileVersionInfo(binaryPath.getString(), handle, size, &data[0]) &&
+        VerQueryValue(&data[0], _T("\\StringFileInfo\\040904b0\\ProductVersion"),
+                      (void **)&text, &textLength) && textLength > 0) {
+      versionString.setString(text);
+    }
   } catch (SystemException &ex) {
     MessageBox(m_ctrlThis.getWindow(),
                ex.getMessage(),

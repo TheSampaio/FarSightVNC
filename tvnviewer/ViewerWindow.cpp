@@ -25,6 +25,7 @@
 // Modified for FarSightVNC on 2026-11-03: floating auto-hide toolbar in full screen.
 // Modified for FarSightVNC on 2026-11-03: connection state in the title and assisted reconnect.
 // Modified for FarSightVNC on 2026-11-03: "FarSightVNC Viewer - <host>" title; sessions open maximized and fitted to the window.
+// Modified for FarSightVNC on 2026-11-04: "FarSightVNC | <host>" title; system shortcuts go to the server in windowed mode too.
 //
 
 #include "config-lib/IniFileSettingsManager.h"
@@ -305,9 +306,8 @@ bool ViewerWindow::onMessage(UINT message, WPARAM wParam, LPARAM lParam)
   case WM_USER_DISCONNECT:
     return onDisconnect();
   case WM_ACTIVATE:
-    if (!m_isFullScr) {
-      return true;
-    }
+    // The keyboard hook sends system shortcuts (Win, Alt+Tab, Ctrl+Esc...)
+    // to the server while the viewer is the active window, windowed or not.
     if (LOWORD(wParam) == WA_ACTIVE || LOWORD(wParam) == WA_CLICKACTIVE) {
       // full screen viewer can be minimized from other screen
       if (IsIconic(this->getHWnd())) {
@@ -954,10 +954,11 @@ void ViewerWindow::doUnFullScr()
   m_dsktWnd.setScale(m_scale);
   applyScreenChanges(false);
 
-  // Unregistration of keyboard hook.
-  m_winHooks.unregisterKeyboardHook(this);
-  // Switching on ignoring win key.
-  m_dsktWnd.setWinKeyIgnore(true);
+  // The windowed viewer keeps the keyboard hook while it is active.
+  if (GetForegroundWindow() != getHWnd()) {
+    m_winHooks.unregisterKeyboardHook(this);
+    m_dsktWnd.setWinKeyIgnore(true);
+  }
 }
 
 bool ViewerWindow::onNotify(int idCtrl, LPNMHDR pnmh)
@@ -1376,7 +1377,7 @@ void ViewerWindow::adjustWindowSize()
     // This is done for keyboard hooks to work.
     // If m_conConf->isFullscreenEnabled() is true,
     // hooks don't work at the first start of the viewer.
-    if (m_hooksEnabledFirstTime && m_isFullScr) {
+    if (m_hooksEnabledFirstTime && GetForegroundWindow() == getHWnd()) {
       try {
         // Registration of keyboard hook.
         m_winHooks.registerKeyboardHook(this);
@@ -1411,9 +1412,9 @@ StringStorage ViewerWindow::formatWindowName() const
   }
   StringStorage windowName;
   if (!desktopName.isEmpty()) {
-    windowName.format(_T("%s Viewer - %s"), ProductNames::VIEWER_PRODUCT_NAME, desktopName.getString());
+    windowName.format(_T("%s | %s"), ProductNames::VIEWER_PRODUCT_NAME, desktopName.getString());
   } else {
-    windowName.format(_T("%s Viewer"), ProductNames::VIEWER_PRODUCT_NAME);
+    windowName.format(_T("%s"), ProductNames::VIEWER_PRODUCT_NAME);
   }
   return windowName;
 }
@@ -1434,6 +1435,11 @@ LRESULT ViewerWindow::onHookProc(int code, WPARAM wParam, LPARAM lParam)
   HWND focus = GetFocus();
   if (GetForegroundWindow() != getHWnd() ||
       (focus != m_dsktWnd.getHWnd() && !IsChild(m_dsktWnd.getHWnd(), focus))) {
+    return false;
+  }
+  // A windowed viewer that cannot type into the server leaves the shortcuts
+  // (Alt+Tab, Win...) to the local desktop.
+  if (!m_isFullScr && (!m_isConnected || m_conConf->isViewOnly())) {
     return false;
   }
   KBDLLHOOKSTRUCT *str = (KBDLLHOOKSTRUCT*) lParam;

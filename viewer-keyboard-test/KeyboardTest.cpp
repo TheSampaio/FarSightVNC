@@ -190,6 +190,7 @@ public:
     memset(m_keys, 0, sizeof(m_keys));
     m_ks.setKeyboardLayout(hkl);
     m_ks.setToggleKeysOverride(false, false);
+    m_ks.setKeyStateOverride(m_keys);
     flushDeadKey();
   }
   ~Harness() { flushDeadKey(); }
@@ -203,6 +204,8 @@ public:
   void repeat(unsigned vk, unsigned scan, bool ext = false) { key(vk, scan, ext, false, true); }
   void up(unsigned vk, unsigned scan, bool ext = false) { key(vk, scan, ext, true, false); }
   void tap(unsigned vk, unsigned scan, bool ext = false) { down(vk, scan, ext); up(vk, scan, ext); }
+  // The key is released but Windows sends no key-up message (both Shifts held).
+  void lostUp(unsigned vk, unsigned scan, bool ext = false) { updateState(vk, scan, ext, false); }
 
   // Hook style event: the low level hook reports L/R specific virtual keys.
   void lshiftDown() { down(VK_SHIFT, SC_LSHIFT); }
@@ -423,6 +426,52 @@ void testShifts(const Layout &lay, LogWriter *log)
     e.d(XK_Shift_L).d(q).u(q).u(XK_Shift_L);
     finish(label(lay, "H3 RShift+LShift, release RShift, '?' still shifted"), h, e);
   }
+}
+
+void testLostShiftKeyUp(const Layout &lay, LogWriter *log)
+{
+  unsigned vk, scan; bool shift;
+  findCharKey(lay.hkl, L'?', &vk, &scan, &shift);
+  UINT32 q = symOf(L'?');
+  unsigned scanA = MapVirtualKeyExW('A', MAPVK_VK_TO_VSC, lay.hkl);
+  {
+    Harness h(lay.hkl, log);
+    h.lshiftDown(); h.rshiftDown();
+    h.lostUp(VK_SHIFT, SC_LSHIFT);
+    h.tap(vk, scan);        // RShift is still held: must be '?'
+    h.rshiftUp();
+    h.tap('A', scanA);      // nothing is held any more
+    Seq e;
+    e.d(XK_Shift_L).press(q).u(XK_Shift_L).press(symOf(L'a'));
+    finish(label(lay, "lost LShift key-up is released with RShift"), h, e);
+  }
+  {
+    Harness h(lay.hkl, log);
+    h.rshiftDown(); h.lshiftDown();
+    h.lostUp(VK_SHIFT, SC_RSHIFT);
+    h.tap(vk, scan);
+    h.lshiftUp();
+    h.tap('A', scanA);
+    Seq e;
+    e.d(XK_Shift_L).press(q).u(XK_Shift_L).press(symOf(L'a'));
+    finish(label(lay, "lost RShift key-up is released with LShift"), h, e);
+  }
+}
+
+void testFakeShift(LogWriter *log)
+{
+  // E0 AA / E0 2A around a navigation key while Left Shift is held.
+  Harness h(g_us->hkl, log);
+  h.lshiftDown();
+  h.up(VK_SHIFT, SC_LSHIFT, true);
+  h.tap(VK_UP, 0x48, true);
+  h.down(VK_SHIFT, SC_LSHIFT, true);
+  h.lshiftUp();
+  unsigned scanA = MapVirtualKeyExW('A', MAPVK_VK_TO_VSC, g_us->hkl);
+  h.tap('A', scanA);
+  Seq e;
+  e.d(XK_Shift_L).u(XK_Shift_L).press(XK_Up).d(XK_Shift_L).u(XK_Shift_L).press(symOf(L'a'));
+  finish("fake (E0) Shift is the same physical Shift key", h, e);
 }
 
 void testModifierAutorepeat(const Layout &lay, LogWriter *log)
@@ -897,6 +946,7 @@ int main()
     const Layout &lay = g_layouts[i];
     testQuestionMark(lay, &log);
     testShifts(lay, &log);
+    testLostShiftKeyUp(lay, &log);
     testModifierAutorepeat(lay, &log);
     testHookStyleModifiers(lay, &log);
     testPlainKeys(lay, &log);
@@ -906,6 +956,7 @@ int main()
   testAltGrAbnt2(&log);
   testDigitWithDeadShiftVariant(&log);
   testRightShiftIsShiftL(&log);
+  testFakeShift(&log);
   testCtrlAltDel(&log);
   testWinKey(&log);
   testFocusLoss(&log);

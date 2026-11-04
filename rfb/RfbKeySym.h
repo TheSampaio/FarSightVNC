@@ -21,7 +21,7 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
-// Modified for FarSightVNC on 2026-10-29, 2026-11-01 and 2026-11-03: added <string>; keyboard test seams and physical key tracking; Shift and dead-key workarounds for TightVNC servers.
+// Modified for FarSightVNC on 2026-10-29, 2026-11-01, 2026-11-03 and 2026-11-04: added <string>; keyboard test seams and physical key tracking; Shift and dead-key workarounds for TightVNC servers; lost Shift key-up.
 //
 
 #ifndef __RFBKEYSYM_H__
@@ -60,6 +60,8 @@ public:
   // Caps Lock / Scroll Lock toggle state are used.
   void setKeyboardLayout(HKL layout);
   void setToggleKeysOverride(bool capsLockOn, bool scrollLockOn);
+  // Key state table (GetKeyboardState() format) used instead of GetKeyState().
+  void setKeyStateOverride(const unsigned char *keys);
 
   // Set function for m_winKeyIgnore.
   void setWinKeyIgnore(bool winIgnore);
@@ -103,6 +105,9 @@ private:
   bool TryTranslateNotPrintableToUnicode(unsigned short virtKey, unsigned int scanCode, HKL currentLayout, WCHAR *unicodeChar);
   // True when Shift+virtKey is a dead key in the current layout.
   bool shiftVariantIsDeadKey(unsigned short virtKey, unsigned int scanCode);
+  // Releases the Shift keys that are pressed for the server but not held.
+  void releaseShiftsNotHeld();
+  bool isKeyHeld(unsigned char virtKey);
 
   RfbKeySymListener *m_extKeySymListener;
 
@@ -132,6 +137,7 @@ private:
   bool m_toggleKeysOverridden;
   bool m_capsLockOverride;
   bool m_scrollLockOverride;
+  const unsigned char *m_keyStateOverride;
   std::map<unsigned int, std::vector<UINT32> > m_pressedKeys;
   // Bit 0: Left Shift, bit 1: Right Shift, as sent to sendKeySymEvent().
   unsigned char m_shiftKeysDown;

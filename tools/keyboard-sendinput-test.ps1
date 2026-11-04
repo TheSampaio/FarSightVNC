@@ -212,6 +212,7 @@ try {
   Invoke-Case "'?' LShift, key released first" @($ls, $qd, $qu, $lsU) @('+ffe1', '+3f', '-3f', '-ffe1')
   Invoke-Case "'?' LShift, Shift released first" @($ls, $qd, $lsU, $qu) @('+ffe1', '+3f', '-ffe1', '-3f')
   Invoke-Case "'?' RShift, Shift released first" @($rs, $qd, $rsU, $qu) @('+ffe1', '+3f', '-ffe1', '-3f')
+  Invoke-Case 'both Shifts, LShift released first (lost key-up), then a' @($ls, $rs, $lsU, $rsU, $ad, $au) @('+ffe1', '-ffe1', '+61', '-61')
   Invoke-Case "plain a after '?'" @($ad, $au) @('+61', '-61')
   Invoke-Case 'plain 6 again (KP_6)' @($sd, $su) @('+ffb6', '-ffb6')
   Invoke-Case 'Shift+6 (dead diaeresis) then space gives diaeresis' @($ls, $sd, $su, $lsU, @('d', $SC.Space), @('u', $SC.Space)) @('+ffe1', '-ffe1', '+a8', '-a8')
