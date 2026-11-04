@@ -201,10 +201,10 @@ try {
   $aR = @('r', $VK.A, $SC.A)
   Invoke-Case "ABNT2 '?' LShift, key released first" $desk @($ls, $kd, $ku, $lsU) @('+ffe1', '+3f', '-3f', '-ffe1')
   Invoke-Case "ABNT2 '?' LShift, Shift released first" $desk @($ls, $kd, $lsU, $ku) @('+ffe1', '+3f', '-ffe1', '-3f')
-  Invoke-Case "ABNT2 '?' RShift, key released first" $desk @($rs, $kd, $ku, $rsU) @('+ffe2', '+3f', '-3f', '-ffe2')
-  Invoke-Case "ABNT2 '?' RShift, Shift released first" $desk @($rs, $kd, $rsU, $ku) @('+ffe2', '+3f', '-ffe2', '-3f')
+  Invoke-Case "ABNT2 '?' RShift, key released first" $desk @($rs, $kd, $ku, $rsU) @('+ffe1', '+3f', '-3f', '-ffe1')
+  Invoke-Case "ABNT2 '?' RShift, Shift released first" $desk @($rs, $kd, $rsU, $ku) @('+ffe1', '+3f', '-ffe1', '-3f')
   Invoke-Case "ABNT2 '?' generic VK_SHIFT with scan 0x36 (windowed Right Shift)" $desk `
-    @(@('d', $VK.Shift, $SC.RShift), $kd, @('u', $VK.Shift, $SC.RShift), $ku) @('+ffe2', '+3f', '-ffe2', '-3f')
+    @(@('d', $VK.Shift, $SC.RShift), $kd, @('u', $VK.Shift, $SC.RShift), $ku) @('+ffe1', '+3f', '-ffe1', '-3f')
   Invoke-Case 'ABNT2 plain a' $desk @($aD, $aU) @('+61', '-61')
   Invoke-Case 'ABNT2 Shift+a, Shift released first' $desk @($ls, $aD, $lsU, $aU) @('+ffe1', '+41', '-ffe1', '-41')
   Invoke-Case 'ABNT2 autorepeat a: same keysym, one release' $desk @($aD, $aR, $aR, $aU) @('+61', '+61', '+61', '-61')

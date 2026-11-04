@@ -21,7 +21,7 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
-// Modified for FarSightVNC on 2026-10-29 and 2026-11-01: added <string>; keyboard test seams and physical key tracking.
+// Modified for FarSightVNC on 2026-10-29, 2026-11-01 and 2026-11-03: added <string>; keyboard test seams and physical key tracking; Shift and dead-key workarounds for TightVNC servers.
 //
 
 #ifndef __RFBKEYSYM_H__
@@ -101,6 +101,8 @@ private:
   // E.g if pressed Ctrl + Alt + A
   // Try found char without modificators
   bool TryTranslateNotPrintableToUnicode(unsigned short virtKey, unsigned int scanCode, HKL currentLayout, WCHAR *unicodeChar);
+  // True when Shift+virtKey is a dead key in the current layout.
+  bool shiftVariantIsDeadKey(unsigned short virtKey, unsigned int scanCode);
 
   RfbKeySymListener *m_extKeySymListener;
 
@@ -131,6 +133,8 @@ private:
   bool m_capsLockOverride;
   bool m_scrollLockOverride;
   std::map<unsigned int, std::vector<UINT32> > m_pressedKeys;
+  // Bit 0: Left Shift, bit 1: Right Shift, as sent to sendKeySymEvent().
+  unsigned char m_shiftKeysDown;
 };
 
 #endif // __RFBKEYSYM_H__

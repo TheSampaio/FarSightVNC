@@ -22,6 +22,7 @@
 //-------------------------------------------------------------------------
 //
 // Modified for FarSightVNC on 2026-11-01: symmetric key press/release, scancode aware translation, Left/Right Shift.
+// Modified for FarSightVNC on 2026-11-03: one Shift_L for both Shift keys; keypad digits when Shift+digit is a dead key.
 //
 
 #include "RfbKeySym.h"
@@ -42,7 +43,8 @@ RfbKeySym::RfbKeySym(RfbKeySymListener *extKeySymListener, LogWriter *log)
   m_layoutOverride(0),
   m_toggleKeysOverridden(false),
   m_capsLockOverride(false),
-  m_scrollLockOverride(false)
+  m_scrollLockOverride(false),
+  m_shiftKeysDown(0)
 {
   clearKeyState();
 }
@@ -129,6 +131,18 @@ void RfbKeySym::processKeyEvent(unsigned short virtKey,
           _T(" rfb symbol to send it"), (unsigned int)chars[i]);
       }
     }
+    // A TightVNC server types a character after probing its key with and
+    // without Shift by ToUnicodeEx(), which leaves a dead Shift variant
+    // pending: on ABNT2 and US-International "6" arrives as "¨6" / "^6".
+    // The server injects keypad keysyms directly, and a keypad digit typed
+    // through its virtual key gives the digit whatever the Num Lock state.
+    if (symbols.size() == 1 && symbols[0] >= '0' && symbols[0] <= '9' &&
+        !isPressed(VK_LSHIFT) && !isPressed(VK_RSHIFT) &&
+        !isPressed(VK_LCONTROL) && !isPressed(VK_RCONTROL) &&
+        !isPressed(VK_LMENU) && !isPressed(VK_RMENU) &&
+        shiftVariantIsDeadKey(key, scanCode | (extended ? 0xe000 : 0))) {
+      symbols[0] = XK_KP_0 + (symbols[0] - '0');
+    }
     for (size_t i = 0; i < symbols.size(); i++) sendKeySymEvent(symbols[i], true);
     if (ctrlAlt && needReleaseModifiers) restoreModifiers();
     m_pressedKeys[physicalKey] = symbols;
@@ -136,6 +150,16 @@ void RfbKeySym::processKeyEvent(unsigned short virtKey,
   }
   for (size_t i = 0; i < symbols.size(); i++) sendKeySymEvent(symbols[i], true);
   m_pressedKeys[physicalKey] = symbols;
+}
+
+bool RfbKeySym::shiftVariantIsDeadKey(unsigned short virtKey, unsigned int scanCode)
+{
+  unsigned char shiftState[256] = {0};
+  shiftState[VK_SHIFT] = shiftState[VK_LSHIFT] = 128;
+  WCHAR outBuff[20];
+  // Bit 2 probes without changing the layout's dead-key buffer.
+  return ToUnicodeEx(virtKey, scanCode, shiftState, outBuff,
+                     sizeof(outBuff) / sizeof(WCHAR), 0x4, getKeyboardLayout()) == -1;
 }
 
 WCHAR RfbKeySym::GettingCharFromCtrlSymbol(WCHAR ch)
@@ -276,6 +300,7 @@ void RfbKeySym::processFocusLoss()
       sendKeySymEvent(it->second[i], false);
   }
   m_pressedKeys.clear();
+  m_shiftKeysDown = 0;
   m_leftMetaIsPressed = false;
   m_rightMetaIsPressed = false;
   clearKeyState();
@@ -397,6 +422,20 @@ bool RfbKeySym::isPressed(unsigned char virtKey)
 
 void RfbKeySym::sendKeySymEvent(unsigned int rfbKeySym, bool down)
 {
+  // A TightVNC server releases and presses VK_SHIFT (the Left Shift scan
+  // code) around characters that need other modifiers, e.g. ABNT2 '?' is
+  // typed as AltGr+W. With Shift_R held this left the Left Shift down on the
+  // server and Shift_R kept the character from being typed. Both Shift keys
+  // are therefore one Shift_L for the server: pressed with the first key and
+  // released with the last one.
+  if (rfbKeySym == XK_Shift_L || rfbKeySym == XK_Shift_R) {
+    unsigned char bit = rfbKeySym == XK_Shift_L ? 1 : 2;
+    unsigned char before = m_shiftKeysDown;
+    m_shiftKeysDown = down ? (before | bit) : (before & ~bit);
+    if (down ? before != 0 : m_shiftKeysDown != 0) return;
+    rfbKeySym = XK_Shift_L;
+  }
+
   // Translate Alt to Meta if Scroll Lock is on.
   if (rfbKeySym == XK_Alt_L || rfbKeySym == XK_Alt_R) {
     bool scrollLockOn = down ? isToggled(VK_SCROLL) :

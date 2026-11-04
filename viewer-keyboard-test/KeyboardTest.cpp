@@ -373,7 +373,8 @@ void testQuestionMark(const Layout &lay, LogWriter *log)
   for (int right = 0; right < 2; right++) {
     for (int keyFirst = 0; keyFirst < 2; keyFirst++) {
       Harness h(lay.hkl, log);
-      UINT32 sh = right ? XK_Shift_R : XK_Shift_L;
+      // Both Shift keys reach the server as Shift_L (TightVNC servers).
+      UINT32 sh = XK_Shift_L;
       right ? h.rshiftDown() : h.lshiftDown();
       h.down(vk, scan);
       Seq e;
@@ -409,7 +410,7 @@ void testShifts(const Layout &lay, LogWriter *log)
     h.up(vk, scan);
     h.rshiftUp();
     Seq e;
-    e.d(XK_Shift_L).d(XK_Shift_R).u(XK_Shift_L).d(q).u(q).u(XK_Shift_R);
+    e.d(XK_Shift_L).d(q).u(q).u(XK_Shift_L);
     finish(label(lay, "H3 LShift+RShift, release LShift, '?' still shifted"), h, e);
   }
   {
@@ -419,7 +420,7 @@ void testShifts(const Layout &lay, LogWriter *log)
     h.up(vk, scan);
     h.lshiftUp();
     Seq e;
-    e.d(XK_Shift_R).d(XK_Shift_L).u(XK_Shift_R).d(q).u(q).u(XK_Shift_L);
+    e.d(XK_Shift_L).d(q).u(q).u(XK_Shift_L);
     finish(label(lay, "H3 RShift+LShift, release RShift, '?' still shifted"), h, e);
   }
 }
@@ -448,7 +449,7 @@ void testHookStyleModifiers(const Layout &lay, LogWriter *log)
   h.down(VK_SHIFT, SC_RSHIFT);    // system copy of the Shift press
   h.up(VK_SHIFT, SC_RSHIFT);      // system copy of the Shift release
   Seq e;
-  e.d(XK_Shift_R).d(q).u(q).u(XK_Shift_R);
+  e.d(XK_Shift_L).d(q).u(q).u(XK_Shift_L);
   finish(label(lay, "H3/H4 hook style RShift with duplicate system copy"), h, e);
 }
 
@@ -628,11 +629,11 @@ void testCtrlAltDel(LogWriter *log)
     h.ks().sendCtrlAltDel();
     h.rshiftUp();
     Seq e;
-    e.d(XK_Shift_R);
-    e.u(XK_Shift_R);
+    e.d(XK_Shift_L);
+    e.u(XK_Shift_L);
     e.d(XK_Control_L).d(XK_Alt_L).d(XK_Delete).u(XK_Delete).u(XK_Alt_L).u(XK_Control_L);
-    e.d(XK_Shift_R);
-    e.u(XK_Shift_R);
+    e.d(XK_Shift_L);
+    e.u(XK_Shift_L);
     finish("Ctrl+Alt+Del button releases and restores a held Right Shift", h, e);
   }
 }
@@ -664,6 +665,73 @@ void testWinKey(LogWriter *log)
     e.d(XK_Super_L).u(XK_Super_L);
     finish("R1 held Win key is released after the ignore flag is set", h, e);
   }
+}
+
+//----------------------------------------------------------------------------
+// TightVNC server workarounds (2026-11-03)
+
+void testDigitWithDeadShiftVariant(LogWriter *log)
+{
+  unsigned scan6 = MapVirtualKeyExW('6', MAPVK_VK_TO_VSC, g_abnt2->hkl);
+  {
+    Harness h(g_abnt2->hkl, log);
+    h.tap('6', scan6);
+    Seq e;
+    e.press(XK_KP_6);
+    finish("ABNT2 plain 6 (Shift+6 is dead) is sent as KP_6", h, e);
+  }
+  {
+    Harness h(g_abnt2->hkl, log);
+    h.down('6', scan6); h.repeat('6', scan6); h.up('6', scan6);
+    Seq e;
+    e.d(XK_KP_6).d(XK_KP_6).u(XK_KP_6);
+    finish("ABNT2 autorepeat 6 keeps KP_6", h, e);
+  }
+  {
+    Harness h(g_abnt2->hkl, log);
+    unsigned scan5 = MapVirtualKeyExW('5', MAPVK_VK_TO_VSC, g_abnt2->hkl);
+    h.tap('5', scan5);
+    Seq e;
+    e.press(symOf(L'5'));
+    finish("ABNT2 plain 5 (Shift+5 is not dead) stays 5", h, e);
+  }
+  {
+    Harness h(g_us->hkl, log);
+    h.tap('6', MapVirtualKeyExW('6', MAPVK_VK_TO_VSC, g_us->hkl));
+    Seq e;
+    e.press(symOf(L'6'));
+    finish("US plain 6 stays 6", h, e);
+  }
+  {
+    Harness h(g_layouts[2].hkl, log);
+    h.tap('6', MapVirtualKeyExW('6', MAPVK_VK_TO_VSC, g_layouts[2].hkl));
+    Seq e;
+    e.press(XK_KP_6);
+    finish("US-Intl plain 6 (Shift+6 is dead) is sent as KP_6", h, e);
+  }
+  {
+    Harness h(g_abnt2->hkl, log);
+    h.down(VK_CONTROL, SC_CTRL);
+    h.tap('6', scan6);
+    h.up(VK_CONTROL, SC_CTRL);
+    Seq e;
+    e.d(XK_Control_L).press(symOf(L'6')).u(XK_Control_L);
+    finish("ABNT2 Ctrl+6 stays 6", h, e);
+  }
+}
+
+void testRightShiftIsShiftL(LogWriter *log)
+{
+  Harness h(g_abnt2->hkl, log);
+  unsigned scanA = MapVirtualKeyExW('A', MAPVK_VK_TO_VSC, g_abnt2->hkl);
+  h.rshiftDown();
+  h.tap('A', scanA);
+  h.rshiftUp();
+  h.lshiftDown(); h.rshiftDown(); h.rshiftUp(); h.lshiftUp();
+  Seq e;
+  e.d(XK_Shift_L).press(symOf(L'A')).u(XK_Shift_L);
+  e.d(XK_Shift_L).u(XK_Shift_L);
+  finish("ABNT2 Right Shift is sent as Shift_L, overlapping Shifts once", h, e);
 }
 
 //----------------------------------------------------------------------------
@@ -803,7 +871,7 @@ void testSyntheticModifierFocus(LogWriter *log)
   h.ks().processFocusLoss();
   h.ks().processFocusLoss();
   Seq e;
-  e.d(XK_Shift_R).u(XK_Shift_R);
+  e.d(XK_Shift_L).u(XK_Shift_L);
   finish("toolbar modifier is released exactly once on focus loss", h, e);
 
   Harness meta(g_us->hkl, log);
@@ -836,6 +904,8 @@ int main()
     testDeadKeys(lay, &log);
   }
   testAltGrAbnt2(&log);
+  testDigitWithDeadShiftVariant(&log);
+  testRightShiftIsShiftL(&log);
   testCtrlAltDel(&log);
   testWinKey(&log);
   testFocusLoss(&log);
