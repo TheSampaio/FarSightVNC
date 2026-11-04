@@ -21,6 +21,8 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-03: a reconnection attempt shows its window while connecting.
+//
 
 #include "ViewerInstance.h"
 
@@ -111,6 +113,11 @@ void ViewerInstance::start()
     StringStorage strHost;
     m_condata.getReducedHost(&strHost);
     UINT16 portVal = m_condata.getPort();
+    // The window of a reconnection attempt shows the "connecting" state;
+    // an ordinary connection keeps it hidden until the session is established.
+    if (m_condata.getReconnectAttempt() > 0) {
+      m_viewerWnd.showConnecting();
+    }
     m_viewerCore.start(strHost.getString(), portVal,
                        &m_viewerWnd, m_conConf.getSharedFlag());
   }

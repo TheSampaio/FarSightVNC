@@ -22,6 +22,8 @@
 //-------------------------------------------------------------------------
 //
 // Modified for FarSightVNC on 2026-11-01: DPI changes, display modes and fullscreen monitor selection.
+// Modified for FarSightVNC on 2026-11-03: floating auto-hide toolbar in full screen.
+// Modified for FarSightVNC on 2026-11-03: connection state in the title and assisted reconnect.
 //
 
 #ifndef _VIEWER_WINDOW_H_
@@ -30,6 +32,7 @@
 #include "ConnectionData.h"
 #include "DesktopWindow.h"
 #include "FileTransferMainDialog.h"
+#include "FullScreenToolbar.h"
 #include "NamingDefs.h"
 #include "OptionsDialog.h"
 #include "ScaleManager.h"
@@ -46,7 +49,8 @@
 
 class ViewerWindow : public BaseWindow,
                      public CoreEventsAdapter,
-                     private HookEventListener
+                     private HookEventListener,
+                     private DesktopPointerListener
 {
 public:
   ViewerWindow(WindowsApplication *application,
@@ -67,6 +71,12 @@ public:
   //
   bool isStopped() const;
 
+  //
+  // Shows the window before the session is established, with the
+  // "connecting" state in its title. Used by reconnection attempts.
+  //
+  void showConnecting();
+
   static const int WM_USER_ERROR = WM_USER + 1;
   static const int WM_USER_STOP = WM_USER + 2;
   static const int WM_USER_DISCONNECT = WM_USER + 3;
@@ -85,6 +95,10 @@ protected:
   bool onError();
 
   bool onFsWarning();
+  // Offers to reconnect after an established session dropped
+  // (sessionWasEstablished) or after a failed reconnection attempt. Returns
+  // false, without any window, when reconnecting is not offered.
+  bool offerReconnect(bool sessionWasEstablished, const StringStorage *reason);
   bool onSize(WPARAM wParam, LPARAM lParam);
   bool onDpiChanged(WPARAM wParam, LPARAM lParam);
   void onDisplayChange();
@@ -173,6 +187,17 @@ protected:
   // Flag is set after onConnected().
   bool m_isConnected;
 
+  // State shown in the title and in the full screen toolbar.
+  enum ConnectionState
+  {
+    STATE_CONNECTING,
+    STATE_CONNECTED,
+    STATE_DISCONNECTED
+  };
+  ConnectionState m_connectionState;
+  void setConnectionState(ConnectionState state);
+  const TCHAR *connectionStateLabel() const;
+
   // Flag is set, if instance is requires to reconnect.
   bool m_requiresReconnect;
 
@@ -207,12 +232,20 @@ private:
   void dialogConfiguration();
   void adjustWindowSize();
   StringStorage formatWindowName() const;
+  // formatWindowName() with the connection state when it is not "connected".
+  StringStorage formatWindowTitle() const;
   void updateKeyState();
 
   // onHookProc function implementation of HookEventListener base abstract class.
   virtual LRESULT onHookProc(int code, WPARAM wParam, LPARAM lParam);
   WinHooks m_winHooks;
   bool m_hooksEnabledFirstTime;
+
+  // Floating toolbar of the full screen mode; it exists only in full screen.
+  FullScreenToolbar m_fsToolbar;
+  HMONITOR fullScreenToolbarMonitor();
+  // Implementation of DesktopPointerListener.
+  virtual void onDesktopPointerMove(POINT clientPoint);
 };
 
 #endif

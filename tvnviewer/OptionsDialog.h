@@ -21,6 +21,9 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-03: Options dialog split into Display,
+// Input and Network tab pages, with Ctrl+Tab switching between them.
+//
 
 #ifndef _OPTIONS_DIALOG_H_
 #define _OPTIONS_DIALOG_H_
@@ -35,10 +38,32 @@
 #include "gui/CheckBox.h"
 #include "gui/ComboBox.h"
 #include "gui/TrackBar.h"
+#include "gui/TabControl.h"
 #include "resource.h"
+
+class OptionsDialog;
+
+// One tab page of the Options dialog. It only hosts the controls of its
+// dialog template and forwards their notifications to the owner dialog, which
+// keeps all the option logic.
+class OptionsPage : public BaseDialog
+{
+public:
+  OptionsPage(DWORD resourceId, OptionsDialog *owner);
+
+protected:
+  BOOL onInitDialog();
+  BOOL onCommand(UINT controlID, UINT notificationID);
+  void onMessageReceived(UINT uMsg, WPARAM wParam, LPARAM lParam);
+
+private:
+  OptionsDialog *m_owner;
+};
 
 class OptionsDialog : public BaseDialog
 {
+  friend class OptionsPage;
+
 public:
   OptionsDialog();
 
@@ -72,12 +97,20 @@ protected:
 
   void onMessageReceived(UINT uMsg, WPARAM wParam, LPARAM lParam);
   BOOL onCommand(UINT controlID, UINT notificationID);
+  BOOL onNotify(UINT controlID, LPARAM data);
   BOOL onInitDialog();
+  BOOL onDestroy();
 
   ConnectionConfig *m_conConfig;
   bool m_connected;
 
 private:
+  BOOL onControlCommand(UINT controlID, UINT notificationID);
+  void createPage(OptionsPage *page, const TCHAR *caption);
+  HWND findControl(UINT controlID);
+  void setPageControl(Control &control, DWORD controlID);
+  bool onTabSwitchKey(const MSG *msg);
+  static LRESULT CALLBACK msgFilterProc(int code, WPARAM wParam, LPARAM lParam);
   void updateControlValues();
   void onViewOnlyClick();
   void on8BitColorClick();
@@ -89,10 +122,22 @@ private:
   void onCustomCompressionLevelScroll();
   void onJpegCompressionLevelScroll();
   void onScaleKillFocus();
+  void showScaleField();
   bool isInputValid();
   bool onOkPressed();
   void apply();
 
+  TabControl m_tabControl;
+  OptionsPage m_displayPage;
+  OptionsPage m_inputPage;
+  OptionsPage m_networkPage;
+  HHOOK m_msgHook;
+
+  // The hook procedure has no user data, so the open Options dialogs are kept
+  // in a list. Several viewer windows can open their own modal Options dialog,
+  // each one nested in the modal loop of the previous one.
+  OptionsDialog *m_previousDialog;
+  static OptionsDialog *s_activeDialog;
 };
 
 #endif

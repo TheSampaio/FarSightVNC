@@ -21,6 +21,8 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-03: favorite hosts listed before the
+// recent ones, Favorite host check box and Remove recent button.
 
 #ifndef _LOGIN_DIALOG_H_
 #define _LOGIN_DIALOG_H_
@@ -28,6 +30,7 @@
 #include "client-config-lib/ViewerConfig.h"
 #include "client-config-lib/ConnectionConfig.h"
 #include "client-config-lib/ConnectionConfigSM.h"
+#include "client-config-lib/ConnectionFavorites.h"
 #include "client-config-lib/ViewerSettingsManager.h"
 #include "util/StringParser.h"
 #include "gui/BaseDialog.h"
@@ -69,6 +72,9 @@ protected:
 
   Control m_listening;
   Control m_ok;
+  CheckBox m_favorite;
+  Control m_removeRecent;
+  ConnectionFavorites m_favorites;
   ConnectionConfig m_connectionConfig;
   ComboBox m_server;
   StringStorage m_serverHost;
@@ -77,6 +83,10 @@ protected:
 private:
   void enableConnect();
   void updateHistory();
+  void fillHostList();
+  void updateHostButtons(const StringStorage *host);
+  void onFavorite();
+  void onRemoveRecent();
   void onConnect();
   void onConfiguration();
   BOOL onOptions();

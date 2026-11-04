@@ -1,6 +1,8 @@
 //{{NO_DEPENDENCIES}}
 // Включаемый файл, созданный в Microsoft Visual C++.
 // Используется tvnviewer.rc
+// Modified for FarSightVNC on 2026-11-03: IDs of the Options dialog tab pages.
+// Modified for FarSightVNC on 2026-11-03: IDs of the login dialog favorite and recent controls.
 //
 #define IDB_TOOLBAR                     101
 #define IDI_CNOCURSOR                   102
@@ -57,6 +59,9 @@
 #define IDS_ERROR_START_LISTENING       152
 #define IDS_ERROR_COMMAND_LINE          153
 #define IDS_ERROR_PARSE_OPTIONS_FILE    154
+#define IDS_OPTIONS_TAB_DISPLAY         155
+#define IDS_OPTIONS_TAB_INPUT           156
+#define IDS_OPTIONS_TAB_NETWORK         157
 #define IDS_TB_NEWCONNECTION            200
 #define IDS_TB_SAVESESSION              201
 #define IDS_TB_CONNOPTIONS              202
@@ -75,6 +80,9 @@
 #define IDS_TB_FULLSCREEN               215
 #define IDS_TB_CONFIGURATION            216
 #define IDD_FS_WARNING                  230
+#define IDD_OPTIONS_DISPLAY             232
+#define IDD_OPTIONS_INPUT               233
+#define IDD_OPTIONS_NETWORK             234
 #define IDC_LABEL                       1001
 #define IDC_FILENAME_EDIT               1002
 #define IDC_FILENAME_LABEL              1004
@@ -161,6 +169,9 @@
 #define IDC_CWARN_FS                    1088
 #define IDC_ID_EDIT                     1089
 #define IDC_LABEL_ID                    1090
+#define IDC_OPTIONS_TAB                 1093
+#define IDC_FAVORITE                    1094
+#define IDC_REMOVE_RECENT               1095
 #define ID_CONN_OPTIONS                 40001
 #define ID_CONN_INFO                    40002
 #define ID_SHOW_TOOLBAR                 40004
@@ -173,9 +184,9 @@
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        232
+#define _APS_NEXT_RESOURCE_VALUE        235
 #define _APS_NEXT_COMMAND_VALUE         40010
-#define _APS_NEXT_CONTROL_VALUE         1093
+#define _APS_NEXT_CONTROL_VALUE         1096
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

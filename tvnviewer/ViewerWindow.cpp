@@ -22,6 +22,8 @@
 //-------------------------------------------------------------------------
 //
 // Modified for FarSightVNC on 2026-11-01: ordered keyboard input, DPI changes, display menu, fullscreen monitor selection, default window size within the work area.
+// Modified for FarSightVNC on 2026-11-03: floating auto-hide toolbar in full screen.
+// Modified for FarSightVNC on 2026-11-03: connection state in the title and assisted reconnect.
 //
 
 #include "config-lib/IniFileSettingsManager.h"
@@ -32,6 +34,8 @@
 
 #include "FsWarningDialog.h"
 #include "NamingDefs.h"
+#include "ReconnectDialog.h"
+#include "ReconnectPolicy.h"
 #include "TvnViewer.h"
 #include "ViewerWindow.h"
 
@@ -52,6 +56,7 @@ ViewerWindow::ViewerWindow(WindowsApplication *application,
   m_conData(conData),
   m_dsktWnd(&m_logWriter, conConf),
   m_isConnected(false),
+  m_connectionState(STATE_CONNECTING),
   m_sizeIsChanged(false),
   m_hooksEnabledFirstTime(true),
   m_requiresReconnect(false),
@@ -83,6 +88,7 @@ ViewerWindow::ViewerWindow(WindowsApplication *application,
   m_dsktWnd.createWindow(&subTitleName,
                          WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_CHILD,
                          getHWnd());
+  m_dsktWnd.setPointerListener(this);
 
   SetTimer(m_hWnd, TIMER_DESKTOP_STATE, TIMER_DESKTOP_STATE_DELAY, (TIMERPROC)NULL);
 }
@@ -154,6 +160,7 @@ void ViewerWindow::enableUserElements()
   m_toolbar.enableButton(IDS_TB_CTRL, isEnable);
   m_toolbar.enableButton(IDS_TB_CTRLESC, isEnable);
   m_toolbar.enableButton(IDS_TB_CTRLALTDEL, isEnable);
+  m_fsToolbar.enableButton(IDS_TB_CTRLALTDEL, isEnable);
 
   UINT enableMenu = static_cast<UINT>(!isEnable);
   m_menu.enableMenuItem(IDS_TB_CTRLALTDEL, enableMenu);
@@ -887,6 +894,10 @@ void ViewerWindow::doFullScr()
   SetFocus(m_dsktWnd.getHWnd());
   applyScreenChanges(true);
 
+  m_fsToolbar.setStateText(connectionStateLabel());
+  m_fsToolbar.create(m_hWnd, fullScreenToolbarMonitor());
+  m_fsToolbar.enableButton(IDS_TB_CTRLALTDEL, !m_conConf->isViewOnly());
+
   if (config->isPromptOnFullscreenEnabled()) {
     postMessage(WM_USER_FS_WARNING);
   }
@@ -906,6 +917,8 @@ void ViewerWindow::doUnFullScr()
   if (!m_isFullScr) {
     return;
   }
+
+  m_fsToolbar.destroy();
 
   m_conConf->enableFullscreen(false);
   m_conConf->saveToStorage(&m_ccsm);
@@ -1035,14 +1048,94 @@ void ViewerWindow::showWindow()
 {
   show();
 
-  StringStorage windowName = formatWindowName();
+  StringStorage windowName = formatWindowTitle();
   setWindowText(&windowName);
   m_dsktWnd.setWindowText(&windowName);
 
 }
 
+void ViewerWindow::showConnecting()
+{
+  m_connectionState = STATE_CONNECTING;
+  showWindow();
+}
+
+void ViewerWindow::setConnectionState(ConnectionState state)
+{
+  m_connectionState = state;
+  StringStorage windowName = formatWindowTitle();
+  setWindowText(&windowName);
+  m_fsToolbar.setStateText(connectionStateLabel());
+}
+
+const TCHAR *ViewerWindow::connectionStateLabel() const
+{
+  switch (m_connectionState) {
+  case STATE_CONNECTING: return _T("Connecting...");
+  case STATE_CONNECTED: return _T("Connected");
+  default: return _T("Disconnected");
+  }
+}
+
+bool ViewerWindow::offerReconnect(bool sessionWasEstablished, const StringStorage *reason)
+{
+  ReconnectPolicy policy;
+  ReconnectPolicy::Cause cause = sessionWasEstablished
+                                 ? ReconnectPolicy::CAUSE_CONNECTION_LOST
+                                 : ReconnectPolicy::CAUSE_CONNECT_FAILED;
+  // A drop of an established session starts a new series of attempts.
+  unsigned int attemptsMade = sessionWasEstablished ? 0 : m_conData->getReconnectAttempt();
+  if (!policy.shouldOffer(cause, m_conData->isIncoming(), attemptsMade)) {
+    return false;
+  }
+  m_logWriter.info(_T("Offering to reconnect (%u attempts made): %s"),
+                   attemptsMade, reason->getString());
+
+  setConnectionState(STATE_DISCONNECTED);
+  if (m_isFullScr && m_fsToolbar.isCreated()) {
+    m_fsToolbar.showOn(fullScreenToolbarMonitor());
+  }
+
+  bool autoRetry = policy.canRetryAutomatically(attemptsMade);
+  StringStorage instruction;
+  if (sessionWasEstablished) {
+    instruction.setString(_T("The connection to the remote computer was lost."));
+  } else {
+    instruction.format(_T("Reconnection attempt %u failed."), attemptsMade);
+  }
+  StringStorage details = *reason;
+  if (!autoRetry) {
+    details.appendString(_T("\n\nNo automatic attempts are left."));
+  }
+  HWND owner = IsWindowVisible(getHWnd()) ? getHWnd() : 0;
+  bool reconnect = ReconnectDialog::show(owner,
+                                         formatWindowName().getString(),
+                                         instruction.getString(),
+                                         details.getString(),
+                                         autoRetry ? policy.delayBeforeAttemptMs(attemptsMade) : 0,
+                                         attemptsMade + 1,
+                                         policy.getMaxAttempts());
+  if (reconnect) {
+    // Same host, options and in-memory password; the application keeps
+    // running until the new instance is created (see m_requiresReconnect).
+    m_requiresReconnect = true;
+    ConnectionData *connectionData = new ConnectionData(*m_conData);
+    connectionData->setReconnectAttempt(attemptsMade + 1);
+    ConnectionConfig *connectionConfig = new ConnectionConfig(*m_conConf);
+    m_application->postMessage(TvnViewer::WM_USER_RECONNECT,
+                               (WPARAM)connectionData,
+                               (LPARAM)connectionConfig);
+  }
+  m_dsktWnd.destroyWindow();
+  destroyWindow();
+  return true;
+}
+
 bool ViewerWindow::onDisconnect()
 {
+  if (offerReconnect(m_isConnected, &m_disconnectMessage)) {
+    return true;
+  }
   MessageBox(getHWnd(),
              m_disconnectMessage.getString(),
              formatWindowName().getString(),
@@ -1068,6 +1161,7 @@ bool ViewerWindow::onAuthError(WPARAM wParam)
         m_requiresReconnect = true;
         ConnectionData *connectionData = new ConnectionData(*m_conData);
         connectionData->resetPassword();
+        connectionData->setReconnectAttempt(0);
         ConnectionConfig *connectionConfig = new ConnectionConfig(*m_conConf);
         m_application->postMessage(TvnViewer::WM_USER_RECONNECT,
                                    (WPARAM)connectionData,
@@ -1082,6 +1176,13 @@ bool ViewerWindow::onAuthError(WPARAM wParam)
 
 bool ViewerWindow::onError()
 {
+  // Errors of an established session are not connection drops.
+  if (!m_isConnected) {
+    StringStorage reason(m_error.getMessage());
+    if (offerReconnect(false, &reason)) {
+      return true;
+    }
+  }
   StringStorage error;
   error.format(_T("Error in %s: %s"), ProductNames::VIEWER_PRODUCT_NAME, m_error.getMessage());
   MessageBox(getHWnd(),
@@ -1166,6 +1267,8 @@ void ViewerWindow::onConnected(RfbOutputGate *output)
 {
   // Set flags.
   m_isConnected = true;
+  m_connectionState = STATE_CONNECTED;
+  m_conData->setReconnectAttempt(0);
   m_sizeIsChanged = false;
   m_dsktWnd.setConnected();
 
@@ -1243,8 +1346,10 @@ bool ViewerWindow::isStopped() const
 
 void ViewerWindow::adjustWindowSize()
 {
-  // If size isn't changed by user, then adjust size.
-  if (!m_sizeIsChanged) {
+  // If size isn't changed by user, then adjust size. Before the first
+  // framebuffer (a reconnection attempt shows the window early) there is
+  // nothing to fit.
+  if (!m_sizeIsChanged && m_dsktWnd.getViewerGeometry().area() != 0) {
     Rect defaultSize = calculateDefaultSize();
     bool defaultSizeIsChanged = defaultSize.getWidth() != m_rcNormal.getWidth() ||
                                 defaultSize.getHeight() != m_rcNormal.getHeight();
@@ -1297,6 +1402,17 @@ StringStorage ViewerWindow::formatWindowName() const
     windowName.format(_T("%s - %s"), desktopName.getString(), ProductNames::VIEWER_PRODUCT_NAME);
   } else {
     windowName.format(_T("%s"), ProductNames::VIEWER_PRODUCT_NAME);
+  }
+  return windowName;
+}
+
+StringStorage ViewerWindow::formatWindowTitle() const
+{
+  StringStorage windowName = formatWindowName();
+  if (m_connectionState == STATE_CONNECTING) {
+    windowName.appendString(_T(" (connecting...)"));
+  } else if (m_connectionState == STATE_DISCONNECTED) {
+    windowName.appendString(_T(" (disconnected)"));
   }
   return windowName;
 }
@@ -1371,6 +1487,7 @@ void ViewerWindow::applyFullscreenTarget()
   if (m_isFullScr) {
     setSizeFullScreenWindow();
     doSize();
+    m_fsToolbar.showOn(fullScreenToolbarMonitor());
   } else {
     doFullScr();
   }
@@ -1385,5 +1502,30 @@ void ViewerWindow::onDisplayChange()
     // Keep covering the selected monitor(s) after a resolution or layout change.
     setSizeFullScreenWindow();
     doSize();
+    m_fsToolbar.showOn(fullScreenToolbarMonitor());
+  }
+}
+
+HMONITOR ViewerWindow::fullScreenToolbarMonitor()
+{
+  // Across all monitors the toolbar starts on the monitor of the pointer;
+  // the hot strip of any monitor brings it there later.
+  if (m_spanMonitors) {
+    POINT pt;
+    if (GetCursorPos(&pt)) {
+      return MonitorFromPoint(pt, MONITOR_DEFAULTTOPRIMARY);
+    }
+  }
+  return MonitorFromWindow(m_hWnd, MONITOR_DEFAULTTONEAREST);
+}
+
+void ViewerWindow::onDesktopPointerMove(POINT clientPoint)
+{
+  if (!m_isFullScr || !m_fsToolbar.isCreated()) {
+    return;
+  }
+  POINT screenPoint = clientPoint;
+  if (ClientToScreen(m_dsktWnd.getHWnd(), &screenPoint)) {
+    m_fsToolbar.onPointerMove(screenPoint);
   }
 }

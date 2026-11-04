@@ -24,6 +24,7 @@
 // Modified for FarSightVNC on 2026-11-02: keyboard state kept in sync for hook-posted keys, also in view-only mode.
 // Modified for FarSightVNC on 2026-11-02: pointer mapping and drawing use the real server size, not the 4-aligned DIB.
 // Modified for FarSightVNC on 2026-11-02: optional Direct3D 11 / Direct2D presentation (GpuPresenter) with GDI as the automatic fallback.
+// Modified for FarSightVNC on 2026-11-03: local pointer movement is reported to a listener (full screen toolbar).
 //
 
 #include "DesktopWindow.h"
@@ -46,6 +47,7 @@ DesktopWindow::DesktopWindow(LogWriter *logWriter, ConnectionConfig *conConf)
   m_previousMousePos(-1, -1),
   m_previousMouseState(0),
   m_isBackgroundDirty(false),
+  m_pointerListener(0),
   m_isConnected(false)
 {
   m_rfbKeySym = std::auto_ptr<RfbKeySym>(new RfbKeySym(this, m_logWriter));
@@ -209,6 +211,11 @@ bool DesktopWindow::onVScroll(WPARAM wParam, LPARAM lParam)
 
 bool DesktopWindow::onMouse(unsigned char mouseButtons, unsigned short wheelSpeed, POINT position)
 {
+  // Wheel positions are already client coordinates, but they are not moves.
+  if (m_pointerListener != 0 && wheelSpeed == 0) {
+    m_pointerListener->onDesktopPointerMove(position);
+  }
+
   // If mode is "view-only", then skip event.
   if (m_conConf->isViewOnly()) {
     return true;
