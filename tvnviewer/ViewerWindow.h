@@ -24,6 +24,7 @@
 // Modified for FarSightVNC on 2026-11-01: DPI changes, display modes and fullscreen monitor selection.
 // Modified for FarSightVNC on 2026-11-03: floating auto-hide toolbar in full screen.
 // Modified for FarSightVNC on 2026-11-03: connection state in the title and assisted reconnect.
+// Modified for FarSightVNC on 2026-11-03: first connection opens maximized and fitted to the window.
 //
 
 #ifndef _VIEWER_WINDOW_H_
@@ -179,6 +180,8 @@ protected:
 
   // Flag is set after recv first message WM_SIZING.
   bool m_sizeIsChanged;
+  // The first connection of the window opens it maximized and fitted.
+  bool m_isFirstConnection;
   // Flag is set, if toolbar is visible.
   bool m_bToolBar;
   // It is scale of viewer window in percent.

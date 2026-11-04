@@ -24,6 +24,7 @@
 // Modified for FarSightVNC on 2026-11-01: ordered keyboard input, DPI changes, display menu, fullscreen monitor selection, default window size within the work area.
 // Modified for FarSightVNC on 2026-11-03: floating auto-hide toolbar in full screen.
 // Modified for FarSightVNC on 2026-11-03: connection state in the title and assisted reconnect.
+// Modified for FarSightVNC on 2026-11-03: "FarSightVNC Viewer - <host>" title; sessions open maximized and fitted to the window.
 //
 
 #include "config-lib/IniFileSettingsManager.h"
@@ -58,6 +59,7 @@ ViewerWindow::ViewerWindow(WindowsApplication *application,
   m_isConnected(false),
   m_connectionState(STATE_CONNECTING),
   m_sizeIsChanged(false),
+  m_isFirstConnection(true),
   m_hooksEnabledFirstTime(true),
   m_requiresReconnect(false),
   m_stopped(false),
@@ -1286,6 +1288,16 @@ void ViewerWindow::onConnected(RfbOutputGate *output)
 
   // Start viewer window and applying settings.
   showWindow();
+  // Like AnyDesk and RustDesk, a session opens maximized (the remote
+  // desktop is scaled to the window by default, see ConnectionConfig).
+  if (m_isFirstConnection) {
+    m_isFirstConnection = false;
+    if (!m_conConf->isFullscreenEnabled()) {
+      // The user's size from now on: adjustWindowSize() must not shrink it.
+      m_sizeIsChanged = true;
+      ShowWindow(getHWnd(), SW_MAXIMIZE);
+    }
+  }
   setForegroundWindow();
   applySettings();
 }
@@ -1399,9 +1411,9 @@ StringStorage ViewerWindow::formatWindowName() const
   }
   StringStorage windowName;
   if (!desktopName.isEmpty()) {
-    windowName.format(_T("%s - %s"), desktopName.getString(), ProductNames::VIEWER_PRODUCT_NAME);
+    windowName.format(_T("%s Viewer - %s"), ProductNames::VIEWER_PRODUCT_NAME, desktopName.getString());
   } else {
-    windowName.format(_T("%s"), ProductNames::VIEWER_PRODUCT_NAME);
+    windowName.format(_T("%s Viewer"), ProductNames::VIEWER_PRODUCT_NAME);
   }
   return windowName;
 }
