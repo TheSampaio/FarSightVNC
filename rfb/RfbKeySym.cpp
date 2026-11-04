@@ -23,7 +23,7 @@
 //
 // Modified for FarSightVNC on 2026-11-01: symmetric key press/release, scancode aware translation, Left/Right Shift.
 // Modified for FarSightVNC on 2026-11-03: one Shift_L for both Shift keys; keypad digits when Shift+digit is a dead key.
-// Modified for FarSightVNC on 2026-11-04: release a Shift whose key-up Windows did not send; fake (E0) Shifts.
+// Modified for FarSightVNC on 2026-11-04: release a Shift whose key-up Windows did not send; fake (E0) Shifts.; keyboard trace in the debug log
 //
 
 #include "RfbKeySym.h"
@@ -68,7 +68,7 @@ void RfbKeySym::sendModifier(unsigned char virtKey, bool down)
 void RfbKeySym::processKeyEvent(unsigned short virtKey,
                                 unsigned int addKeyData)
 {
-  m_log->debug(_T("Keyboard VK=%04x data=%08x"), virtKey, addKeyData);
+  m_log->debug(_T("Keyboard VK=%04x data=%08x LShift=%d RShift=%d"), virtKey, addKeyData, (int)isKeyHeld(VK_LSHIFT), (int)isKeyHeld(VK_RSHIFT));
   bool down = (addKeyData & 0x80000000) == 0;
   unsigned int scanCode = (addKeyData >> 16) & 0xff;
   bool extended = (addKeyData & 0x1000000) != 0; // 24 bit
@@ -492,6 +492,7 @@ void RfbKeySym::sendKeySymEvent(unsigned int rfbKeySym, bool down)
 
 void RfbKeySym::sendVerbatimKeySymEvent(unsigned int rfbKeySym, bool down)
 {
+  m_log->debug(_T("Send keysym %#x down=%d"), rfbKeySym, (int)down);
   m_extKeySymListener->onRfbKeySymEvent(rfbKeySym, down);
 }
 
