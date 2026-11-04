@@ -23,6 +23,7 @@
 //
 // Modified for FarSightVNC on 2026-11-01: symmetric key press/release, scancode aware translation, Left/Right Shift.
 // Modified for FarSightVNC on 2026-11-03: one Shift_L for both Shift keys; keypad digits when Shift+digit is a dead key.
+// Modified for FarSightVNC on 2026-11-04: release a Shift whose key-up Windows did not send; fake (E0) Shifts.
 //
 
 #include "RfbKeySym.h"
@@ -44,6 +45,7 @@ RfbKeySym::RfbKeySym(RfbKeySymListener *extKeySymListener, LogWriter *log)
   m_toggleKeysOverridden(false),
   m_capsLockOverride(false),
   m_scrollLockOverride(false),
+  m_keyStateOverride(0),
   m_shiftKeysDown(0)
 {
   clearKeyState();
@@ -70,6 +72,10 @@ void RfbKeySym::processKeyEvent(unsigned short virtKey,
   bool down = (addKeyData & 0x80000000) == 0;
   unsigned int scanCode = (addKeyData >> 16) & 0xff;
   bool extended = (addKeyData & 0x1000000) != 0; // 24 bit
+  bool shiftKey = virtKey == VK_SHIFT || virtKey == VK_LSHIFT || virtKey == VK_RSHIFT;
+  // A Shift key has no E0 prefix: the keyboard sends E0 2A / E0 AA ("fake
+  // Shifts") around some keys. They are the same physical Shift key.
+  if (shiftKey) extended = false;
   unsigned int physicalKey = scanCode ? (scanCode | (extended ? 0x100 : 0)) :
                                         (0x200 | virtKey);
   std::map<unsigned int, std::vector<UINT32> >::iterator old = m_pressedKeys.find(physicalKey);
@@ -89,6 +95,7 @@ void RfbKeySym::processKeyEvent(unsigned short virtKey,
       sendKeySymEvent(old->second[i], false);
     if (releaseCtrlAlt) restoreModifiers();
     m_pressedKeys.erase(old);
+    if (shiftKey) releaseShiftsNotHeld();
   } else if (old != m_pressedKeys.end()) {
     // Repeat the cached printable/special key without translating it again.
     // Modifiers are state transitions and must not repeat.
@@ -150,6 +157,34 @@ void RfbKeySym::processKeyEvent(unsigned short virtKey,
   }
   for (size_t i = 0; i < symbols.size(); i++) sendKeySymEvent(symbols[i], true);
   m_pressedKeys[physicalKey] = symbols;
+}
+
+void RfbKeySym::releaseShiftsNotHeld()
+{
+  // With both Shift keys held Windows sends no key-up for the Shift released
+  // first, so the server kept Shift down (and the viewer typed shifted
+  // characters) until the focus was lost.
+  std::map<unsigned int, std::vector<UINT32> >::iterator it = m_pressedKeys.begin();
+  while (it != m_pressedKeys.end()) {
+    unsigned char vk = 0;
+    if (it->second.size() == 1 && it->second[0] == XK_Shift_L) vk = VK_LSHIFT;
+    if (it->second.size() == 1 && it->second[0] == XK_Shift_R) vk = VK_RSHIFT;
+    if (vk == 0 || isKeyHeld(vk)) {
+      ++it;
+      continue;
+    }
+    sendKeySymEvent(it->second[0], false);
+    m_viewerKeyState[vk] = 0;
+    m_serverKeyState[vk] = 0;
+    m_viewerKeyState[VK_SHIFT] = m_viewerKeyState[VK_LSHIFT] | m_viewerKeyState[VK_RSHIFT];
+    m_pressedKeys.erase(it++);
+  }
+}
+
+bool RfbKeySym::isKeyHeld(unsigned char virtKey)
+{
+  if (m_keyStateOverride != 0) return (m_keyStateOverride[virtKey] & 0x80) != 0;
+  return (GetKeyState(virtKey) & 0x8000) != 0;
 }
 
 bool RfbKeySym::shiftVariantIsDeadKey(unsigned short virtKey, unsigned int scanCode)
@@ -478,6 +513,11 @@ unsigned char RfbKeySym::distinguishLeftRightModifier(unsigned char virtKey,
 void RfbKeySym::setKeyboardLayout(HKL layout)
 {
   m_layoutOverride = layout;
+}
+
+void RfbKeySym::setKeyStateOverride(const unsigned char *keys)
+{
+  m_keyStateOverride = keys;
 }
 
 void RfbKeySym::setToggleKeysOverride(bool capsLockOn, bool scrollLockOn)
