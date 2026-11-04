@@ -21,6 +21,8 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-02: -renderer=gdi|auto|gpu option.
+//
 
 #ifndef _VIEWER_CMD_LINE_H_
 #define _VIEWER_CMD_LINE_H_
@@ -64,6 +66,7 @@ protected:
   static const TCHAR VIEW_ONLY[];
   static const TCHAR USE_CLIPBOARD[];
   static const TCHAR SCALE[];
+  static const TCHAR RENDERER[];
   static const TCHAR FULL_SCREEN[];
   static const TCHAR WARN_FULL_SCREEN[];
   static const TCHAR ENCODING[];
@@ -111,6 +114,7 @@ private:
   void parseMouseShape();
   void parseMouseCursor();
   void parseScale();
+  void parseRenderer();
   void parseFullScreen();
   void parseCompressionLevel();
   void parseWarnFullScr();

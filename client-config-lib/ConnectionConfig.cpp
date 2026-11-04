@@ -21,6 +21,8 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-03: sessions always start scaled to the window.
+//
 
 #include "ConnectionConfig.h"
 
@@ -36,7 +38,7 @@ ConnectionConfig::ConnectionConfig()
   m_requestSharedSession(true), m_deiconifyOnRemoteBell(false),
   m_isClipboardEnabled(true),
   m_customCompressionLevel(-1), m_jpegCompressionLevel(6),
-  m_fitWindow(false), m_requestShapeUpdates(true),
+  m_fitWindow(true), m_requestShapeUpdates(true),
   m_ignoreShapeUpdates(false), m_scaleNumerator(1), m_scaleDenominator(1),
   m_localCursor(DOT_CURSOR), m_allowedCopyRect(true)
 {
@@ -437,6 +439,9 @@ bool ConnectionConfig::loadFromStorage(SettingsManager *sm)
 
   TEST_FAIL(sm->getBoolean(_T("swapmouse"),        &m_swapMouse), loadAllOk);
   TEST_FAIL(sm->getBoolean(_T("fitwindow"),        &m_fitWindow), loadAllOk);
+  // Sessions always start scaled to the window, whatever was stored (also by
+  // TightVNC in the shared registry key). The toolbar and -scale change it.
+  m_fitWindow = true;
   TEST_FAIL(sm->getBoolean(_T("cursorshape"),      &m_requestShapeUpdates), loadAllOk);
   TEST_FAIL(sm->getBoolean(_T("noremotecursor"),   &m_ignoreShapeUpdates), loadAllOk);
 

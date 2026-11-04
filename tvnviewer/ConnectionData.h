@@ -21,6 +21,8 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-03: in-memory reconnection attempt counter.
+//
 
 #ifndef _CONNECTION_DATA_
 #define _CONNECTION_DATA_
@@ -68,6 +70,13 @@ public:
   void setIncoming(bool isIncoming);
   bool isIncoming() const;
 
+  //
+  // Number of the reconnection attempt this connection makes since the
+  // session dropped (0 for an ordinary connection). Kept in memory only.
+  //
+  void setReconnectAttempt(unsigned int attempt);
+  unsigned int getReconnectAttempt() const;
+
 protected:
   HostPath m_hostPath;
 
@@ -79,6 +88,8 @@ protected:
 
   // This flag is true, if connection is incoming (e.g. listening mode).
   bool m_isIncoming;
+  // Reconnection attempt number (see getReconnectAttempt()).
+  unsigned int m_reconnectAttempt;
 
   // Saved password is crypted.
   StringStorage m_defaultPassword;

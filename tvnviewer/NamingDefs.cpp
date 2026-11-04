@@ -21,11 +21,14 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-03: user-visible product and window title
+// name is FarSightVNC (registry, log and window class names unchanged).
+//
 
 #include "NamingDefs.h"
 
 const TCHAR ProductNames::PRODUCT_NAME[] = _T("TightVNC");
-const TCHAR ProductNames::VIEWER_PRODUCT_NAME[] = _T("TightVNC Viewer");
+const TCHAR ProductNames::VIEWER_PRODUCT_NAME[] = _T("FarSightVNC");
 
 const TCHAR LogNames::VIEWER_LOG_FILE_STUB_NAME[] = _T("tvnviewer");
 const TCHAR LogNames::LOG_DIR_NAME[] = _T("TightVNC");
@@ -36,6 +39,6 @@ const TCHAR ApplicationNames::WINDOW_CLASS_NAME[] =
   _T("TvnApplicationClass");
 
 const TCHAR WindowNames::TVN_WINDOW_CLASS_NAME[] = _T("TvnWindowClass");
-const TCHAR WindowNames::TVN_WINDOW_TITLE_NAME[] = _T("TightVNC Viewer");
+const TCHAR WindowNames::TVN_WINDOW_TITLE_NAME[] = _T("FarSightVNC");
 const TCHAR WindowNames::TVN_SUB_WINDOW_TITLE_NAME[] = _T("Viewer");
 

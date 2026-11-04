@@ -21,8 +21,15 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-02: keyboard state kept in sync for hook-posted keys, also in view-only mode.
+// Modified for FarSightVNC on 2026-11-02: pointer mapping and drawing use the real server size, not the 4-aligned DIB.
+// Modified for FarSightVNC on 2026-11-02: optional Direct3D 11 / Direct2D presentation (GpuPresenter) with GDI as the automatic fallback.
+// Modified for FarSightVNC on 2026-11-03: local pointer movement is reported to a listener (full screen toolbar).
+//
 
 #include "DesktopWindow.h"
+#include "win-system/WinHooks.h"
+#include "RenderSettings.h"
 
 DesktopWindow::DesktopWindow(LogWriter *logWriter, ConnectionConfig *conConf)
 : m_logWriter(logWriter),
@@ -39,9 +46,15 @@ DesktopWindow::DesktopWindow(LogWriter *logWriter, ConnectionConfig *conConf)
   m_altDown(false),
   m_previousMousePos(-1, -1),
   m_previousMouseState(0),
-  m_isBackgroundDirty(false)
+  m_isBackgroundDirty(false),
+  m_pointerListener(0),
+  m_isConnected(false)
 {
   m_rfbKeySym = std::auto_ptr<RfbKeySym>(new RfbKeySym(this, m_logWriter));
+  if (RenderSettings::isGpuAllowed()) {
+    m_gpu.reset(new GpuPresenter(m_logWriter));
+    m_gpu->warmUp();
+  }
 }
 
 DesktopWindow::~DesktopWindow()
@@ -60,6 +73,8 @@ void DesktopWindow::setViewerCore(RemoteViewerCore *viewerCore)
 
 bool DesktopWindow::onCreate(LPCREATESTRUCT pcs)
 {
+  // Modified for FarSightVNC on 2026-11-01: ordered keyboard translation.
+  SetProp(getHWnd(), _T("FarSightVNC.RemoteKeyboard"), (HANDLE)1);
   m_sbar.setWindow(getHWnd());
   m_clipboard.setHWnd(getHWnd());
   return true;
@@ -138,7 +153,7 @@ bool DesktopWindow::onEraseBackground(HDC hdc) {
   return true;
 }
 
-bool DesktopWindow::onHScroll(WPARAM wParam, LPARAM lParam) 
+bool DesktopWindow::onHScroll(WPARAM wParam, LPARAM lParam)
 {
   switch(LOWORD(wParam)) {
     case SB_THUMBTRACK:
@@ -150,7 +165,7 @@ bool DesktopWindow::onHScroll(WPARAM wParam, LPARAM lParam)
       m_sbar.moveLeftHorz(ScrollBar::SCROLL_STEP);
       redraw();
       break;
-    case SB_PAGELEFT:   
+    case SB_PAGELEFT:
       m_sbar.moveLeftHorz();
       redraw();
       break;
@@ -158,7 +173,7 @@ bool DesktopWindow::onHScroll(WPARAM wParam, LPARAM lParam)
       m_sbar.moveRightHorz(ScrollBar::SCROLL_STEP);
       redraw();
       break;
-    case SB_PAGERIGHT:    
+    case SB_PAGERIGHT:
       m_sbar.moveRightHorz();
       redraw();
       break;
@@ -166,7 +181,7 @@ bool DesktopWindow::onHScroll(WPARAM wParam, LPARAM lParam)
   return true;
 }
 
-bool DesktopWindow::onVScroll(WPARAM wParam, LPARAM lParam) 
+bool DesktopWindow::onVScroll(WPARAM wParam, LPARAM lParam)
 {
   switch(LOWORD(wParam)) {
     case SB_THUMBTRACK:
@@ -196,6 +211,11 @@ bool DesktopWindow::onVScroll(WPARAM wParam, LPARAM lParam)
 
 bool DesktopWindow::onMouse(unsigned char mouseButtons, unsigned short wheelSpeed, POINT position)
 {
+  // Wheel positions are already client coordinates, but they are not moves.
+  if (m_pointerListener != 0 && wheelSpeed == 0) {
+    m_pointerListener->onDesktopPointerMove(position);
+  }
+
   // If mode is "view-only", then skip event.
   if (m_conConf->isViewOnly()) {
     return true;
@@ -211,7 +231,7 @@ bool DesktopWindow::onMouse(unsigned char mouseButtons, unsigned short wheelSpee
     bool bSecond = !!(mouseButtons & MOUSE_MDOWN);
     bool bThird  = !!(mouseButtons & MOUSE_RDOWN);
     mouseButtons &= ~(MOUSE_MDOWN | MOUSE_RDOWN);
-    if (bSecond) {  
+    if (bSecond) {
       mouseButtons |= MOUSE_RDOWN;
     }
     if (bThird) {
@@ -231,7 +251,7 @@ bool DesktopWindow::onMouse(unsigned char mouseButtons, unsigned short wheelSpee
 
     // If posititon of mouse isn't change, then don't send event to server.
     if (buttons != m_previousMouseState || !pos.isEqualTo(&m_previousMousePos)) {
-      int wheelMask = MOUSE_WUP | MOUSE_WDOWN;
+      int wheelMask = MOUSE_WUP | MOUSE_WDOWN | MOUSE_WLEFT | MOUSE_WRIGHT;
 
       // Update previously position of mouse.
       m_previousMouseState = buttons & ~wheelMask;
@@ -252,47 +272,53 @@ bool DesktopWindow::onMouse(unsigned char mouseButtons, unsigned short wheelSpee
   return true;
 }
 
-bool DesktopWindow::onKey(WPARAM wParam, LPARAM lParam) 
+bool DesktopWindow::onKey(WPARAM wParam, LPARAM lParam)
 {
+  unsigned short virtualKey = static_cast<unsigned short>(wParam);
+  unsigned int additionalInfo = static_cast<unsigned int>(lParam);
+
+  if (virtualKey == VK_PROCESSKEY) {
+    bool extended = HIWORD(lParam) & KF_EXTENDED;
+    UINT scancode = HIWORD(lParam) & 0xFF;
+    if (extended) {
+      scancode += 0xE000;
+    }
+    virtualKey = MapVirtualKey(scancode, MAPVK_VSC_TO_VK_EX);
+  }
+
+  // Keys posted by the fullscreen hook never reach the thread's own key
+  // state, which TranslateMessage and TranslateAccelerator rely on. Keep it
+  // current, also in view-only mode (the accelerators must keep working).
+  // Only the Ctrl/Alt key events change the toolbar latch flags.
+  BYTE keys[256];
+  if (GetKeyboardState(keys)) {
+    unsigned char key = WinHooks::applyKeyToStateTable(keys, virtualKey, lParam);
+    SetKeyboardState(keys);
+    if (key == VK_LCONTROL || key == VK_RCONTROL) {
+      m_ctrlDown = (keys[VK_CONTROL] & 0x80) != 0;
+    }
+    if (key == VK_LMENU || key == VK_RMENU) {
+      m_altDown = (keys[VK_MENU] & 0x80) != 0;
+    }
+  }
+
   if (!m_conConf->isViewOnly()) {
-    unsigned short virtualKey = static_cast<unsigned short>(wParam);
-    unsigned int additionalInfo = static_cast<unsigned int>(lParam);
-    static const unsigned int DOWN_FLAG = 0x80000000;
-    bool isDown = (additionalInfo & DOWN_FLAG) == 0;
-
-    if (virtualKey == VK_PROCESSKEY) {
-      bool extended = HIWORD(lParam) & KF_EXTENDED;
-      UINT scancode = HIWORD(lParam) & 0xFF;
-      if (extended) {
-        scancode += 0xE000;
-      }
-      virtualKey = MapVirtualKey(scancode, MAPVK_VSC_TO_VK_EX);
-    }
-
-    if (virtualKey == VK_CONTROL) {
-      m_ctrlDown = isDown;
-    }
-
-    if (virtualKey == VK_MENU) {
-      m_altDown = isDown;
-    }
-
     m_rfbKeySym->processKeyEvent(virtualKey,
                                  additionalInfo);
   }
   return true;
 }
 
-bool DesktopWindow::onChar(WPARAM wParam, LPARAM lParam) 
+bool DesktopWindow::onChar(WPARAM wParam, LPARAM lParam)
 {
   if (!m_conConf->isViewOnly()) {
-    m_rfbKeySym->processCharEvent(static_cast<WCHAR>(wParam), 
+    m_rfbKeySym->processCharEvent(static_cast<WCHAR>(wParam),
                                   static_cast<unsigned int>(lParam));
   }
   return true;
 }
 
-bool DesktopWindow::onDeadChar(WPARAM wParam, LPARAM lParam) 
+bool DesktopWindow::onDeadChar(WPARAM wParam, LPARAM lParam)
 {
   return true;
 }
@@ -327,23 +353,27 @@ void DesktopWindow::setClipboardData(const StringStorage * strText)
 void DesktopWindow::doDraw(DeviceContext *dc)
 {
   AutoLock al(&m_bufferLock);
-  int fbWidth  = m_framebuffer.getDimension().width;
-  int fbHeight = m_framebuffer.getDimension().height;
+  int fbWidth  = m_serverDimension.width;
+  int fbHeight = m_serverDimension.height;
 
   if (!fbWidth || !fbHeight) {
+    if (m_gpu.get() != 0) {
+      // GDI paints the empty desktop: the window must be free of the swap chain.
+      m_gpu->shutdown();
+    }
     Graphics graphics(dc);
 
-    graphics.fillRect(m_clientArea.left, m_clientArea.top, 
+    graphics.fillRect(m_clientArea.left, m_clientArea.top,
                       m_clientArea.right, m_clientArea.bottom, &m_brush);
     return;
   }
 
   scrollProcessing(fbWidth, fbHeight);
 
-  int iHorzPos = 0; 
-  int iVertPos = 0; 
+  int iHorzPos = 0;
+  int iVertPos = 0;
 
-  if (m_showHorz) { 
+  if (m_showHorz) {
     iHorzPos = m_sbar.getHorzPos();
   }
 
@@ -356,6 +386,30 @@ void DesktopWindow::doDraw(DeviceContext *dc)
   Rect src, dst;
   m_scManager.getSourceRect(&src);
   m_scManager.getDestinationRect(&dst);
+
+  // GPU path: the GPU scales the frame buffer into the window. When it can not
+  // (disabled, unsupported pixel format, device lost, ...) it returns false and
+  // the GDI code below paints the frame.
+  if (m_gpu.get() != 0 && !m_gpu->isDisabled()) {
+    GpuPresenter::Frame frame;
+    Dimension dim = m_framebuffer.getDimension();
+    PixelFormat pf = m_framebuffer.getPixelFormat();
+    frame.bits = m_framebuffer.getBuffer();
+    frame.width = dim.width;
+    frame.height = dim.height;
+    frame.stride = m_framebuffer.getBytesPerRow();
+    frame.bitsPerPixel = pf.bitsPerPixel;
+    frame.bigEndian = pf.bigEndian;
+    frame.redShift = pf.redShift;
+    frame.greenShift = pf.greenShift;
+    frame.blueShift = pf.blueShift;
+    frame.redMax = pf.redMax;
+    frame.greenMax = pf.greenMax;
+    frame.blueMax = pf.blueMax;
+    if (m_gpu->present(getHWnd(), frame, src, dst)) {
+      return;
+    }
+  }
 
   int iWidth = m_clientArea.getWidth() - dst.getWidth();
   int iHeight = m_clientArea.getHeight() - dst.getHeight();
@@ -478,7 +532,7 @@ void DesktopWindow::drawImage(const RECT *src, const RECT *dst)
   Rect rc_dest(dst);
 
   AutoLock al(&m_bufferLock);
-  
+
   if ((src->right - src->left) == (dst->right - dst->left) &&
      (src->bottom - src->top) == (dst->bottom - dst->top) &&
      src->left == dst->left &&
@@ -491,15 +545,20 @@ void DesktopWindow::drawImage(const RECT *src, const RECT *dst)
   }
 }
 
-bool DesktopWindow::onSize(WPARAM wParam, LPARAM lParam) 
+bool DesktopWindow::onSize(WPARAM wParam, LPARAM lParam)
 {
   calcClientArea();
-  m_winResize = true; 
+  m_winResize = true;
   return true;
 }
 
 bool DesktopWindow::onDestroy()
 {
+  if (m_gpu.get() != 0) {
+    // Release the swap chain while the window still exists.
+    m_gpu->shutdown();
+  }
+  RemoveProp(getHWnd(), _T("FarSightVNC.RemoteKeyboard"));
   return true;
 }
 
@@ -519,6 +578,8 @@ void DesktopWindow::updateFramebuffer(const FrameBuffer *framebuffer,
     m_logWriter->error(_T("Possible invalide region. (%d, %d), (%d, %d)"),
                        dstRect->left, dstRect->top, dstRect->right, dstRect->bottom);
     m_logWriter->interror(_T("Error in updateFramebuffer (ViewerWindow)"));
+  } else if (m_gpu.get() != 0) {
+    m_gpu->markDirty(dstRect);
   }
   repaint(dstRect);
 }
@@ -526,9 +587,10 @@ void DesktopWindow::updateFramebuffer(const FrameBuffer *framebuffer,
 void DesktopWindow::setNewFramebuffer(const FrameBuffer *framebuffer)
 {
   Dimension dimension = framebuffer->getDimension();
-  Dimension olddimension = m_framebuffer.getDimension();
+  // Compare the real server sizes, not the DIB which is aligned to 4.
+  Dimension olddimension = m_serverDimension;
 
-  bool isBackgroundDirty = dimension.width < olddimension.width || 
+  bool isBackgroundDirty = dimension.width < olddimension.width ||
                            dimension.height < olddimension.height;
 
   m_logWriter->detail(_T("Desktop size: %d, %d"),  dimension.width, dimension.height);
@@ -537,17 +599,20 @@ void DesktopWindow::setNewFramebuffer(const FrameBuffer *framebuffer)
     AutoLock al(&m_bufferLock);
 
     m_serverDimension = dimension;
+    if (m_gpu.get() != 0) {
+      m_gpu->invalidateAll();
+    }
     if (!dimension.isEmpty()) {
       // the width and height should be aligned to 4
       int alignWidth = (dimension.width + 3) / 4;
       dimension.width = alignWidth * 4;
       int alignHeight = (dimension.height + 3) / 4;
       dimension.height = alignHeight * 4;
-      m_framebuffer.setProperties(&dimension, 
-                                  &framebuffer->getPixelFormat(), 
+      m_framebuffer.setProperties(&dimension,
+                                  &framebuffer->getPixelFormat(),
                                   getHWnd());
       m_framebuffer.setColor(0, 0, 0);
-      m_scManager.setScreenResolution(dimension.width, dimension.height);
+      m_scManager.setScreenResolution(m_serverDimension.width, m_serverDimension.height);
     } else {
       // If size of remote frame buffer is (0, 0), then fill viewer.
       // Otherwise user might think that everything hangs.
@@ -617,6 +682,8 @@ POINTS DesktopWindow::getViewerCoord(long xPos, long yPos)
     return p;
   }
   p = m_scManager.transformDispToScr(xPos, yPos);
+  p.x = static_cast<SHORT>(max(0, min((int)p.x, m_serverDimension.width - 1)));
+  p.y = static_cast<SHORT>(max(0, min((int)p.y, m_serverDimension.height - 1)));
   return p;
 }
 
@@ -626,8 +693,8 @@ Rect DesktopWindow::getViewerGeometry()
   viewerRect.setHeight(m_scManager.getVertPoints());
   viewerRect.setWidth(m_scManager.getHorzPoints());
   if (viewerRect.area() == 0) {
-    viewerRect.setWidth(m_framebuffer.getDimension().width);
-    viewerRect.setHeight(m_framebuffer.getDimension().height);
+    viewerRect.setWidth(m_serverDimension.width);
+    viewerRect.setHeight(m_serverDimension.height);
   }
   return viewerRect;
 }
@@ -635,7 +702,7 @@ Rect DesktopWindow::getViewerGeometry()
 Rect DesktopWindow::getFrameBufferGeometry()
 {
   AutoLock al(&m_bufferLock);
-  return m_framebuffer.getDimension().getRect();
+  return m_serverDimension.getRect();
 }
 
 void DesktopWindow::getServerGeometry(Rect *rect, int *pixelsize)

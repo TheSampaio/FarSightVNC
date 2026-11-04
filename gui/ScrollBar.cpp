@@ -21,8 +21,11 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-01: scroll bar sizes follow the monitor DPI.
+//
 
 #include "ScrollBar.h"
+#include "DpiUtils.h"
 
 ScrollBar::ScrollBar() 
 : m_hwnd(0), 
@@ -267,10 +270,10 @@ int ScrollBar::getHorzPos() {
 
 int ScrollBar::getVerticalSize()
 {
-  return GetSystemMetrics(SM_CXVSCROLL);
+  return DpiUtils::getSystemMetrics(SM_CXVSCROLL, DpiUtils::getDpiForWindow(m_hwnd));
 }
 
 int ScrollBar::getHorizontalSize()
 {
-  return GetSystemMetrics(SM_CXHSCROLL);
+  return DpiUtils::getSystemMetrics(SM_CYHSCROLL, DpiUtils::getDpiForWindow(m_hwnd));
 }

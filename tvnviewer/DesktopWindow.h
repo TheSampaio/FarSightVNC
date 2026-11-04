@@ -21,6 +21,9 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-02: optional Direct3D 11 / Direct2D presenter member.
+// Modified for FarSightVNC on 2026-11-03: listener for local pointer movement (full screen toolbar).
+//
 
 #ifndef _DESKTOP_WINDOW_H_
 #define _DESKTOP_WINDOW_H_
@@ -37,6 +40,19 @@
 #include "gui/drawing/Graphics.h"
 #include "rfb/RfbKeySym.h"
 #include "viewer-core/RemoteViewerCore.h"
+#include "GpuPresenter.h"
+
+#include <memory>
+
+// Receives the local pointer position over the desktop window (client
+// coordinates), also in view-only mode and before it is sent to the server.
+class DesktopPointerListener
+{
+public:
+  virtual void onDesktopPointerMove(POINT clientPoint) = 0;
+protected:
+  ~DesktopPointerListener() {}
+};
 
 class DesktopWindow : public PaintWindow,
                       protected RfbKeySymListener
@@ -82,6 +98,8 @@ public:
 
   // Set function for m_winKeyIgnore.
   void setWinKeyIgnore(bool winKeyIgnore) { m_rfbKeySym->setWinKeyIgnore(winKeyIgnore); }
+
+  void setPointerListener(DesktopPointerListener *listener) { m_pointerListener = listener; }
 
 protected:
   //
@@ -147,6 +165,8 @@ protected:
   // frame buffer
   LocalMutex m_bufferLock;
   DibFrameBuffer m_framebuffer;
+  // Direct3D 11 / Direct2D presenter; null when the GDI renderer is forced.
+  std::unique_ptr<GpuPresenter> m_gpu;
   // This variable save server dimension.
   // Dimension of m_framebuffer can be large m_serverDimension.
   Dimension m_serverDimension;
@@ -162,6 +182,7 @@ protected:
   RemoteViewerCore *m_viewerCore;
   ConnectionConfig *m_conConf;
   bool m_isBackgroundDirty;
+  DesktopPointerListener *m_pointerListener;
 
 private:
   void doDraw(DeviceContext *dc);

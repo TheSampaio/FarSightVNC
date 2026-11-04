@@ -21,6 +21,8 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-03: in-memory reconnection attempt counter.
+//
 
 #include <iomanip>
 #include <sstream>
@@ -33,14 +35,16 @@
 ConnectionData::ConnectionData()
 : m_isEmpty(true),
   m_isSetPassword(false),
-  m_isIncoming(false)
+  m_isIncoming(false),
+  m_reconnectAttempt(0)
 {
 }
 
 ConnectionData::ConnectionData(const ConnectionData &connectionData)
 : m_isEmpty(connectionData.m_isEmpty),
   m_isSetPassword(connectionData.m_isSetPassword),
-  m_isIncoming(connectionData.m_isIncoming)
+  m_isIncoming(connectionData.m_isIncoming),
+  m_reconnectAttempt(connectionData.m_reconnectAttempt)
 {
   if (!connectionData.isEmpty()) {
     m_hostPath.set(connectionData.m_hostPath.get());
@@ -58,6 +62,16 @@ void ConnectionData::setIncoming(bool isIncoming)
 bool ConnectionData::isIncoming() const
 {
   return m_isIncoming;
+}
+
+void ConnectionData::setReconnectAttempt(unsigned int attempt)
+{
+  m_reconnectAttempt = attempt;
+}
+
+unsigned int ConnectionData::getReconnectAttempt() const
+{
+  return m_reconnectAttempt;
 }
 
 bool ConnectionData::isEmpty() const

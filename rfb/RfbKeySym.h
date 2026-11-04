@@ -21,10 +21,16 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-10-29, 2026-11-01 and 2026-11-03: added <string>; keyboard test seams and physical key tracking; Shift and dead-key workarounds for TightVNC servers.
+//
 
 #ifndef __RFBKEYSYM_H__
 #define __RFBKEYSYM_H__
 
+#include <string>
+
+#include <map>
+#include <vector>
 #include "RfbKeySymListener.h"
 #include "util/Keymap.h"
 #include "log-writer/LogWriter.h"
@@ -41,7 +47,7 @@ public:
   void sendModifier(unsigned char virtKey, bool down);
 
   void processKeyEvent(unsigned short virtKey, unsigned int addKeyData);
-  bool vkCodeToString(unsigned short virtKey, bool isKeyDown, std::wstring *res);
+  bool vkCodeToString(unsigned short virtKey, unsigned int scanCode, std::wstring *res);
   void processCharEvent(WCHAR charCode, unsigned int addKeyData);
   // Checks a new modifiers state after focus restoration and sends difference
   void processFocusRestoration();
@@ -49,6 +55,11 @@ public:
   void processFocusLoss();
 
   void sendCtrlAltDel();
+
+  // Test seams. By default the layout of the calling thread and the real
+  // Caps Lock / Scroll Lock toggle state are used.
+  void setKeyboardLayout(HKL layout);
+  void setToggleKeysOverride(bool capsLockOn, bool scrollLockOn);
 
   // Set function for m_winKeyIgnore.
   void setWinKeyIgnore(bool winIgnore);
@@ -62,8 +73,10 @@ private:
   void restoreModifier(unsigned char modifier);
   void releaseModifiers();
   void restoreModifiers();
-  
+
   bool isPressed(unsigned char virtKey);
+  HKL getKeyboardLayout();
+  bool isToggled(int virtKey);
 
   // This function does distinguish between a right or left modifier and
   // if the virtKey is a modifier (e.g VK_CONTROL), the function always return
@@ -87,7 +100,9 @@ private:
   WCHAR GettingCharFromCtrlSymbol(WCHAR ctrlSymbol);
   // E.g if pressed Ctrl + Alt + A
   // Try found char without modificators
-  bool TryTranslateNotPrintableToUnicode(unsigned short virtKey, HKL currentLayout, WCHAR *unicodeChar);
+  bool TryTranslateNotPrintableToUnicode(unsigned short virtKey, unsigned int scanCode, HKL currentLayout, WCHAR *unicodeChar);
+  // True when Shift+virtKey is a dead key in the current layout.
+  bool shiftVariantIsDeadKey(unsigned short virtKey, unsigned int scanCode);
 
   RfbKeySymListener *m_extKeySymListener;
 
@@ -106,11 +121,20 @@ private:
   bool m_allowProcessCharEvent;
   bool m_allowProcessDoubleChar;
   bool m_doubleDeadCatched;
-  
+
   LogWriter *m_log;
 
   // Flag for ignoring win key.
   bool m_winKeyIgnore;
+
+  // Test seams (see setKeyboardLayout()).
+  HKL m_layoutOverride;
+  bool m_toggleKeysOverridden;
+  bool m_capsLockOverride;
+  bool m_scrollLockOverride;
+  std::map<unsigned int, std::vector<UINT32> > m_pressedKeys;
+  // Bit 0: Left Shift, bit 1: Right Shift, as sent to sendKeySymEvent().
+  unsigned char m_shiftKeysDown;
 };
 
 #endif // __RFBKEYSYM_H__

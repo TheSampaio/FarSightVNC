@@ -21,8 +21,11 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-01: icon size follows the monitor DPI.
+//
 
 #include "FileInfoListView.h"
+#include "gui/DpiUtils.h"
 #include "util/DateTime.h"
 #include "tvnviewer/resource.h"
 #include "util/ResourceLoader.h"
@@ -149,8 +152,9 @@ void FileInfoListView::loadImages()
     ImageList_Destroy(m_smallImageList);
   }
 
-  m_smallImageList = ImageList_Create(GetSystemMetrics(SM_CXSMICON),
-                                      GetSystemMetrics(SM_CYSMICON),
+  UINT dpi = DpiUtils::getDpiForWindow(m_hwnd);
+  m_smallImageList = ImageList_Create(DpiUtils::getSystemMetrics(SM_CXSMICON, dpi),
+                                      DpiUtils::getSystemMetrics(SM_CYSMICON, dpi),
                                       ILC_MASK, 1, 1);
 
   HICON icon;
