@@ -68,6 +68,12 @@ struct Seq {
   Seq &d(UINT32 s) { Rec r = {s, true}; v.push_back(r); return *this; }
   Seq &u(UINT32 s) { Rec r = {s, false}; v.push_back(r); return *this; }
   Seq &press(UINT32 s) { return d(s).u(s); }
+  // Key-down of a character typed with Shift held: the viewer releases
+  // Shift_L around it when the server would type it with AltGr.
+  Seq &shifted(UINT32 s, bool altGr)
+  {
+    return altGr ? u(XK_Shift_L).d(s).d(XK_Shift_L) : d(s);
+  }
 };
 
 std::string toString(const std::vector<Rec> &v)
@@ -309,6 +315,13 @@ UINT32 symOf(WCHAR ch)
   return s;
 }
 
+// True when a TightVNC server types 'ch' with Ctrl and/or Alt (AltGr).
+bool serverAltGr(HKL hkl, WCHAR ch)
+{
+  SHORT r = VkKeyScanExW(ch, hkl);
+  return r != -1 && (r & 0x600) != 0;
+}
+
 std::string label(const Layout &l, const char *what)
 {
   return std::string(l.name) + " " + what;
@@ -373,6 +386,7 @@ void testQuestionMark(const Layout &lay, LogWriter *log)
     checkTrue("ABNT2 '?' is VK_ABNT_C1 scan 0x73", vk == VK_ABNT_C1_CODE && scan == SC_ABNT_C1);
   }
   UINT32 q = symOf(L'?');
+  bool altGr = serverAltGr(lay.hkl, L'?');
   for (int right = 0; right < 2; right++) {
     for (int keyFirst = 0; keyFirst < 2; keyFirst++) {
       Harness h(lay.hkl, log);
@@ -381,7 +395,7 @@ void testQuestionMark(const Layout &lay, LogWriter *log)
       right ? h.rshiftDown() : h.lshiftDown();
       h.down(vk, scan);
       Seq e;
-      e.d(sh).d(q);
+      e.d(sh).shifted(q, altGr);
       if (keyFirst) {
         h.up(vk, scan);
         right ? h.rshiftUp() : h.lshiftUp();
@@ -406,6 +420,7 @@ void testShifts(const Layout &lay, LogWriter *log)
   unsigned vk, scan; bool shift;
   findCharKey(lay.hkl, L'?', &vk, &scan, &shift);
   UINT32 q = symOf(L'?');
+  bool altGr = serverAltGr(lay.hkl, L'?');
   {
     Harness h(lay.hkl, log);
     h.lshiftDown(); h.rshiftDown(); h.lshiftUp();
@@ -413,7 +428,7 @@ void testShifts(const Layout &lay, LogWriter *log)
     h.up(vk, scan);
     h.rshiftUp();
     Seq e;
-    e.d(XK_Shift_L).d(q).u(q).u(XK_Shift_L);
+    e.d(XK_Shift_L).shifted(q, altGr).u(q).u(XK_Shift_L);
     finish(label(lay, "H3 LShift+RShift, release LShift, '?' still shifted"), h, e);
   }
   {
@@ -423,7 +438,7 @@ void testShifts(const Layout &lay, LogWriter *log)
     h.up(vk, scan);
     h.lshiftUp();
     Seq e;
-    e.d(XK_Shift_L).d(q).u(q).u(XK_Shift_L);
+    e.d(XK_Shift_L).shifted(q, altGr).u(q).u(XK_Shift_L);
     finish(label(lay, "H3 RShift+LShift, release RShift, '?' still shifted"), h, e);
   }
 }
@@ -433,6 +448,7 @@ void testLostShiftKeyUp(const Layout &lay, LogWriter *log)
   unsigned vk, scan; bool shift;
   findCharKey(lay.hkl, L'?', &vk, &scan, &shift);
   UINT32 q = symOf(L'?');
+  bool altGr = serverAltGr(lay.hkl, L'?');
   unsigned scanA = MapVirtualKeyExW('A', MAPVK_VK_TO_VSC, lay.hkl);
   {
     Harness h(lay.hkl, log);
@@ -442,7 +458,7 @@ void testLostShiftKeyUp(const Layout &lay, LogWriter *log)
     h.rshiftUp();
     h.tap('A', scanA);      // nothing is held any more
     Seq e;
-    e.d(XK_Shift_L).press(q).u(XK_Shift_L).press(symOf(L'a'));
+    e.d(XK_Shift_L).shifted(q, altGr).u(q).u(XK_Shift_L).press(symOf(L'a'));
     finish(label(lay, "lost LShift key-up is released with RShift"), h, e);
   }
   {
@@ -453,7 +469,7 @@ void testLostShiftKeyUp(const Layout &lay, LogWriter *log)
     h.lshiftUp();
     h.tap('A', scanA);
     Seq e;
-    e.d(XK_Shift_L).press(q).u(XK_Shift_L).press(symOf(L'a'));
+    e.d(XK_Shift_L).shifted(q, altGr).u(q).u(XK_Shift_L).press(symOf(L'a'));
     finish(label(lay, "lost RShift key-up is released with LShift"), h, e);
   }
 }
@@ -498,7 +514,7 @@ void testHookStyleModifiers(const Layout &lay, LogWriter *log)
   h.down(VK_SHIFT, SC_RSHIFT);    // system copy of the Shift press
   h.up(VK_SHIFT, SC_RSHIFT);      // system copy of the Shift release
   Seq e;
-  e.d(XK_Shift_L).d(q).u(q).u(XK_Shift_L);
+  e.d(XK_Shift_L).shifted(q, serverAltGr(lay.hkl, L'?')).u(q).u(XK_Shift_L);
   finish(label(lay, "H3/H4 hook style RShift with duplicate system copy"), h, e);
 }
 
@@ -783,6 +799,74 @@ void testRightShiftIsShiftL(LogWriter *log)
   finish("ABNT2 Right Shift is sent as Shift_L, overlapping Shifts once", h, e);
 }
 
+// Shift+'/?' (VK_ABNT_C1) on ABNT2: a TightVNC server types '?' as AltGr+W
+// (VkKeyScanEx), so Shift must not be held on the server meanwhile.
+void testAbnt2QuestionMarkAltGr(LogWriter *log)
+{
+  const UINT32 q = '?';
+  checkTrue("ABNT2 server types '?' with Ctrl+Alt (VkKeyScanEx)",
+            (VkKeyScanExW(L'?', g_abnt2->hkl) & 0x600) == 0x600);
+  {
+    Harness h(g_abnt2->hkl, log);
+    h.lshiftDown();
+    h.down(VK_ABNT_C1_CODE, SC_ABNT_C1);
+    h.up(VK_ABNT_C1_CODE, SC_ABNT_C1);
+    h.lshiftUp();
+    Seq e;
+    e.d(XK_Shift_L).u(XK_Shift_L).d(q).d(XK_Shift_L).u(q).u(XK_Shift_L);
+    finish("ABNT2 LShift+VK_ABNT_C1 releases Shift_L around '?'", h, e);
+  }
+  {
+    Harness h(g_abnt2->hkl, log);
+    h.rshiftDown();
+    h.down(VK_ABNT_C1_CODE, SC_ABNT_C1);
+    h.up(VK_ABNT_C1_CODE, SC_ABNT_C1);
+    h.rshiftUp();
+    Seq e;
+    e.d(XK_Shift_L).u(XK_Shift_L).d(q).d(XK_Shift_L).u(q).u(XK_Shift_L);
+    finish("ABNT2 RShift+VK_ABNT_C1 releases Shift_L around '?'", h, e);
+  }
+  {
+    Harness h(g_abnt2->hkl, log);
+    h.lshiftDown();
+    h.down(VK_ABNT_C1_CODE, SC_ABNT_C1);
+    h.repeat(VK_ABNT_C1_CODE, SC_ABNT_C1);
+    h.up(VK_ABNT_C1_CODE, SC_ABNT_C1);
+    h.lshiftUp();
+    Seq e;
+    e.d(XK_Shift_L).u(XK_Shift_L).d(q).d(XK_Shift_L);
+    e.u(XK_Shift_L).d(q).d(XK_Shift_L).u(q).u(XK_Shift_L);
+    finish("ABNT2 LShift+VK_ABNT_C1 autorepeat releases Shift_L each time", h, e);
+  }
+  {
+    Harness h(g_abnt2->hkl, log);
+    h.lshiftDown();
+    h.down(VK_ABNT_C1_CODE, SC_ABNT_C1);
+    h.lshiftUp();
+    h.up(VK_ABNT_C1_CODE, SC_ABNT_C1);
+    Seq e;
+    e.d(XK_Shift_L).u(XK_Shift_L).d(q).d(XK_Shift_L).u(XK_Shift_L).u(q);
+    finish("ABNT2 '?' with Shift released first sends one Shift_L up", h, e);
+  }
+  {
+    Harness h(g_abnt2->hkl, log);
+    h.tap(VK_ABNT_C1_CODE, SC_ABNT_C1);
+    Seq e;
+    e.press('/');
+    finish("ABNT2 plain VK_ABNT_C1 '/' is unchanged", h, e);
+  }
+  {
+    Harness h(g_abnt2->hkl, log);
+    unsigned scan1 = h.scanOf('1');
+    h.lshiftDown();
+    h.tap('1', scan1);
+    h.lshiftUp();
+    Seq e;
+    e.d(XK_Shift_L).press('!').u(XK_Shift_L);
+    finish("ABNT2 Shift+1 '!' keeps Shift held", h, e);
+  }
+}
+
 //----------------------------------------------------------------------------
 // H5: focus loss
 
@@ -956,6 +1040,7 @@ int main()
   testAltGrAbnt2(&log);
   testDigitWithDeadShiftVariant(&log);
   testRightShiftIsShiftL(&log);
+  testAbnt2QuestionMarkAltGr(&log);
   testFakeShift(&log);
   testCtrlAltDel(&log);
   testWinKey(&log);

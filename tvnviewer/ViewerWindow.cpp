@@ -26,6 +26,7 @@
 // Modified for FarSightVNC on 2026-11-03: connection state in the title and assisted reconnect.
 // Modified for FarSightVNC on 2026-11-03: "FarSightVNC Viewer - <host>" title; sessions open maximized and fitted to the window.
 // Modified for FarSightVNC on 2026-11-04: "FarSightVNC | <host>" title; system shortcuts go to the server in windowed mode too.
+// Modified for FarSightVNC on 2026-11-07: a session opened in full screen no longer freezes the viewer (window work moved to the window thread).
 //
 
 #include "config-lib/IniFileSettingsManager.h"
@@ -289,6 +290,8 @@ bool ViewerWindow::onMessage(UINT message, WPARAM wParam, LPARAM lParam)
     return true;
   case WM_USER_FS_WARNING:
     return onFsWarning();
+  case WM_USER_CONNECTED:
+    return onSessionShown();
   case WM_CLOSE:
     return onClose();
   case WM_DESTROY:
@@ -1287,6 +1290,19 @@ void ViewerWindow::onConnected(RfbOutputGate *output)
 
   m_fileTransfer->getCore()->updateSupportedOperations(&clientMsgCodes, &serverMsgCodes);
 
+  // This runs in the thread of the viewer core, which pumps no messages.
+  // Full screen created the floating toolbar and the low level keyboard hook
+  // in it, so the window thread blocked on the toolbar and the keyboard
+  // stalled: the session opened in full screen froze. Windows are touched
+  // in the window thread only.
+  postMessage(WM_USER_CONNECTED);
+}
+
+bool ViewerWindow::onSessionShown()
+{
+  if (m_stopped || !m_isConnected) {
+    return true;
+  }
   // Start viewer window and applying settings.
   showWindow();
   // Like AnyDesk and RustDesk, a session opens maximized (the remote
@@ -1301,6 +1317,7 @@ void ViewerWindow::onConnected(RfbOutputGate *output)
   }
   setForegroundWindow();
   applySettings();
+  return true;
 }
 
 void ViewerWindow::onDisconnect(const StringStorage *message)
