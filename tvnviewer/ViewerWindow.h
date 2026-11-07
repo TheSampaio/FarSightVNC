@@ -25,6 +25,7 @@
 // Modified for FarSightVNC on 2026-11-03: floating auto-hide toolbar in full screen.
 // Modified for FarSightVNC on 2026-11-03: connection state in the title and assisted reconnect.
 // Modified for FarSightVNC on 2026-11-03: first connection opens maximized and fitted to the window.
+// Modified for FarSightVNC on 2026-11-07: the connected session is shown by the window thread (WM_USER_CONNECTED).
 //
 
 #ifndef _VIEWER_WINDOW_H_
@@ -83,6 +84,7 @@ public:
   static const int WM_USER_DISCONNECT = WM_USER + 3;
   static const int WM_USER_AUTH_ERROR = WM_USER + 4;
   static const int WM_USER_FS_WARNING = WM_USER + 5;
+  static const int WM_USER_CONNECTED = WM_USER + 6;
 
 protected:
   static const int TIMER_DESKTOP_STATE = 1;
@@ -96,6 +98,8 @@ protected:
   bool onError();
 
   bool onFsWarning();
+  // Shows the established session (window thread part of onConnected()).
+  bool onSessionShown();
   // Offers to reconnect after an established session dropped
   // (sessionWasEstablished) or after a failed reconnection attempt. Returns
   // false, without any window, when reconnecting is not offered.

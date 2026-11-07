@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.1.0a-blue" alt="Version 0.1.0a">
+  <img src="https://img.shields.io/badge/version-0.1.1a-blue" alt="Version 0.1.1a">
   <img src="https://img.shields.io/badge/status-alpha-orange" alt="Alpha status">
   <img src="https://img.shields.io/badge/platform-Windows-0078D4" alt="Platform: Windows">
   <img src="https://img.shields.io/badge/language-C%2B%2B-00599C" alt="Language: C++">
@@ -31,7 +31,7 @@ FarSightVNC is a **fork of TightVNC 2.8.90**, focused on improving the Windows V
 
 It keeps the native C++/Win32 foundation and RFB protocol implementation of TightVNC, with targeted changes rather than a rewrite. The repository also retains the upstream server, shared libraries and installer projects; FarSightVNC development currently centers on the **Viewer**.
 
-**Current version: v0.1.0a (alpha).** Features and behavior are still evolving. The original TightVNC version remains the upstream baseline, separate from FarSightVNC's own version number. See [MODIFICATIONS.md](MODIFICATIONS.md) for the dated modification history.
+**Current version: v0.1.1a (alpha).** Features and behavior are still evolving. The original TightVNC version remains the upstream baseline, separate from FarSightVNC's own version number. See [MODIFICATIONS.md](MODIFICATIONS.md) for the dated modification history.
 
 ## Highlights
 

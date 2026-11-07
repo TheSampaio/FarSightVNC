@@ -21,7 +21,7 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
-// Modified for FarSightVNC on 2026-10-29, 2026-11-01, 2026-11-03 and 2026-11-04: added <string>; keyboard test seams and physical key tracking; Shift and dead-key workarounds for TightVNC servers; lost Shift key-up.
+// Modified for FarSightVNC on 2026-10-29, 2026-11-01, 2026-11-03, 2026-11-04 and 2026-11-07: added <string>; keyboard test seams and physical key tracking; Shift and dead-key workarounds for TightVNC servers; lost Shift key-up; Shift released around AltGr characters.
 //
 
 #ifndef __RFBKEYSYM_H__
@@ -105,6 +105,12 @@ private:
   bool TryTranslateNotPrintableToUnicode(unsigned short virtKey, unsigned int scanCode, HKL currentLayout, WCHAR *unicodeChar);
   // True when Shift+virtKey is a dead key in the current layout.
   bool shiftVariantIsDeadKey(unsigned short virtKey, unsigned int scanCode);
+  // True when Shift is held on the server and a TightVNC server would type
+  // one of the symbols with Ctrl and/or Alt (AltGr) in the viewer's layout.
+  bool needsShiftReleased(const std::vector<UINT32> &symbols);
+  // Sends the key-down of the symbols, with Shift released around them when
+  // needsShiftReleased().
+  void sendCharKeySyms(const std::vector<UINT32> &symbols);
   // Releases the Shift keys that are pressed for the server but not held.
   void releaseShiftsNotHeld();
   bool isKeyHeld(unsigned char virtKey);

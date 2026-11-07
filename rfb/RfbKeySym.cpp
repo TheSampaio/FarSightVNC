@@ -24,6 +24,7 @@
 // Modified for FarSightVNC on 2026-11-01: symmetric key press/release, scancode aware translation, Left/Right Shift.
 // Modified for FarSightVNC on 2026-11-03: one Shift_L for both Shift keys; keypad digits when Shift+digit is a dead key.
 // Modified for FarSightVNC on 2026-11-04: release a Shift whose key-up Windows did not send; fake (E0) Shifts.; keyboard trace in the debug log
+// Modified for FarSightVNC on 2026-11-07: Shift released around characters a TightVNC server types with AltGr (ABNT2 Shift+'/?').
 //
 
 #include "RfbKeySym.h"
@@ -101,9 +102,7 @@ void RfbKeySym::processKeyEvent(unsigned short virtKey,
     // Modifiers are state transitions and must not repeat.
     bool modifier = virtKey == VK_SHIFT || virtKey == VK_CONTROL || virtKey == VK_MENU ||
       (virtKey >= VK_LSHIFT && virtKey <= VK_RMENU) || virtKey == VK_LWIN || virtKey == VK_RWIN;
-    if (!modifier) {
-      for (size_t i = 0; i < old->second.size(); i++) sendKeySymEvent(old->second[i], true);
-    }
+    if (!modifier) sendCharKeySyms(old->second);
     return;
   }
 
@@ -150,13 +149,44 @@ void RfbKeySym::processKeyEvent(unsigned short virtKey,
         shiftVariantIsDeadKey(key, scanCode | (extended ? 0xe000 : 0))) {
       symbols[0] = XK_KP_0 + (symbols[0] - '0');
     }
-    for (size_t i = 0; i < symbols.size(); i++) sendKeySymEvent(symbols[i], true);
+    sendCharKeySyms(symbols);
     if (ctrlAlt && needReleaseModifiers) restoreModifiers();
     m_pressedKeys[physicalKey] = symbols;
     return;
   }
   for (size_t i = 0; i < symbols.size(); i++) sendKeySymEvent(symbols[i], true);
   m_pressedKeys[physicalKey] = symbols;
+}
+
+bool RfbKeySym::needsShiftReleased(const std::vector<UINT32> &symbols)
+{
+  if (m_shiftKeysDown == 0 || isPressed(VK_LCONTROL) || isPressed(VK_RCONTROL) ||
+      isPressed(VK_LMENU) || isPressed(VK_RMENU)) {
+    return false;
+  }
+  HKL layout = getKeyboardLayout();
+  for (size_t i = 0; i < symbols.size(); i++) {
+    WCHAR ch;
+    if (!m_keyMap.keySymToUnicodeChar(symbols[i], &ch)) continue;
+    SHORT scan = VkKeyScanExW(ch, layout);
+    // Bit 1 of the high byte is Ctrl, bit 2 is Alt.
+    if (scan != -1 && (scan & 0x600) != 0) return true;
+  }
+  return false;
+}
+
+void RfbKeySym::sendCharKeySyms(const std::vector<UINT32> &symbols)
+{
+  // A TightVNC server types a character by VkKeyScanEx() and presses the
+  // modifiers it needs: ABNT2 '?' becomes AltGr+W. With Shift held it pressed
+  // Ctrl and Alt and then toggled Shift, giving Ctrl+Shift / Alt+Shift
+  // (input language hotkeys) and a Ctrl+Alt+Shift chord on the remote. Shift
+  // is released around such a character; m_shiftKeysDown is unchanged, so the
+  // physical Shift key-up still sends exactly one Shift_L up.
+  bool releaseShift = needsShiftReleased(symbols);
+  if (releaseShift) sendVerbatimKeySymEvent(XK_Shift_L, false);
+  for (size_t i = 0; i < symbols.size(); i++) sendKeySymEvent(symbols[i], true);
+  if (releaseShift) sendVerbatimKeySymEvent(XK_Shift_L, true);
 }
 
 void RfbKeySym::releaseShiftsNotHeld()
