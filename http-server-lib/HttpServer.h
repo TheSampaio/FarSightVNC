@@ -46,7 +46,7 @@ public:
   HttpServer(const TCHAR *bindHost,
              unsigned short bindPort,
              bool lockAddr,
-             LogWriter *log) throw(Exception);
+             LogWriter *log);
   /**
    * Stops http server thread and deletes http server.
    */

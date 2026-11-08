@@ -41,7 +41,7 @@ public:
   QueryConnectionCommandLine();
   virtual ~QueryConnectionCommandLine();
 
-  void parse(const CommandLineArgs *commandLine) throw(Exception);
+  void parse(const CommandLineArgs *commandLine);
 
   // Returns true if timeout is specified.
   bool isTimeoutSpecified();

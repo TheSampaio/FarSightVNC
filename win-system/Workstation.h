@@ -39,13 +39,13 @@ public:
    * Locks workstation.
    * @throws SystemException on fail.
    */
-  static void lock() throw(SystemException);
+  static void lock();
   /**
    * Logs off interactive user.
    * @throws SystemException on fail.
    * @remark caller must be run on interactive session.
    */
-  static void logOff() throw(SystemException);
+  static void logOff();
 };
 
 #endif

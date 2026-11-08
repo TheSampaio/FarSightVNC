@@ -73,32 +73,32 @@ public:
    * Installs tvnserver service.
    * @throws SystemException on fail.
    */
-  static void install() throw(SystemException);
+  static void install();
   /**
    * Stops and removes tvnserver service.
    * @throws SystemException when failed to remove service.
    */
-  static void remove() throw(SystemException);
+  static void remove();
   /**
    * Reinstalls tvnserver service (combite call of remove and install methods).
    * @remark ignores if remove call throws exception.
    * @throws SystemException when fail to install service.
    */
-  static void reinstall() throw(SystemException);
+  static void reinstall();
   /**
    * Starts tvnserver service.
    * @param waitCompletion if true, wait until the status becomes
    *   SERVICE_RUNNING.
    * @throws SystemException on fail.
    */
-  static void start(bool waitCompletion = false) throw(SystemException);
+  static void start(bool waitCompletion = false);
   /**
    * Stopps tvnserver service.
    * @param waitCompletion if true, wait until the status becomes
    *   SERVICE_STOPPED.
    * @throws SystemException on fail.
    */
-  static void stop(bool waitCompletion = false) throw(SystemException);
+  static void stop(bool waitCompletion = false);
 
 protected:
   /**
@@ -106,7 +106,7 @@ protected:
    * Starts tvnserver execution.
    * @throws SystemException when failed to start.
    */
-  virtual void onStart() throw(SystemException);
+  virtual void onStart();
 
   /**
    * Inherited from superclass.

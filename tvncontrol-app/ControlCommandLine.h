@@ -61,7 +61,7 @@ public:
   ControlCommandLine();
   virtual ~ControlCommandLine();
 
-  void parse(const CommandLineArgs *cmdArgs) throw(CommandLineFormatException);
+  void parse(const CommandLineArgs *cmdArgs);
 
   void getPasswordFile(StringStorage *passwordFile) const;
   bool hasPasswordFile();

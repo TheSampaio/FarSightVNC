@@ -35,7 +35,7 @@ public:
   ShareAppCommand(ControlProxy *serverControl, unsigned int procId);
   virtual ~ShareAppCommand();
 
-  virtual void execute() throw(IOException, RemoteException);
+  virtual void execute();
 private:
   ControlProxy *m_proxy;
   unsigned int m_procId;

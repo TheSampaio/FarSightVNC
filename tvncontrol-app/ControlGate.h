@@ -38,7 +38,7 @@ public:
   ControlGate(Channel *stream);
   virtual ~ControlGate();
 
-  void skipBytes(UINT32 length) throw(IOException);
+  void skipBytes(UINT32 length);
 };
 
 #endif

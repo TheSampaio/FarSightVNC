@@ -43,12 +43,12 @@ public:
 
   virtual void sendRectangle(const Rect *rect,
                              const FrameBuffer *serverFb,
-                             const EncodeOptions *options) throw(IOException);
+                             const EncodeOptions *options);
 
 private:
   template <class PIXEL_T>
     void rreEncode(const Rect *r,
-                   const FrameBuffer *frameBuffer) throw(IOException);
+                   const FrameBuffer *frameBuffer);
 
   // Coordinates of subrectangles.
   std::vector<Rect> m_rects;

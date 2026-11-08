@@ -40,7 +40,7 @@ public:
   @param filename path to library file.
   @throws Exception on error.
   */
-  DynamicLibrary(const TCHAR *filename) throw(Exception);
+  DynamicLibrary(const TCHAR *filename);
   DynamicLibrary();
   virtual ~DynamicLibrary();
 

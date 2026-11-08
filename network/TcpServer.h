@@ -51,7 +51,7 @@ public:
   TcpServer(const TCHAR *bindHost,
             unsigned short bindPort,
             bool autoStart = false,
-            bool lockAddr = false) throw(Exception);
+            bool lockAddr = false);
   /**
    * Closes listening socket, terminates tcp server thread and
    * deletes tcp server object.

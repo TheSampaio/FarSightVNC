@@ -47,24 +47,24 @@ public:
   FileTransferEventAdapter();
   virtual ~FileTransferEventAdapter();
 
-  virtual void onCompressionSupportReply(DataInputStream *input) throw(OperationNotPermittedException);
-  virtual void onFileListReply(DataInputStream *input) throw(OperationNotPermittedException);
-  virtual void onMd5DataReply(DataInputStream *input) throw(OperationNotPermittedException);
+  virtual void onCompressionSupportReply(DataInputStream *input);
+  virtual void onFileListReply(DataInputStream *input);
+  virtual void onMd5DataReply(DataInputStream *input);
 
-  virtual void onUploadReply(DataInputStream *input) throw(OperationNotPermittedException);
-  virtual void onUploadDataReply(DataInputStream *input) throw(OperationNotPermittedException);
-  virtual void onUploadEndReply(DataInputStream *input) throw(OperationNotPermittedException);
+  virtual void onUploadReply(DataInputStream *input);
+  virtual void onUploadDataReply(DataInputStream *input);
+  virtual void onUploadEndReply(DataInputStream *input);
 
-  virtual void onDownloadReply(DataInputStream *input) throw(OperationNotPermittedException);
-  virtual void onDownloadDataReply(DataInputStream *input) throw(OperationNotPermittedException);
-  virtual void onDownloadEndReply(DataInputStream *input) throw(OperationNotPermittedException);
+  virtual void onDownloadReply(DataInputStream *input);
+  virtual void onDownloadDataReply(DataInputStream *input);
+  virtual void onDownloadEndReply(DataInputStream *input);
 
-  virtual void onMkdirReply(DataInputStream *input) throw(OperationNotPermittedException);
-  virtual void onRmReply(DataInputStream *input) throw(OperationNotPermittedException);
-  virtual void onMvReply(DataInputStream *input) throw(OperationNotPermittedException);
+  virtual void onMkdirReply(DataInputStream *input);
+  virtual void onRmReply(DataInputStream *input);
+  virtual void onMvReply(DataInputStream *input);
 
-  virtual void onDirSizeReply(DataInputStream *input) throw(OperationNotPermittedException);
-  virtual void onLastRequestFailedReply(DataInputStream *input) throw(OperationNotPermittedException);
+  virtual void onDirSizeReply(DataInputStream *input);
+  virtual void onLastRequestFailedReply(DataInputStream *input);
 };
 
 #endif

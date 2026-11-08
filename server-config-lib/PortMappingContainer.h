@@ -75,14 +75,14 @@ public:
    * @param output output stream for serializing.
    * @throws Exception on error.
    */
-  void serialize(DataOutputStream *output) const throw(Exception);
+  void serialize(DataOutputStream *output) const;
 
   /**
    * Deserializes port mapping container from input stream.
    * @param input source input stream.
    * @throws Exception on error.
    */
-  void deserialize(DataInputStream *input) throw(Exception);
+  void deserialize(DataInputStream *input);
 
   // Returns a read-only pointer to the element with specifed index
   // or 0 if not found.

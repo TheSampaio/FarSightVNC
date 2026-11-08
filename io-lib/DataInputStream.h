@@ -47,7 +47,7 @@ public:
    * Inherited from superclass.
    * Delegates execution of method to real input stream.
    */
-  virtual size_t read(void *buffer, size_t len) throw(IOException);
+  virtual size_t read(void *buffer, size_t len);
 
   virtual size_t available();
 
@@ -58,19 +58,19 @@ public:
    * @throws IOException on error.
    * @fixme really it can throw any kind of exception.
    */
-  void readFully(void *buffer, size_t len) throw(IOException);
+  void readFully(void *buffer, size_t len);
 
-  UINT8 readUInt8() throw(IOException);
-  UINT16 readUInt16() throw(IOException);
-  UINT32 readUInt32() throw(IOException);
-  UINT64 readUInt64() throw(IOException);
+  UINT8 readUInt8();
+  UINT16 readUInt16();
+  UINT32 readUInt32();
+  UINT64 readUInt64();
 
-  INT8 readInt8() throw(IOException);
-  INT16 readInt16() throw(IOException);
-  INT32 readInt32() throw(IOException);
-  INT64 readInt64() throw(IOException);
+  INT8 readInt8();
+  INT16 readInt16();
+  INT32 readInt32();
+  INT64 readInt64();
 
-  void readUTF8(StringStorage *storage) throw(IOException);
+  void readUTF8(StringStorage *storage);
 
 protected:
   InputStream *m_inputStream;

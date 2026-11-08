@@ -136,7 +136,7 @@ bool WTS::SessionIsRdpSession(DWORD sessionId, LogWriter *log)
 }
 
 
-HANDLE WTS::queryConsoleUserToken(LogWriter *log) throw(SystemException)
+HANDLE WTS::queryConsoleUserToken(LogWriter *log)
 {
   DWORD sessionId = getActiveConsoleSessionId(log);
   return sessionUserToken(sessionId, log);

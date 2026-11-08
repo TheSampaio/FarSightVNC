@@ -53,7 +53,7 @@ public:
    *
    * @throws IOException on io error, RemoteException on server side error.
    */
-  virtual void execute() throw(IOException, RemoteException);
+  virtual void execute();
 private:
   /**
    * Proxy to some of TightVNC server control methods.

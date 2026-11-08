@@ -40,14 +40,14 @@ public:
    * @param state [out] array of 256 virtual key states.
    * @throws SystemException on error.
    */
-  static void getState(BYTE state[256]) throw(SystemException);
+  static void getState(BYTE state[256]);
 
   /**
    * Sets current keyboard state.
    * @param state array of 256 virtual key states.
    * @throws SystemException on error.
    */
-  static void setState(BYTE state[256]) throw(SystemException);
+  static void setState(BYTE state[256]);
 
   /**
    * Check if specified key is in pressed state.

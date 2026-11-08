@@ -35,7 +35,7 @@ public:
   SharePrimaryCommand(ControlProxy *serverControl);
   virtual ~SharePrimaryCommand();
 
-  virtual void execute() throw(IOException, RemoteException);
+  virtual void execute();
 private:
   ControlProxy *m_proxy;
 };

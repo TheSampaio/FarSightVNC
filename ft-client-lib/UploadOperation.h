@@ -84,7 +84,7 @@ public:
   // Starts upload operation
   //
 
-  virtual void start() throw(IOException);
+  virtual void start();
 
   //
   // Inherited from FileTransferEventHandler class
@@ -92,12 +92,12 @@ public:
   // Event handlers to process file transfer messages
   //
 
-  virtual void onUploadReply(DataInputStream *input) throw(IOException);
-  virtual void onUploadDataReply(DataInputStream *input) throw(IOException);
-  virtual void onUploadEndReply(DataInputStream *input) throw(IOException);
-  virtual void onMkdirReply(DataInputStream *input) throw(IOException);
-  virtual void onLastRequestFailedReply(DataInputStream *input) throw(IOException);
-  virtual void onFileListReply(DataInputStream *input) throw(IOException);
+  virtual void onUploadReply(DataInputStream *input);
+  virtual void onUploadDataReply(DataInputStream *input);
+  virtual void onUploadEndReply(DataInputStream *input);
+  virtual void onMkdirReply(DataInputStream *input);
+  virtual void onLastRequestFailedReply(DataInputStream *input);
+  virtual void onFileListReply(DataInputStream *input);
 
 private:
 
@@ -113,13 +113,13 @@ protected:
   // Special ft message handler for "Last request failed" and "File list request".
   //
 
-  bool specialHandler() throw(IOException);
+  bool specialHandler();
 
   //
   // Start current file upload (current file is notated by m_toCopy value).
   //
 
-  void startUpload() throw(IOException);
+  void startUpload();
 
   //
   // Lists folder from local file system and set this list as child to current
@@ -127,13 +127,13 @@ protected:
   // file system.
   //
 
-  void processFolder() throw(IOException);  
+  void processFolder();  
 
   //
   // Tryies to start upload of current file (notated by m_toCopy member).
   //
 
-  void processFile() throw(IOException);
+  void processFile();
 
   //
   // Calls gotoNext method with true 'fake' argument
@@ -149,14 +149,14 @@ protected:
   // to child or parent, and sets 'Get file list trick' flags and sends file list request.
   //
 
-  void gotoNext(bool fake) throw(IOException);
+  void gotoNext(bool fake);
 
   //
   // Reads data chunk from current uploading file and
   // sends it to server.
   //
 
-  void sendFileDataChunk() throw(IOException);
+  void sendFileDataChunk();
 
   //
   // Helper methods to control m_remoteFilesInfo, m_remoteFilesCount

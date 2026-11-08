@@ -11,8 +11,8 @@ class DataCopy : public InputStream, public OutputStream
 public:
   DataCopy();
 
-  size_t read(void* buffer, size_t len) throw(IOException);
-  size_t write(const void* buffer, size_t len) throw(IOException);
+  size_t read(void* buffer, size_t len);
+  size_t write(const void* buffer, size_t len);
   size_t available();
 
 private:

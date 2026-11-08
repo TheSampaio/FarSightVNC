@@ -45,7 +45,7 @@ public:
   // Checks result and throws exception if caller
   // must not execute file transfer code and return error
   // to client.
-  void throwIfAccessDenied() throw(Exception);
+  void throwIfAccessDenied();
   // Sets previous (before startMessageProcessing call) access rights
   // for calling process.
   void endMessageProcessing();

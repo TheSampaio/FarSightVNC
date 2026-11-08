@@ -68,7 +68,7 @@ public:
    * Creates security identifier from WinAPI SID struct.
    * @throws SystemException if copy failed.
    */
-  SecurityIdentifier(SID *sid) throw(SystemException);
+  SecurityIdentifier(SID *sid);
   /**
    * Creates security identifier by a string.
    * @throws SystemException if copy failed.
@@ -92,7 +92,7 @@ public:
    * @param sidString string storage where result will be stored.
    * @throws SystemException if error occurs.
    */
-  void toString(StringStorage *sidString) throw(SystemException);
+  void toString(StringStorage *sidString);
 
   /**
    * Returns SID of process owner.
@@ -101,14 +101,14 @@ public:
    * @throws SystemException if operation failed.
    * @fixme stub (returns invalid SID).
    */
-  static SecurityIdentifier *getProcessOwner(HANDLE processHandle) throw(SystemException);
+  static SecurityIdentifier *getProcessOwner(HANDLE processHandle);
 
   /**
    * Creates SID from sid string.
    * @return created SID.
    * @throws SystemException on fail.
    */
-  static SecurityIdentifier *createSidFromString(const TCHAR *sidString) throw(SystemException);
+  static SecurityIdentifier *createSidFromString(const TCHAR *sidString);
 
   /**
    * Returns pointer to WinAPI SID structure.

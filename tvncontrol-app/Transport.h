@@ -62,7 +62,7 @@ public:
    * Closes transport.
    * @throws Exception on fail.
    */
-  virtual void close() throw(Exception) = 0;
+  virtual void close() = 0;
 };
 
 #endif

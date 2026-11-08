@@ -39,17 +39,17 @@ public:
 
   void setOutput(RfbOutputGate *outputStream);
 
-  void sendCompressionSupportRequest() throw(IOException);
-  void sendFileListRequest(const TCHAR *fullPath, bool useCompression) throw(IOException);
-  void sendDownloadRequest(const TCHAR *fullPathName, UINT64 offset) throw(IOException);
-  void sendDownloadDataRequest(UINT32 size, bool useCompression) throw(IOException);
-  void sendRmFileRequest(const TCHAR *fullPathName) throw(IOException);
-  void sendMkDirRequest(const TCHAR *fullPathName) throw(IOException);
-  void sendMvFileRequest(const TCHAR *oldFileName, const TCHAR *newFileName) throw(IOException);
-  void sendUploadRequest(const TCHAR *fullPathName, bool overwrite, UINT64 offset) throw(IOException);
-  void sendUploadDataRequest(const char *buffer, UINT32 size, bool useCompression) throw(IOException);
-  void sendUploadEndRequest(UINT8 fileFlags, UINT64 modificationTime) throw(IOException);
-  void sendFolderSizeRequest(const TCHAR *fullPath) throw(IOException);
+  void sendCompressionSupportRequest();
+  void sendFileListRequest(const TCHAR *fullPath, bool useCompression);
+  void sendDownloadRequest(const TCHAR *fullPathName, UINT64 offset);
+  void sendDownloadDataRequest(UINT32 size, bool useCompression);
+  void sendRmFileRequest(const TCHAR *fullPathName);
+  void sendMkDirRequest(const TCHAR *fullPathName);
+  void sendMvFileRequest(const TCHAR *oldFileName, const TCHAR *newFileName);
+  void sendUploadRequest(const TCHAR *fullPathName, bool overwrite, UINT64 offset);
+  void sendUploadDataRequest(const char *buffer, UINT32 size, bool useCompression);
+  void sendUploadEndRequest(UINT8 fileFlags, UINT64 modificationTime);
+  void sendFolderSizeRequest(const TCHAR *fullPath);
 
 protected:
   LogWriter *m_logWriter;

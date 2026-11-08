@@ -73,7 +73,7 @@ public:
    * not for extended and auxilary keys like LEFT, RIGHT, INSERT etc.
    * @throws SystemException on fail.
    */
-  void injectCharEvent(WCHAR ch, bool release) throw(SystemException);
+  void injectCharEvent(WCHAR ch, bool release);
 
 private:
   // Return true if CapsLock toggled on.

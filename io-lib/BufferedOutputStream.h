@@ -50,14 +50,14 @@ public:
    * @throw IOException on error.
    * @fixme really it can throw any kind of exception.
    */
-  virtual size_t write(const void *buffer, size_t len) throw(IOException);
+  virtual size_t write(const void *buffer, size_t len);
 
   /**
    * Writes content of inner buffer to real output stream.
    * @throws IOException on error.
    * @fixme really it can throw any kind of exception.
    */
-  void flush() throw(IOException);
+  void flush();
 
 protected:
   DataOutputStream *m_output;

@@ -98,13 +98,13 @@ private:
    * @param message description of error.
    * @throws IOException on io error.
    */
-  void sendError(const TCHAR *message) throw(IOException);
+  void sendError(const TCHAR *message);
 
   /**
    * Called when auth message recieved.
    * @throws IOException on io error.
    */
-  void authMsgRcdv() throw(IOException);
+  void authMsgRcdv();
 
   /**
    * Handlers of control proto messages.
@@ -114,58 +114,58 @@ private:
    * Called when get client list message recieved.
    * @throws IOException on io error.
    */
-  void getClientsListMsgRcvd() throw(IOException);
+  void getClientsListMsgRcvd();
   /**
    * Called when get server info message reciveved.
    * @throws IOException on io error.
    */
-  void getServerInfoMsgRcvd() throw(IOException);
+  void getServerInfoMsgRcvd();
   /**
    * Called when reload configuration message recieved.
    * @throws IOException on io error.
    * @deprecated.
    */
-  void reloadConfigMsgRcvd() throw(IOException);
+  void reloadConfigMsgRcvd();
   /**
    * Called when disconnect all clients message recieved.
    * @throws IOException on io error.
    */
-  void disconnectAllMsgRcvd() throw(IOException);
+  void disconnectAllMsgRcvd();
   /**
    * Called when shutdown message recieved.
    * @throws IOException on io error.
    */
-  void shutdownMsgRcvd() throw(IOException);
+  void shutdownMsgRcvd();
   /**
    * Called when add new client message recieved.
    * @throws IOException on io error.
    */
-  void addClientMsgRcvd() throw(IOException);
+  void addClientMsgRcvd();
   /**
    * Called when Connect to a tcp dispatcher message recieved.
    * @throws IOException on io error.
    */
-  void connectToTcpDispatcher() throw(IOException);
+  void connectToTcpDispatcher();
   /**
    * Called when set server config message recieved.
    * @throws IOException on io error.
    */
-  void setServerConfigMsgRcvd() throw(IOException);
+  void setServerConfigMsgRcvd();
   /**
    * Called when get server config message recieved.
    * @throws IOException on io error.
    */
-  void getServerConfigMsgRcvd() throw(IOException);
+  void getServerConfigMsgRcvd();
   /**
    * Called when "get show tray icon flag" message recieved.
    * @throws IOException on io error.
    */
-  void getShowTrayIconFlagMsgRcvd() throw(IOException);
+  void getShowTrayIconFlagMsgRcvd();
   /**
    * Called when "update tvncontrol process id" message recieved.
    * @throws IOException on io error.
    */
-  void updateTvnControlProcessIdMsgRcvd() throw(IOException);
+  void updateTvnControlProcessIdMsgRcvd();
   /**
    * Calling when "share primary id" message recieved.
    */

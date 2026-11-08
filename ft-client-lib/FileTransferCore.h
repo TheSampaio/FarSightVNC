@@ -113,7 +113,7 @@ protected:
   //
 
   virtual void ftOpStarted(FileTransferOperation *sender);
-  virtual void ftOpFinished(FileTransferOperation *sender) throw(IOException);
+  virtual void ftOpFinished(FileTransferOperation *sender);
   virtual void ftOpErrorMessage(FileTransferOperation *sender, const TCHAR *message);
   virtual void ftOpInfoMessage(FileTransferOperation *sender,
                                const TCHAR *message);
@@ -184,7 +184,7 @@ protected:
   // new operation current and executes it.
   //
 
-  void executeOperation(FileTransferOperation *newOperation) throw(IOException);
+  void executeOperation(FileTransferOperation *newOperation);
   //
   // Avaliable m_state values
   // FIXME: Maybe make m_state enumeration?

@@ -47,7 +47,7 @@ public:
   virtual size_t write(const void *buffer, size_t len);
 
   // Inherited from Channel.
-  virtual void close() throw(Exception);
+  virtual void close();
   size_t available();
 
 private:

@@ -228,7 +228,7 @@ void ZrleEncoder::writeRawTile(const Rect *tileRect,
   }
 }
 
-void ZrleEncoder::writeSolidTile() throw(IOException)
+void ZrleEncoder::writeSolidTile()
 {
   m_oldSize = m_rgbData.size();
   UINT32 colorPixel = m_pal.getEntry(0);

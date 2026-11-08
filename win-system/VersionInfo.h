@@ -39,7 +39,7 @@ public:
    * @param pathToFile path to executable file to get version info from.
    * @throws SystemException on fail.
    */
-  VersionInfo(const TCHAR *pathToFile) throw(SystemException);
+  VersionInfo(const TCHAR *pathToFile);
 
   /**
    * Returns product version info string.

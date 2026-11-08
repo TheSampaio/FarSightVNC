@@ -59,24 +59,24 @@ public:
    * @param port port to connect.
    * @throws SocketException on fail.
    */
-  void connect(const TCHAR *host, unsigned short port) throw(SocketException);
+  void connect(const TCHAR *host, unsigned short port);
   /**
    * Connects to remote host.
    * @param addr address to connect.
    * @throws SocketException on fail.
    */
-  void connect(const SocketAddressIPv4 &addr) throw(SocketException);
+  void connect(const SocketAddressIPv4 &addr);
   /**
    * Closes socket.
    * @throws SocketException on fail.
    */
-  void close() throw(SocketException);
+  void close();
   /**
    * Shutdowns socket.
    * @param how how to shutdown socket (SD_RECEIVE|SD_SEND|SD_BOTH).
    * @throws SocketException on fail.
    */
-  void shutdown(int how) throw(SocketException);
+  void shutdown(int how);
   /**
    * Binds socket to specified address.
    * @param bindHost host to bind.
@@ -88,7 +88,7 @@ public:
    * Binds socket to socket address.
    * @throws SocketException on fail.
    */
-  void bind(const SocketAddressIPv4 &addr) throw(SocketException);
+  void bind(const SocketAddressIPv4 &addr);
   /**
    * Checks if this socket is bound and used for server needs.
    * @return true if socket used as server and successfully bounded, false otherwise.
@@ -99,14 +99,14 @@ public:
    * @param backlog max count of connections in pool.
    * @throws SocketException on fail.
    */
-  void listen(int backlog) throw(SocketException);
+  void listen(int backlog);
 
   /**
    * Accepts incoming connection.
    * @throws SocketException on fail.
    * @return newly allocated socket that contain incoming connections.
    */
-  SocketIPv4 *accept() throw(SocketException);
+  SocketIPv4 *accept();
 
   /**
    * Sends data to socket.
@@ -117,7 +117,7 @@ public:
    * @return count to sent bytes.
    * @throw IOException on error.
    */
-  int send(const char *data, int size, int flags = 0) throw(IOException);
+  int send(const char *data, int size, int flags = 0);
   /**
    * Receives data from socket.
    *
@@ -127,7 +127,7 @@ public:
    * @return count of read bytes.
    * @throws IOException on fail.
    */
-  int recv(char *buffer, int size, int flags = 0) throw(IOException);
+  int recv(char *buffer, int size, int flags = 0);
 
   int available();
 
@@ -145,12 +145,12 @@ public:
   bool getPeerAddr(SocketAddressIPv4 *addr);
 
   /* Auxiliary */
-  void setSocketOptions(int level, int name, void *value, socklen_t len) throw(SocketException);
-  void getSocketOptions(int level, int name, void *value, socklen_t *len) throw(SocketException);
+  void setSocketOptions(int level, int name, void *value, socklen_t len);
+  void getSocketOptions(int level, int name, void *value, socklen_t *len);
 
   /* Socket options */
-  void enableNaggleAlgorithm(bool enabled) throw(SocketException);
-  void setExclusiveAddrUse() throw(SocketException);
+  void enableNaggleAlgorithm(bool enabled);
+  void setExclusiveAddrUse();
 
 private:
   WsaStartup m_wsaStartup;

@@ -71,13 +71,13 @@ public:
    * Starts execution of process.
    * @throws SystemException on error.
    */
-  virtual void start() throw(SystemException);
+  virtual void start();
 
   /**
    * Terminates running process.
    * @throws SystemException on fail.
    */
-  virtual void kill() throw(SystemException);
+  virtual void kill();
 
   /**
    * Blocks the current thread of execution until the process has exited.
@@ -93,7 +93,7 @@ public:
    * Returns exit code of terminated process.
    * @throws SystemException on fail.
    */
-  DWORD getExitCode() throw(SystemException);
+  DWORD getExitCode();
 
   /**
    * Returns the process handle if process already run and zero otherwise.

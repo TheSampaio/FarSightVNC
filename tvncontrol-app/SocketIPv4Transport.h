@@ -54,12 +54,12 @@ public:
    * @return transport for accepted connection.
    * @throws SocketException on fail.
    */
-  virtual Transport *accept() throw(SocketException);
+  virtual Transport *accept();
 
   /**
    * Destroys transport(closes socket).
    */
-  virtual void close() throw(SocketException);
+  virtual void close();
 
 private:
   /**

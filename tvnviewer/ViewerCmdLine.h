@@ -42,7 +42,7 @@ public:
                 bool *isListening);
 
   // this function parse the command line
-  void parse() throw(CommandLineFormatException, CommandLineFormatHelp);
+  void parse();
 
   // this function creates the modal dialog with text how to use it
   void onHelp();

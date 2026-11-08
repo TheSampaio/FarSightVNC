@@ -51,7 +51,7 @@ public:
    */
   ControlServer(PipeServer *pipeServer,
                 RfbClientManager *rfbClientManager,
-                LogWriter *log) throw(Exception);
+                LogWriter *log);
   /**
    * Stops and deletes control server and deletes transport.
    */

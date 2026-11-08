@@ -62,7 +62,7 @@ public:
    * @param len count of bytes to read.
    * @throws IOException on io error.
    */
-  virtual size_t read(void *buffer, size_t len) throw(IOException);
+  virtual size_t read(void *buffer, size_t len);
 
   /**
    * Writes data to pipe.
@@ -71,7 +71,7 @@ public:
    * @param len count of bytes to write.
    * @throws IOException on io error.
    */
-  virtual size_t write(const void *buffer, size_t len) throw(IOException);
+  virtual size_t write(const void *buffer, size_t len);
 
   virtual size_t available() { return 0; };
 

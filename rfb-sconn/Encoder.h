@@ -94,7 +94,7 @@ public:
   // m_pixelConverter->convert().
   virtual void sendRectangle(const Rect *rect,
                              const FrameBuffer *serverFb,
-                             const EncodeOptions *options) throw(IOException);
+                             const EncodeOptions *options);
 
 protected:
 

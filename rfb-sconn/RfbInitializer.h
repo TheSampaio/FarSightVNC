@@ -82,7 +82,7 @@ protected:
   // that the format is valid and that the major version number is 3. Returns
   // minor version number without checking its value. If the format is invalid
   // or major version number is not 3, an Exception will be thrown.
-  unsigned int getProtocolMinorVersion(const char str[12]) throw(Exception);
+  unsigned int getProtocolMinorVersion(const char str[12]);
 
   DataOutputStream *m_output;
   DataInputStream *m_input;

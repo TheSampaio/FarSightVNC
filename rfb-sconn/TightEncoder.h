@@ -51,7 +51,7 @@ public:
 
   virtual void sendRectangle(const Rect *rect,
                              const FrameBuffer *serverFb,
-                             const EncodeOptions *options) throw(IOException);
+                             const EncodeOptions *options);
 
 protected:
   // An implementation of sendRectangle() for the given pixel size.
@@ -59,33 +59,33 @@ protected:
     void sendAnyRect(const Rect *rect,
                      const FrameBuffer *serverFb,
                      const FrameBuffer *clientFb,
-                     const EncodeOptions *options) throw(IOException);
+                     const EncodeOptions *options);
 
   // Send a solid-color rectangle.
-  void sendSolidRect(const Rect *r, const FrameBuffer *fb) throw(IOException);
+  void sendSolidRect(const Rect *r, const FrameBuffer *fb);
 
   // Send a two-color rectangle (1 bit per pixel).
   template <class PIXEL_T>
     void sendMonoRect(const Rect *rect,
                       const FrameBuffer *fb,
-                      const EncodeOptions *options) throw(IOException);
+                      const EncodeOptions *options);
 
   // Send an indexed-color rectangle (1 byte per pixel).
   template <class PIXEL_T>
     void sendIndexedRect(const Rect *rect,
                          const FrameBuffer *fb,
-                         const EncodeOptions *options) throw(IOException);
+                         const EncodeOptions *options);
 
   // Send a true color rectangle.
   template <class PIXEL_T>
     void sendFullColorRect(const Rect *rect,
                            const FrameBuffer *fb,
-                           const EncodeOptions *options) throw(IOException);
+                           const EncodeOptions *options);
 
   // Send a rectangle encoded with JPEG.
   void sendJpegRect(const Rect *rect,
                     const FrameBuffer *serverFb,
-                    const EncodeOptions *options) throw(IOException);
+                    const EncodeOptions *options);
 
   // Return true if 32-bit pixels should be packed into 24-bit representation,
   // false otherwise. This function should be given the client's pixel format.
@@ -113,22 +113,22 @@ protected:
   // FIXME: Do not use DataOutputStream, do not throw IOException.
   template <class PIXEL_T>
     void encodeMonoRect(const Rect *rect, const FrameBuffer *fb,
-                        DataOutputStream *out) throw(IOException);
+                        DataOutputStream *out);
 
   // Encode a rectangle using m_pal as a palette, produce a pixmap where one
   // pixel is represented by one byte which is its index in the palette.
   // FIXME: Do not use DataOutputStream, do not throw IOException.
   template <class PIXEL_T>
     void encodeIndexedRect(const Rect *rect, const FrameBuffer *fb,
-                           DataOutputStream *out) throw(IOException);
+                           DataOutputStream *out);
 
   // FIXME: Throw ZlibException instead.
   void sendCompressed(const char *data, size_t dataLen,
-                      int streamId, int zlibLevel) throw(IOException);
+                      int streamId, int zlibLevel);
 
   // Send the number of the compressed bytes following. The number (dataLen)
   // is represented by a variable-length code (1..3 bytes).
-  void sendCompactLength(size_t dataLen) throw(IOException);
+  void sendCompactLength(size_t dataLen);
 
   // Configuration table of the Tight encoder. Do not access this table
   // directly, use getConf() method instead.

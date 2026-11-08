@@ -65,7 +65,7 @@ public:
    * @remark to detect WinXP bug it uses loop, so before XP trick will be tried,
    * it will try to start process for some times.
    */
-  virtual void start() throw(SystemException);
+  virtual void start();
 
 private:
   LogWriter *m_log;

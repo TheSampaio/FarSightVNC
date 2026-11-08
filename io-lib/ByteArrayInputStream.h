@@ -48,7 +48,7 @@ public:
    * @param len count of bytes to write.
    * @throws IOException when no data left in memory buffer.
    */
-  virtual size_t read(void *buffer, size_t len) throw(IOException);
+  virtual size_t read(void *buffer, size_t len);
 
   virtual size_t available();
 

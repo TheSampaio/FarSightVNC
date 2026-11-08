@@ -52,8 +52,7 @@ public:
             RfbClientManager *clientManager,
             bool lockAddr,
             LogWriter *log,
-            const Rect *viewPort = 0)
-            throw(Exception);
+            const Rect *viewPort = 0);
   /**
    * Stops listening thread and deletes rfb server.
    */
