@@ -208,8 +208,10 @@ void UpdateHandlerClient::sendInit(BlockingGate *gate)
   AutoLock al(gate);
   gate->writeUInt8(FRAME_BUFFER_INIT);
 
-  sendPixelFormat(&m_backupFrameBuffer.getPixelFormat(), gate);
+  const PixelFormat pixelFormat = m_backupFrameBuffer.getPixelFormat();
+  sendPixelFormat(&pixelFormat, gate);
   Dimension dim = m_backupFrameBuffer.getDimension();
   sendDimension(&dim, gate);
-  sendFrameBuffer(&m_backupFrameBuffer, &dim.getRect(), gate);
+  const Rect dimRect = dim.getRect();
+  sendFrameBuffer(&m_backupFrameBuffer, &dimRect, gate);
 }

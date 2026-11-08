@@ -171,7 +171,8 @@ bool WindowsScreenGrabber::getScreenSizeChanged()
 bool WindowsScreenGrabber::applyNewPixelFormat()
 {
   m_screen.update();
-  m_workFrameBuffer.setEmptyPixelFmt(&m_screen.getPixelFormat());
+  const PixelFormat screenPixelFormat = m_screen.getPixelFormat();
+  m_workFrameBuffer.setEmptyPixelFmt(&screenPixelFormat);
 
   return true;
 }

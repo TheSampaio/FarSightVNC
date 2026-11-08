@@ -66,7 +66,8 @@ void Win32ScreenDriver::terminateDetection()
 Dimension Win32ScreenDriver::getScreenDimension()
 {
   AutoLock al(getFbMutex());
-  return Dimension(&m_screenGrabber.getScreenRect());
+  const Rect screenRect = m_screenGrabber.getScreenRect();
+  return Dimension(&screenRect);
 }
 
 bool Win32ScreenDriver::grabFb(const Rect *rect)

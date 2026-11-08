@@ -148,7 +148,8 @@ void processMessage(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
       HWND ctlHwnd = dts->hwndItem;
       if (wParam == 0) { // it is a menu control
       } else {
-        sendRect(&getWindowRect(ctlHwnd));
+        Rect ctlRect = getWindowRect(ctlHwnd);
+        sendRect(&ctlRect);
       }
     }
     break;
@@ -174,8 +175,10 @@ void sendClientRect(HWND hwnd)
 
 void sendNClientRegion(HWND hwnd)
 {
-  Region ncRegion(&getWindowRect(hwnd));
-  Region cRegion(&getClientRect(hwnd));
+  Rect windowRect = getWindowRect(hwnd);
+  Rect clientRect = getClientRect(hwnd);
+  Region ncRegion(&windowRect);
+  Region cRegion(&clientRect);
 
   ncRegion.subtract(&cRegion);
 

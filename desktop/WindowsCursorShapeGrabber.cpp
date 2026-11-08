@@ -95,7 +95,8 @@ bool WindowsCursorShapeGrabber::grabPixels(const PixelFormat *pixelFormat)
 
   const FrameBuffer *pixels= m_cursorShape.getPixels();
 
-  m_cursorShape.setProperties(&Dimension(width, height), pixelFormat);
+  const Dimension cursorDimension(width, height);
+  m_cursorShape.setProperties(&cursorDimension, pixelFormat);
 
   std::vector<char> maskBuff(widthBytes * bmMask.bmHeight);
   if (maskBuff.empty()) {
@@ -192,7 +193,7 @@ HCURSOR WindowsCursorShapeGrabber::getHCursor()
   cursorInfo.cbSize = sizeof(CURSORINFO);
 
   if (GetCursorInfo(&cursorInfo) == 0) {
-    return false;
+    return NULL;
   }
 
   return cursorInfo.hCursor;
