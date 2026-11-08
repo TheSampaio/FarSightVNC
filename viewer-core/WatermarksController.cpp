@@ -61,7 +61,8 @@ void WatermarksController::setNewPixelFormat(const PixelFormat *pf)
 
 		m_overlay.setPixelFormat(pf);
 
-		if (pf->isEqualTo(&fb.getPixelFormat()))
+		const PixelFormat fbPixelFormat = fb.getPixelFormat();
+		if (pf->isEqualTo(&fbPixelFormat))
 			return;
 
 		temp.clone(&fb);
@@ -71,7 +72,9 @@ void WatermarksController::setNewPixelFormat(const PixelFormat *pf)
 		PixelConverter pc = PixelConverter();
 		Rect rect = fb.getDimension().getRect();
 
-		pc.setPixelFormats(&fb.getPixelFormat(), &temp.getPixelFormat());
+		const PixelFormat newPixelFormat = fb.getPixelFormat();
+		const PixelFormat tempPixelFormat = temp.getPixelFormat();
+		pc.setPixelFormats(&newPixelFormat, &tempPixelFormat);
 
 		pc.convert(&rect, &fb, &temp);
 	}
@@ -123,7 +126,8 @@ void WatermarksController::loadFromfile()
 	Dimension dim(m_width, m_height);
 	PixelFormat pf = StandardPixelFormatFactory::create32bppPixelFormat();
 	m_frameBuffer.setPropertiesWithoutResize(&dim, &pf);
-	m_overlay.setPropertiesWithoutResize(&m_overlay.getDimension(), &pf);
+	const Dimension overlayDimension = m_overlay.getDimension();
+	m_overlay.setPropertiesWithoutResize(&overlayDimension, &pf);
 
 	for (int i = 0; i < m_height; ++i)
 	{

@@ -106,7 +106,8 @@ void FbUpdateNotifier::execute()
         AutoLock al(m_fbLock);
         m_adapter->onFrameBufferPropChange(m_frameBuffer);
         // FIXME: it's bad code. Must work without one next line, but not it.
-        m_adapter->onFrameBufferUpdate(m_frameBuffer, &m_frameBuffer->getDimension().getRect());
+        const Rect fbRect = m_frameBuffer->getDimension().getRect();
+        m_adapter->onFrameBufferUpdate(m_frameBuffer, &fbRect);
       } catch (...) {
         m_logWriter->error(_T("FbUpdateNotifier (event): error in set new size"));
       }

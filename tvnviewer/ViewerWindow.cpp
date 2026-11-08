@@ -213,9 +213,11 @@ bool ViewerWindow::viewerCoreSettings()
   m_viewerCore->setJpegQualityLevel(m_conConf->getJpegCompressionLevel());
 
   if (m_conConf->isUsing8BitColor()) {
-    m_viewerCore->setPixelFormat(&StandardPixelFormatFactory::create8bppPixelFormat());
+    const PixelFormat pixelFormat = StandardPixelFormatFactory::create8bppPixelFormat();
+    m_viewerCore->setPixelFormat(&pixelFormat);
   } else {
-    m_viewerCore->setPixelFormat(&StandardPixelFormatFactory::create32bppPixelFormat());
+    const PixelFormat pixelFormat = StandardPixelFormatFactory::create32bppPixelFormat();
+    m_viewerCore->setPixelFormat(&pixelFormat);
   }
   return true;
 }
