@@ -53,7 +53,7 @@ public:
   void addListener(T listener) {
     AutoLock l(&m_listeners);
 
-    vector<T>::iterator it;
+    typename vector<T>::iterator it;
     for (it = m_listeners.begin(); it != m_listeners.end(); it++) {
       T current = *it;
       if (current == listener) {
@@ -76,7 +76,7 @@ public:
   void removeListener(T listener) {
     AutoLock l(&m_listeners);
 
-    vector<T>::iterator it;
+    typename vector<T>::iterator it;
     for (it = m_listeners.begin(); it != m_listeners.end(); it++) {
       T current = *it;
       if (current == listener) {
