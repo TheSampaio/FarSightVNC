@@ -53,7 +53,8 @@ void OutgoingRfbConnectionThread::execute()
     return ;
   }
 
+  ViewPortState defaultViewPort;
   m_clientManager->addNewConnection(socket,
-                                    &ViewPortState(), // with a default view port
+                                    &defaultViewPort, // with a default view port
                                     m_viewOnly, true);
 }

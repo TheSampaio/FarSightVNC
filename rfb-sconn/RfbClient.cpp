@@ -232,7 +232,8 @@ void RfbClient::execute()
     Dimension fbDim;
     m_desktop->getFrameBufferProperties(&fbDim, &pf);
     Rect viewPort = getViewPortRect(&fbDim);
-    m_updateSender->init(&Dimension(&viewPort), &pf);
+    const Dimension viewPortDim(&viewPort);
+    m_updateSender->init(&viewPortDim, &pf);
     m_log->debug(_T("UpdateSender has been initialized"));
     // ClientInputHandler initialization
     m_clientInputHandler = new ClientInputHandler(&codeRegtor, this,
@@ -262,8 +263,9 @@ void RfbClient::execute()
                                                  viewPort.getWidth(),
                                                  viewPort.getHeight());
     m_log->info(_T("Entering RFB initialization phase 2"));
+    const Dimension viewPortDimension(&viewPort);
     rfbInitializer.afterAuthPhase(&srvToClCaps, &clToSrvCaps,
-                                  &encCaps, &Dimension(&viewPort), &pf);
+                                  &encCaps, &viewPortDimension, &pf);
     m_log->debug(_T("RFB initialization phase 2 completed"));
 
     // Start normal phase
@@ -365,8 +367,8 @@ Rect RfbClient::getViewPortRect(const Dimension *fbDimension)
   m_constViewPort.update(fbDimension);
   m_dynamicViewPort.update(fbDimension);
 
-  return m_constViewPort.getViewPortRect().intersection(
-    &m_dynamicViewPort.getViewPortRect());
+  const Rect dynamicViewPortRect = m_dynamicViewPort.getViewPortRect();
+  return m_constViewPort.getViewPortRect().intersection(&dynamicViewPortRect);
 }
 
 void RfbClient::getViewPortInfo(const Dimension *fbDimension, Rect *resultRect,

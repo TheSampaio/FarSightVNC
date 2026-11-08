@@ -62,15 +62,19 @@ ServerConfig::~ServerConfig()
 ServerConfig::ServerConfig(ServerConfig& other)
 {
   DataCopy dc;
-  other.serialize(&DataOutputStream(&dc));
-  this->deserialize(&DataInputStream(&dc));
+  DataOutputStream dataOutput(&dc);
+  other.serialize(&dataOutput);
+  DataInputStream dataInput(&dc);
+  this->deserialize(&dataInput);
 }
 
 ServerConfig& ServerConfig::operator=(ServerConfig& other) {
   if (this != &other) {
     DataCopy dc;
-    other.serialize(&DataOutputStream(&dc));
-    this->deserialize(&DataInputStream(&dc));
+    DataOutputStream dataOutput(&dc);
+    other.serialize(&dataOutput);
+    DataInputStream dataInput(&dc);
+    this->deserialize(&dataInput);
   }
   return *this;
 }

@@ -97,7 +97,8 @@ void writePasswordToRegistry(MSIHANDLE hInstall,
     }
 
   } catch (Exception &e) {
-    AnsiStringStorage ansiStr(&StringStorage(e.getMessage()));
+    StringStorage message(e.getMessage());
+    AnsiStringStorage ansiStr(&message);
     //WcaLog(LOGMSG_STANDARD, ansiStr.getString());
   }
 }

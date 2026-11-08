@@ -65,7 +65,10 @@ void ViewPort::update(const Dimension *fbDimension)
     m_desktop->getApplicationRegion(m_state.m_processId, &m_appRegion);
     // Also, the view port rectangle will be FULL_DESKTOP.
   case ViewPortState::FULL_DESKTOP:
-    rect.setRect(&fbDimension->getRect());
+    {
+      const Rect fbRect = fbDimension->getRect();
+      rect.setRect(&fbRect);
+    }
     break;
   case ViewPortState::PRIMARY_DISPLAY:
     _ASSERT(m_desktop != 0);
@@ -100,7 +103,8 @@ void ViewPort::update(const Dimension *fbDimension)
   m_log->debug(_T("View port coordinates: (%d, %d %dx%d)"),
     rect.left, rect.top, rect.getWidth(), rect.getHeight());
   // Constrain and save
-  m_rect = rect.intersection(&fbDimension->getRect());
+  const Rect fbDimensionRect = fbDimension->getRect();
+  m_rect = rect.intersection(&fbDimensionRect);
   if (m_rect.getWidth() < 0 || m_rect.getHeight() < 0) {
     m_rect.clear();
   }

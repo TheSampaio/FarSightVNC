@@ -143,21 +143,23 @@ void CursorUpdates::drawCursor(UpdateContainer *updCont, FrameBuffer *fb)
 {
   AutoLock al(&m_curPosLocMut);
   // Add previous background rectangle to the changed region.
-  Rect rect(&m_shapeBackground.getDimension().getRect());
+  Rect rect(m_shapeBackground.getDimension().getRect());
   rect.setLocation(m_backgroundPos.x, m_backgroundPos.y);
   updCont->changedRegion.addRect(&rect);
   // Keep the current background rectangle.
   Point hotSpot = m_cursorShape.getHotSpot();
   m_backgroundPos.setPoint(m_cursorPos.x - hotSpot.x,
                            m_cursorPos.y - hotSpot.y);
-  m_shapeBackground.setProperties(&m_cursorShape.getDimension(),
-                                  &m_cursorShape.getPixelFormat());
+  const Dimension cursorDimension = m_cursorShape.getDimension();
+  const PixelFormat cursorPixelFormat = m_cursorShape.getPixelFormat();
+  m_shapeBackground.setProperties(&cursorDimension, &cursorPixelFormat);
   // Keep background under cursor shape to can reconstruct full image.
   m_shapeBackground.copyFrom(fb,
                              m_backgroundPos.x,
                              m_backgroundPos.y);
   // Draw the cursor shape on the frame buffer
-  rect.setRect(&m_cursorShape.getDimension().getRect());
+  const Rect cursorRect = m_cursorShape.getDimension().getRect();
+  rect.setRect(&cursorRect);
   rect.setLocation(m_backgroundPos.x, m_backgroundPos.y);
 
   fb->overlay(&rect,
@@ -225,7 +227,7 @@ Point CursorUpdates::getCurPos()
 Rect CursorUpdates::getBackgroundRect()
 {
   AutoLock al(&m_curPosLocMut);
-  Rect rect(&m_shapeBackground.getDimension().getRect());
+  Rect rect(m_shapeBackground.getDimension().getRect());
   rect.setLocation(m_backgroundPos.x, m_backgroundPos.y);
   return rect;
 }
