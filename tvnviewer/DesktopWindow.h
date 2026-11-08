@@ -141,7 +141,7 @@ protected:
   bool m_isConnected;
 
   // keyboard support
-  std::auto_ptr<RfbKeySym> m_rfbKeySym;
+  std::unique_ptr<RfbKeySym> m_rfbKeySym;
 
   // This variable contained previously state of mouse-button and position of cursor.
   unsigned char m_previousMouseState;

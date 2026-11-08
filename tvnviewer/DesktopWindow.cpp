@@ -50,7 +50,7 @@ DesktopWindow::DesktopWindow(LogWriter *logWriter, ConnectionConfig *conConf)
   m_pointerListener(0),
   m_isConnected(false)
 {
-  m_rfbKeySym = std::auto_ptr<RfbKeySym>(new RfbKeySym(this, m_logWriter));
+  m_rfbKeySym = std::unique_ptr<RfbKeySym>(new RfbKeySym(this, m_logWriter));
   if (RenderSettings::isGpuAllowed()) {
     m_gpu.reset(new GpuPresenter(m_logWriter));
     m_gpu->warmUp();
@@ -415,10 +415,14 @@ void DesktopWindow::doDraw(DeviceContext *dc)
   int iHeight = m_clientArea.getHeight() - dst.getHeight();
 
   if (iWidth || iHeight) {
-    drawBackground(dc, &m_clientArea.toWindowsRect(), &dst.toWindowsRect());
+    const RECT clientAreaRect = m_clientArea.toWindowsRect();
+    const RECT dstRect = dst.toWindowsRect();
+    drawBackground(dc, &clientAreaRect, &dstRect);
   }
 
-  drawImage(&src.toWindowsRect(), &dst.toWindowsRect());
+  const RECT srcRect = src.toWindowsRect();
+  const RECT dstRect = dst.toWindowsRect();
+  drawImage(&srcRect, &dstRect);
 }
 
 void DesktopWindow::applyScrollbarChanges(bool isChanged, bool isVert, bool isHorz, int wndWidth, int wndHeight)
@@ -436,7 +440,8 @@ void DesktopWindow::applyScrollbarChanges(bool isChanged, bool isVert, bool isHo
   }
 
   if (isChanged) {
-    m_scManager.setWindow(&Rect(0, 0, wndWidth, wndHeight));
+    Rect windowRect(0, 0, wndWidth, wndHeight);
+    m_scManager.setWindow(&windowRect);
     if (m_showVert) {
       m_sbar.setVertRange(0, m_scManager.getVertPoints(), wndHeight);
     }
@@ -608,8 +613,9 @@ void DesktopWindow::setNewFramebuffer(const FrameBuffer *framebuffer)
       dimension.width = alignWidth * 4;
       int alignHeight = (dimension.height + 3) / 4;
       dimension.height = alignHeight * 4;
+      const PixelFormat framebufferPixelFormat = framebuffer->getPixelFormat();
       m_framebuffer.setProperties(&dimension,
-                                  &framebuffer->getPixelFormat(),
+                                  &framebufferPixelFormat,
                                   getHWnd());
       m_framebuffer.setColor(0, 0, 0);
       m_scManager.setScreenResolution(m_serverDimension.width, m_serverDimension.height);
@@ -620,7 +626,8 @@ void DesktopWindow::setNewFramebuffer(const FrameBuffer *framebuffer)
     }
   }
   if (dimension.isEmpty()) {
-    repaint(&dimension.getRect());
+    const Rect dimensionRect = dimension.getRect();
+    repaint(&dimensionRect);
   } else {
     m_isBackgroundDirty = isBackgroundDirty;
   }
@@ -655,7 +662,8 @@ void DesktopWindow::repaint(const Rect *repaintRect)
     ++wnd.bottom;
   }
   wnd.intersection(&rect);
-  redraw(&wnd.toWindowsRect());
+  const RECT wndRect = wnd.toWindowsRect();
+  redraw(&wndRect);
 }
 
 void DesktopWindow::setScale(int scale)
