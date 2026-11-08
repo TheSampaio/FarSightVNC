@@ -8,4 +8,10 @@
     <OutDir>$(FsvBuildRoot)bin\$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(FsvBuildRoot)obj\$(Platform)\$(Configuration)\$(MSBuildProjectName)\</IntDir>
   </PropertyGroup>
+  <!-- C++20 for every project (viewer, server, libraries and tests). -->
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+    </ClCompile>
+  </ItemDefinitionGroup>
 </Project>
