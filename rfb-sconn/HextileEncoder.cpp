@@ -27,14 +27,6 @@
 
 #include <crtdbg.h>
 
-// FIXME: Get rid of globals.
-// FIXME: Use UPPER_CASE for constants.
-const int hextileRaw = 1;
-const int hextileBgSpecified = 2;
-const int hextileFgSpecified = 4;
-const int hextileAnySubrects = 8;
-const int hextileSubrectsColoured = 16;
-
 HextileEncoder::HextileEncoder(PixelConverter *conv, DataOutputStream *output)
 : Encoder(conv, output)
 {
@@ -89,7 +81,8 @@ void HextileEncoder::hextileFunction(const Rect &r,
 
       t.right = min(r.right, t.left + 16);
 
-      fb.setProperties(&t, &frameBuffer->getPixelFormat());
+      const PixelFormat framePixelFormat = frameBuffer->getPixelFormat();
+      fb.setProperties(&t, &framePixelFormat);
       fb.copyFrom(frameBuffer, t.left, t.top);
       buf = (PIXEL_T *)fb.getBuffer();
 

@@ -29,6 +29,14 @@
 #include "util/inttypes.h"
 #include <crtdbg.h>
 
+// FIXME: Get rid of globals.
+// FIXME: Use UPPER_CASE for constants.
+const int hextileRaw = 1;
+const int hextileBgSpecified = 2;
+const int hextileFgSpecified = 4;
+const int hextileAnySubrects = 8;
+const int hextileSubrectsColoured = 16;
+
 template<class PIXEL_T> class HextileTile
 {
 public:
