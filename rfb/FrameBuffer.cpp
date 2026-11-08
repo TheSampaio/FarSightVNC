@@ -42,8 +42,9 @@ FrameBuffer::~FrameBuffer(void)
 
 bool FrameBuffer::assignProperties(const FrameBuffer *srcFrameBuffer)
 {
-  setProperties(&srcFrameBuffer->getDimension(),
-                &srcFrameBuffer->getPixelFormat());
+  const Dimension srcDimension = srcFrameBuffer->getDimension();
+  const PixelFormat srcPixelFormat = srcFrameBuffer->getPixelFormat();
+  setProperties(&srcDimension, &srcPixelFormat);
   return resizeBuffer();
 }
 
@@ -53,7 +54,7 @@ bool FrameBuffer::clone(const FrameBuffer *srcFrameBuffer)
     return false;
   }
 
-  Rect fbRect = &m_dimension.getRect();
+  Rect fbRect = m_dimension.getRect();
   copyFrom(&fbRect, srcFrameBuffer, fbRect.left, fbRect.top);
 
   return true;
@@ -107,8 +108,10 @@ void FrameBuffer::fillRect(const Rect *dstRect, UINT32 color)
 
 bool FrameBuffer::isEqualTo(const FrameBuffer *frameBuffer)
 {
-  return m_dimension.cmpDim(&frameBuffer->getDimension()) &&
-         m_pixelFormat.isEqualTo(&frameBuffer->getPixelFormat());
+  const Dimension frameBufferDimension = frameBuffer->getDimension();
+  const PixelFormat frameBufferPixelFormat = frameBuffer->getPixelFormat();
+  return m_dimension.cmpDim(&frameBufferDimension) &&
+         m_pixelFormat.isEqualTo(&frameBufferPixelFormat);
 }
 
 void FrameBuffer::clipRect(const Rect *dstRect, const FrameBuffer *srcFrameBuffer,
@@ -139,7 +142,7 @@ void FrameBuffer::clipRect(const Rect *dstRect, const Rect *srcBufferRect,
   dstCommonArea.move(-dstRect->left, -dstRect->top);
   srcCommonArea.move(-srcRect.left, -srcRect.top);
 
-  Rect commonRect(&dstCommonArea.intersection(&srcCommonArea));
+  Rect commonRect(dstCommonArea.intersection(&srcCommonArea));
 
   // Moving commonRect to destination coordinates and source
   dstClippedRect->setRect(&commonRect);
@@ -154,7 +157,8 @@ bool FrameBuffer::overlay(const Rect *dstRect,
                           int srcX, int srcY,
                           const char *andMask)
 {
-  if (!m_pixelFormat.isEqualTo(&srcFrameBuffer->getPixelFormat())) {
+  const PixelFormat srcPixelFormat = srcFrameBuffer->getPixelFormat();
+  if (!m_pixelFormat.isEqualTo(&srcPixelFormat)) {
     return false;
   }
   if (m_pixelFormat.bitsPerPixel == 32) {
@@ -203,7 +207,8 @@ template<class PIXEL_T> bool FrameBuffer::overlayT(const Rect *dstRect,
 bool FrameBuffer::copyFrom(const Rect *dstRect, const FrameBuffer *srcFrameBuffer,
                            int srcX, int srcY)
 {
-  if (!m_pixelFormat.isEqualTo(&srcFrameBuffer->getPixelFormat())) {
+  const PixelFormat srcPixelFormat = srcFrameBuffer->getPixelFormat();
+  if (!m_pixelFormat.isEqualTo(&srcPixelFormat)) {
     return false;
   }
 
@@ -240,13 +245,15 @@ bool FrameBuffer::copyFrom(const Rect *dstRect, const FrameBuffer *srcFrameBuffe
 bool FrameBuffer::copyFrom(const FrameBuffer *srcFrameBuffer,
                            int srcX, int srcY)
 {
-  return copyFrom(&m_dimension.getRect(), srcFrameBuffer, srcX, srcY);
+  const Rect dimensionRect = m_dimension.getRect();
+  return copyFrom(&dimensionRect, srcFrameBuffer, srcX, srcY);
 }
 
 bool FrameBuffer::copyFromRotated90(const Rect *dstRect, const FrameBuffer *srcFrameBuffer,
                                     int srcX, int srcY)
 {
-  if (m_pixelFormat.bitsPerPixel != 32 || !m_pixelFormat.isEqualTo(&srcFrameBuffer->getPixelFormat())) {
+  const PixelFormat srcPixelFormat = srcFrameBuffer->getPixelFormat();
+  if (m_pixelFormat.bitsPerPixel != 32 || !m_pixelFormat.isEqualTo(&srcPixelFormat)) {
     return false;
   }
 
@@ -295,7 +302,8 @@ bool FrameBuffer::copyFromRotated90(const Rect *dstRect, const FrameBuffer *srcF
 bool FrameBuffer::copyFromRotated180(const Rect *dstRect, const FrameBuffer *srcFrameBuffer,
                                     int srcX, int srcY)
 {
-  if (m_pixelFormat.bitsPerPixel != 32 || !m_pixelFormat.isEqualTo(&srcFrameBuffer->getPixelFormat())) {
+  const PixelFormat srcPixelFormat = srcFrameBuffer->getPixelFormat();
+  if (m_pixelFormat.bitsPerPixel != 32 || !m_pixelFormat.isEqualTo(&srcPixelFormat)) {
     return false;
   }
 
@@ -346,7 +354,8 @@ bool FrameBuffer::copyFromRotated180(const Rect *dstRect, const FrameBuffer *src
 bool FrameBuffer::copyFromRotated270(const Rect *dstRect, const FrameBuffer *srcFrameBuffer,
                                     int srcX, int srcY)
 {
-  if (m_pixelFormat.bitsPerPixel != 32 || !m_pixelFormat.isEqualTo(&srcFrameBuffer->getPixelFormat())) {
+  const PixelFormat srcPixelFormat = srcFrameBuffer->getPixelFormat();
+  if (m_pixelFormat.bitsPerPixel != 32 || !m_pixelFormat.isEqualTo(&srcPixelFormat)) {
     return false;
   }
 
@@ -395,7 +404,8 @@ bool FrameBuffer::copyFromRotated270(const Rect *dstRect, const FrameBuffer *src
 bool FrameBuffer::cmpFrom(const Rect *dstRect, const FrameBuffer *srcFrameBuffer,
                           const int srcX, const int srcY)
 {
-  if (!m_pixelFormat.isEqualTo(&srcFrameBuffer->getPixelFormat())) {
+  const PixelFormat srcPixelFormat = srcFrameBuffer->getPixelFormat();
+  if (!m_pixelFormat.isEqualTo(&srcPixelFormat)) {
     return false;
   }
 
