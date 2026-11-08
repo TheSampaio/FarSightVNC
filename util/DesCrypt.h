@@ -66,8 +66,8 @@ private:
   static void scrunch(const unsigned char *outof, unsigned long *into);
   static void unscrun(const unsigned long *outof, unsigned char *into);
   static void desfunc(unsigned long *block, unsigned long *keys);
-  void cookey(register unsigned long *raw1);
-  void usekey(register unsigned long *from);
+  void cookey(unsigned long *raw1);
+  void usekey(unsigned long *from);
 
 
   unsigned long m_knL[32];
