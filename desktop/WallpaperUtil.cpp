@@ -104,7 +104,8 @@ void WallpaperUtil::disableWallpaper()
     path[0] = '\0';
   }
 
-  if (SystemParametersInfo(SPI_SETDESKWALLPAPER, 0, _T(""), 0) == 0) {
+  TCHAR noWallpaper[] = _T("");
+  if (SystemParametersInfo(SPI_SETDESKWALLPAPER, 0, noWallpaper, 0) == 0) {
     throw SystemException(_T("Cannot disable desktop wallpaper"));
   }
   m_wallparerPath = StringStorage(path);
