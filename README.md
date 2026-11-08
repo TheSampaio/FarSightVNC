@@ -135,6 +135,18 @@ The script locates MSBuild through `vswhere` and builds the `tvnviewer` target i
 
 Build logs are written to `build-logs/`.
 
+### Build with CMake (experimental)
+
+A CMake build of the Viewer, its libraries (including `vendor/zlib` and `vendor/libjpeg`) and the three viewer tests runs alongside MSBuild. **`tightvnc2017.sln` remains the official build**; the server projects are not covered. It needs CMake 4.2 or later (for the `Visual Studio 18 2026` generator; the `CMakeLists.txt` files themselves need 3.25) and C++20 (`/std:c++20`).
+
+```powershell
+cmake --preset x64-release          # also: x64-debug, win32-release, win32-debug
+cmake --build --preset x64-release --parallel
+ctest --preset x64-release          # viewer-keyboard-test, viewer-input-queue-test, viewer-favorites-test
+```
+
+Output goes to `build\cmake\<preset>\bin\<Configuration>\` (separate from `build\bin` and `build\obj`). Precompiled headers (`cmake/fsv_pch.h`: `util/winhdr.h` plus the STL headers in use) are on by default; pass `-DFSV_USE_PCH=OFF` at configure time to compare. Sources whose include order the header would change are excluded from it, listed in each `CMakeLists.txt`. Each PCH target keeps its own `.pch` (about 100 MB per library in Debug), so a Debug preset needs roughly 2 GB of disk.
+
 ## Testing
 
 The repository includes native regression projects and integration scripts. Choose the checks relevant to your change; GUI and GPU checks require an interactive Windows session.
