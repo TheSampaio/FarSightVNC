@@ -55,7 +55,7 @@
   the current one.
 
 .EXAMPLE
-  .\tools\phase2-test.ps1 -Viewer .\x64\Release\tvnviewer.exe
+  .\tools\phase2-test.ps1 -Viewer .\build\bin\x64\Release\tvnviewer.exe
   .\tools\phase2-test.ps1 -Viewer C:\path\tvnviewer.exe -Sizes 1920x1080 -Scales 100,auto
 #>
 param(

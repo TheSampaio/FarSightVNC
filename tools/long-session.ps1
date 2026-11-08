@@ -14,7 +14,7 @@
   server test configuration and the viewer history entry it created.
 
 .EXAMPLE
-  .\tools\long-session.ps1 -Viewer .\x64\Release\tvnviewer.exe -Server C:\...\tvnserver.exe -Hours 2
+  .\tools\long-session.ps1 -Viewer .\build\bin\x64\Release\tvnviewer.exe -Server C:\...\tvnserver.exe -Hours 2
 #>
 param(
   [Parameter(Mandatory = $true)][string]$Viewer,

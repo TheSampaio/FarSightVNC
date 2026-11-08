@@ -40,8 +40,8 @@ not use the machine while it runs. Nothing is injected into the desktop.
 
 Examples:
   python -I tools/zrle-cpixel-server.py --port 5985 --case shifted --phase after
-  python -I tools/zrle-cpixel-server.py --run-viewer x64\\Debug\\tvnviewer.exe
-  python -I tools/zrle-cpixel-server.py --run-viewer x64\\Debug\\tvnviewer.exe --use-8bit
+  python -I tools/zrle-cpixel-server.py --run-viewer build\\bin\\x64\\Debug\\tvnviewer.exe
+  python -I tools/zrle-cpixel-server.py --run-viewer build\\bin\\x64\\Debug\\tvnviewer.exe --use-8bit
 """
 import argparse
 import ctypes

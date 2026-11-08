@@ -29,13 +29,13 @@
     <?define ProductId = '*' ?>
     <?define Win64 = "yes" ?>
     <?define PlatformProgramFilesFolder = "ProgramFiles64Folder" ?>
-    <?define BinFolder = "$(var.SrcFolder)\x64\Release" ?>
+    <?define BinFolder = "$(var.SrcFolder)\build\bin\x64\Release" ?>
     <?define AddonBinFolder = "files64" ?>
   <?else ?>
     <?define ProductId = '*' ?>
     <?define Win64 = "no" ?>
     <?define PlatformProgramFilesFolder = "ProgramFilesFolder" ?>
-    <?define BinFolder = "$(var.SrcFolder)\Release" ?>
+    <?define BinFolder = "$(var.SrcFolder)\build\bin\Win32\Release" ?>
     <?define AddonBinFolder = "files32" ?>
   <?endif ?>
 </Include>

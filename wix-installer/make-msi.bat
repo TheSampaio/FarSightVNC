@@ -35,12 +35,12 @@ if %VAR1% == -d set VAR1=
 
 set OUTPUT_MSI_NAME=%1
 set TARGET_PLATFORM=x86
-set OUT_DIR=..\Release
+set OUT_DIR=..\build\bin\Win32\Release
 call :build_msi
 
 set OUTPUT_MSI_NAME=%2
 set TARGET_PLATFORM=x64
-set OUT_DIR=..\x64\Release
+set OUT_DIR=..\build\bin\x64\Release
 call :build_msi
 
 goto :exit

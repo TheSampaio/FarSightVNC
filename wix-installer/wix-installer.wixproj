@@ -12,25 +12,25 @@
     <Name>wix-installer</Name>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x86' ">
-    <OutputPath>$(SolutionDir)\$(Configuration)\</OutputPath>
-    <IntermediateOutputPath>$(SolutionDir)\$(Configuration)\wixobj\</IntermediateOutputPath>
+    <OutputPath>$(MSBuildThisFileDirectory)..\build\bin\Win32\$(Configuration)\</OutputPath>
+    <IntermediateOutputPath>$(MSBuildThisFileDirectory)..\build\obj\Win32\$(Configuration)\wix-installer\</IntermediateOutputPath>
     <DefineConstants>Debug;</DefineConstants>
     <SuppressPdbOutput>False</SuppressPdbOutput>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|x86' ">
-    <OutputPath>$(SolutionDir)\$(Configuration)\</OutputPath>
-    <IntermediateOutputPath>$(SolutionDir)\$(Configuration)\wixobj\</IntermediateOutputPath>
+    <OutputPath>$(MSBuildThisFileDirectory)..\build\bin\Win32\$(Configuration)\</OutputPath>
+    <IntermediateOutputPath>$(MSBuildThisFileDirectory)..\build\obj\Win32\$(Configuration)\wix-installer\</IntermediateOutputPath>
     <SuppressPdbOutput>True</SuppressPdbOutput>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x64' ">
     <DefineConstants>Debug;</DefineConstants>
     <SuppressPdbOutput>False</SuppressPdbOutput>
-    <OutputPath>$(SolutionDir)\$(Platform)\$(Configuration)\</OutputPath>
-    <IntermediateOutputPath>$(SolutionDir)\$(Platform)\$(Configuration)\wixobj\</IntermediateOutputPath>
+    <OutputPath>$(MSBuildThisFileDirectory)..\build\bin\$(Platform)\$(Configuration)\</OutputPath>
+    <IntermediateOutputPath>$(MSBuildThisFileDirectory)..\build\obj\$(Platform)\$(Configuration)\wix-installer\</IntermediateOutputPath>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|x64' ">
-    <OutputPath>$(SolutionDir)\$(Platform)\$(Configuration)\</OutputPath>
-    <IntermediateOutputPath>$(SolutionDir)\$(Platform)\$(Configuration)\wixobj\</IntermediateOutputPath>
+    <OutputPath>$(MSBuildThisFileDirectory)..\build\bin\$(Platform)\$(Configuration)\</OutputPath>
+    <IntermediateOutputPath>$(MSBuildThisFileDirectory)..\build\obj\$(Platform)\$(Configuration)\wix-installer\</IntermediateOutputPath>
     <SuppressPdbOutput>True</SuppressPdbOutput>
   </PropertyGroup>
   <Import Project="$(WixTargetsPath)" />

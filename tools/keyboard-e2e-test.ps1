@@ -18,10 +18,10 @@
   removed only when this run created it. All started processes are stopped.
 
 .EXAMPLE
-  .\tools\keyboard-e2e-test.ps1 -Viewer .\x64\Release\tvnviewer.exe
+  .\tools\keyboard-e2e-test.ps1 -Viewer .\build\bin\x64\Release\tvnviewer.exe
 #>
 param(
-  [string]$Viewer = (Join-Path $PSScriptRoot '..\x64\Release\tvnviewer.exe'),
+  [string]$Viewer = (Join-Path $PSScriptRoot '..\build\bin\x64\Release\tvnviewer.exe'),
   [int]$Port = 5921,
   [string]$Python = 'python',
   [int]$StepDelayMs = 60

@@ -18,10 +18,10 @@
         <File Id='tvnserverEXE' Name='tvnserver.exe' DiskId='1' Source='$(var.BinFolder)\tvnserver.exe' KeyPath='yes'>
         </File>
         <!-- screenhooks -->
-        <File Id='screenHooksFile' Name='screenhooks32.dll' DiskId='1' Source='$(var.SrcFolder)\Release\screenhooks32.dll'/>
+        <File Id='screenHooksFile' Name='screenhooks32.dll' DiskId='1' Source='$(var.SrcFolder)\build\bin\Win32\Release\screenhooks32.dll'/>
         <?if $(var.Platform) = x64 ?>
           <File Id='screenHooksFile64' Name='screenhooks64.dll' DiskId='1' Source='$(var.BinFolder)\screenhooks64.dll'/>
-          <File Id='screenHooksLoader' Name='hookldr.exe' DiskId='1' Source='$(var.SrcFolder)\Release\hookldr.exe'/>
+          <File Id='screenHooksLoader' Name='hookldr.exe' DiskId='1' Source='$(var.SrcFolder)\build\bin\Win32\Release\hookldr.exe'/>
         <?endif ?>
       </Component>
       <!--

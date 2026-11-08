@@ -13,7 +13,7 @@
   AllowLoopback=1) on a port other than the production one.
 
 .EXAMPLE
-  .\tools\smoke-test.ps1 -Viewer .\x64\Release\tvnviewer.exe -Port 5910 -Password <test password>
+  .\tools\smoke-test.ps1 -Viewer .\build\bin\x64\Release\tvnviewer.exe -Port 5910 -Password <test password>
 #>
 param(
   [Parameter(Mandatory = $true)][string]$Viewer,
