@@ -21,5 +21,8 @@
 /win-event-log/MessageProvider.h
 /win-event-log/MessageProvider.rc
 
+# Centralized build output (Directory.Build.props)
+/build/
+
 # Local build logs (tools/build.ps1)
 /build-logs/

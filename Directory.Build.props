@@ -6,6 +6,6 @@
   <PropertyGroup>
     <FsvBuildRoot>$(MSBuildThisFileDirectory)build\</FsvBuildRoot>
     <OutDir>$(FsvBuildRoot)bin\$(Platform)\$(Configuration)\</OutDir>
-    <IntDir>$(FsvBuildRoot)obj\$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
+    <IntDir>$(FsvBuildRoot)obj\$(Platform)\$(Configuration)\$(MSBuildProjectName)\</IntDir>
   </PropertyGroup>
 </Project>
