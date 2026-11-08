@@ -66,3 +66,5 @@ TightVNC 2.8.90 source tree.
 | 2026-11-08 | `wix-installer/components.wxs`, `product_definitions.wxi`, `make-msi.bat`, `wix-installer.wixproj` | Source and output paths follow `build\bin\<Platform>\<Config>` (Win32 instead of the old root `Release`); only paths changed, installer not built. |
 | 2026-11-08 | `.gitignore` | Ignores `/build/` (old entries kept). |
 | 2026-11-08 | `README.md` | Build output paths updated to `build\bin\<Platform>\<Configuration>\`. |
+
+| 2026-11-08 | `vendor/zlib/`, `vendor/libjpeg/` (moved from `zlib/`, `libjpeg/` with `git mv`), `tightvnc.sln`, `tightvnc2017.sln`, `tvnserver/tvnserver.vcxproj`, `tvnviewer/tvnviewer.{vcxproj,vcproj}`, `viewer-core/viewer-core.vcxproj`, `util/ZLibBase.h`, `rfb-sconn/{TightEncoder,JpegCompressor}.h`, `viewer-core/JpegDecompressor.h`, `README.md` | Third-party code moved under `vendor/`; project/solution paths and the four `#include` paths (`vendor/zlib/zlib.h`, `vendor/libjpeg/jpeglib.h`, resolved through the existing `..` include directory) updated. File contents of zlib/libjpeg unchanged; no behavior change. |

@@ -97,7 +97,7 @@ The diagram shows the main session paths; configuration, file transfer and platf
 | [`gui/`](gui/), [`win-system/`](win-system/) | Native UI helpers, DPI utilities, keyboard hooks and Windows integration. |
 | [`client-config-lib/`](client-config-lib/), [`config-lib/`](config-lib/) | Viewer options, favorites, connection history and configuration infrastructure. |
 | [`ft-client-lib/`](ft-client-lib/), [`ft-common/`](ft-common/) | Client-side file transfer and shared transfer protocol code. |
-| [`zlib/`](zlib/), [`libjpeg/`](libjpeg/) | Bundled compression and JPEG dependencies. |
+| [`vendor/zlib/`](vendor/zlib/), [`vendor/libjpeg/`](vendor/libjpeg/) | Bundled compression and JPEG dependencies. |
 | `tvnserver/`, `tvnserver-app/`, `rfb-sconn/` | Retained upstream server implementation. |
 | [`tools/`](tools/), [`docs/`](docs/) | Build scripts, test servers, regression tools, measurements and engineering reports. |
 
@@ -174,7 +174,7 @@ This project is derived from **[TightVNC](https://www.tightvnc.com/) 2.8.90**, C
 
 Bundled third-party components retain their own license terms:
 
-- **zlib** — see [`zlib/LICENSE`](zlib/LICENSE).
-- **Independent JPEG Group's JPEG library** — see the **LEGAL ISSUES** section of [`libjpeg/README`](libjpeg/README).
+- **zlib** — see [`vendor/zlib/LICENSE`](vendor/zlib/LICENSE).
+- **Independent JPEG Group's JPEG library** — see the **LEGAL ISSUES** section of [`vendor/libjpeg/README`](vendor/libjpeg/README).
 
 The software is provided **without warranty**, as described in the license. Thanks to the TightVNC authors and the open-source projects that make this fork possible.

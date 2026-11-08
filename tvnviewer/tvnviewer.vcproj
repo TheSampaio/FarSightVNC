@@ -631,7 +631,7 @@
 		/>
 		<ProjectReference
 			ReferencedProjectIdentifier="{4793826B-B077-4D75-A36C-66C9724C08F4}"
-			RelativePathToProject=".\libjpeg\libjpeg.vcproj"
+			RelativePathToProject=".\vendor\libjpeg\libjpeg.vcproj"
 		/>
 	</References>
 	<Files>

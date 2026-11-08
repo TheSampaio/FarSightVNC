@@ -41,7 +41,7 @@
 #ifdef LIBJPEG_TURBO
 #include "libjpeg-turbo/jpeglib.h"
 #else
-#include "libjpeg/jpeglib.h"
+#include "vendor/libjpeg/jpeglib.h"
 #endif
 
 class JpegDecompressor
