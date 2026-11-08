@@ -40,6 +40,14 @@
   sync). Windows refuses a window title of about 64K characters, so for the
   longest names the title is empty (title=0) even though the name was kept.
 
+  With -DumpOnHang <folder> a full-memory minidump (MiniDumpWriteDump, MiniDumpWithFullMemory)
+  of the viewer process is written to <folder> at the moment a HANG is
+  detected, before the process is stopped. The script then keeps probing the
+  window for up to 10 s and appends "dump=<file>; recovered after <n> s" or
+  "dump=<file>; still hung after 10 s" to the HANG detail, which tells a
+  permanent hang from slowness. Dumps are large (tens of MB each): keep them
+  out of the repository.
+
   Build the viewer first (Debug x64 adds /RTC1 and the debug CRT heap):
     & .\tools\build.ps1 -Configurations Debug -Platforms x64 -Project tvnviewer
 
@@ -48,6 +56,7 @@
   .\tools\fuzz-test.ps1 -Encodings zrle -Seeds 17 -Parallel 1
   .\tools\fuzz-test.ps1 -Seeds (1..100) -Use8Bit
   .\tools\fuzz-test.ps1 -Regression
+  .\tools\fuzz-test.ps1 -Encodings desktopsize -Seeds 25 -Parallel 1 -DumpOnHang $env:TEMP\fsvnc-dumps
   .\tools\fuzz-test.ps1 -Handshake -Parallel 1 -TimeoutSeconds 6
 #>
 param(
@@ -66,7 +75,8 @@ param(
   [ValidateRange(5960, 5999)]
   [int]$HandshakeBasePort = 5960,
   [switch]$Use8Bit,
-  [string]$CsvPath = ''
+  [string]$CsvPath = '',
+  [string]$DumpOnHang = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -111,6 +121,26 @@ public static class FuzzWin {
   [DllImport("user32.dll")] static extern bool PostMessage(IntPtr hwnd, uint msg, IntPtr w, IntPtr l);
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowTextLength(IntPtr hwnd);
   [DllImport("kernel32.dll")] public static extern uint SetErrorMode(uint mode);
+  [DllImport("kernel32.dll", SetLastError = true)] static extern IntPtr OpenProcess(uint access, bool inherit, uint pid);
+  [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);
+  [DllImport("dbghelp.dll", SetLastError = true)] static extern bool MiniDumpWriteDump(
+    IntPtr process, uint pid, Microsoft.Win32.SafeHandles.SafeFileHandle file, uint type, IntPtr exception, IntPtr user, IntPtr callback);
+
+  // Full-memory minidump of the process (data segments, handles, thread info, unloaded modules).
+  // Returns an empty string on success, otherwise the failure reason.
+  public static string WriteDump(int pid, string path) {
+    IntPtr process = OpenProcess(0x0400 | 0x0010 /* QUERY_INFORMATION | VM_READ */, false, (uint)pid);
+    if (process == IntPtr.Zero) return "OpenProcess error " + Marshal.GetLastWin32Error();
+    try {
+      using (var file = new System.IO.FileStream(path, System.IO.FileMode.Create, System.IO.FileAccess.Write)) {
+        // MiniDumpWithFullMemory | WithHandleData | WithUnloadedModules | WithFullMemoryInfo | WithThreadInfo
+        const uint type = 0x2 | 0x4 | 0x20 | 0x800 | 0x1000;
+        if (!MiniDumpWriteDump(process, (uint)pid, file.SafeFileHandle, type, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero))
+          return "MiniDumpWriteDump error " + Marshal.GetLastWin32Error();
+      }
+      return "";
+    } finally { CloseHandle(process); }
+  }
 
   static List<IntPtr> TopWindows(uint pid) {
     var list = new List<IntPtr>();
@@ -278,6 +308,27 @@ function Complete-Case($state, [string]$result, [string]$detail) {
   $state.Phase = 'done'
 }
 
+# HANG: with -DumpOnHang, dump the live viewer first (Stop-Case kills it later) and probe
+# whether the window ever answers again.
+function Complete-Hang($state, [string]$detail) {
+  if ($DumpOnHang) {
+    New-Item -ItemType Directory -Force $DumpOnHang | Out-Null
+    $file = Join-Path $DumpOnHang ('hang-{0}-{1}-pid{2}-{3}.dmp' -f $state.Encoding, $state.Seed, $state.Viewer.Id, (Get-Date -Format 'yyyyMMdd-HHmmss'))
+    $failure = [FuzzWin]::WriteDump($state.Viewer.Id, $file)
+    if ($failure) { $detail += "; dump failed: $failure" }
+    else {
+      $watch = [Diagnostics.Stopwatch]::StartNew()
+      $recovered = $false
+      while ($watch.Elapsed.TotalSeconds -lt 10 -and -not $state.Viewer.HasExited) {
+        if ([FuzzWin]::HungWindows($state.Viewer.Id, 1000) -eq 0) { $recovered = $true; break }
+      }
+      $probe = if ($recovered) { 'recovered after {0:N1} s' -f $watch.Elapsed.TotalSeconds } else { 'still hung after 10 s' }
+      $detail += "; dump=$file; $probe"
+    }
+  }
+  Complete-Case $state 'HANG' $detail
+}
+
 function Test-Running($state) {
   $v = $state.Viewer
   $elapsed = ([DateTime]::UtcNow - $state.Mark).TotalSeconds
@@ -309,7 +360,7 @@ function Test-Running($state) {
       return
     }
     if ($elapsed -ge $TimeoutSeconds) {
-      if ([FuzzWin]::HungWindows($v.Id, 3000) -gt 0) { Complete-Case $state 'HANG' 'window not responding'; return }
+      if ([FuzzWin]::HungWindows($v.Id, 3000) -gt 0) { Complete-Hang $state 'window not responding'; return }
       Complete-Case $state 'OK' ('nodialog' + $(if ($Handshake) { " title=$($state.TitleLen)" } else { '' }))
     }
     return
@@ -320,8 +371,8 @@ function Test-Running($state) {
     [void][FuzzWin]::DismissDialogs($v.Id)
   }
   if ($elapsed -ge 10) {
-    if ([FuzzWin]::HungWindows($v.Id, 3000) -gt 0) { Complete-Case $state 'HANG' 'window not responding after message'; return }
-    Complete-Case $state 'HANG' 'viewer did not exit after its message was dismissed'
+    if ([FuzzWin]::HungWindows($v.Id, 3000) -gt 0) { Complete-Hang $state 'window not responding after message'; return }
+    Complete-Hang $state 'viewer did not exit after its message was dismissed'
   }
 }
 
@@ -373,7 +424,7 @@ try {
         elseif ($state.Result -ne 'OK') {
           $last = if ($state.ServerDone) { ($state.ServerDone -replace '^DONE ', '') } else { '' }
           if ($last.Length -gt 220) { $last = $last.Substring(0, 220) + '...' }
-          $detail = if ($state.Detail.Length -gt 160) { $state.Detail.Substring(0, 160) + '...' } else { $state.Detail }
+          $detail = if ($state.Detail.Length -gt 160 -and -not $DumpOnHang) { $state.Detail.Substring(0, 160) + '...' } else { $state.Detail }
           Write-Host ("{0,-5} {1}#{2}: {3} [{4}]" -f $state.Result, $state.Encoding, $state.Seed, $detail, $last)
         }
       }
