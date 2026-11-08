@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Central build output for every project (build/bin and build/obj). The
+     .vcxproj files no longer set OutDir/IntDir. $(MSBuildThisFileDirectory)
+     (not $(SolutionDir)) keeps this working when a project is built alone. -->
+<Project>
+  <PropertyGroup>
+    <FsvBuildRoot>$(MSBuildThisFileDirectory)build\</FsvBuildRoot>
+    <OutDir>$(FsvBuildRoot)bin\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(FsvBuildRoot)obj\$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
+  </PropertyGroup>
+</Project>
