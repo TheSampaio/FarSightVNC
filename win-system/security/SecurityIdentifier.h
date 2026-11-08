@@ -73,7 +73,7 @@ public:
    * Creates security identifier by a string.
    * @throws SystemException if copy failed.
    */
-  SecurityIdentifier::SecurityIdentifier(const TCHAR *sidString);
+  SecurityIdentifier(const TCHAR *sidString);
 
   /**
    * Destructor.

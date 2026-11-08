@@ -46,7 +46,7 @@ private:
   virtual Region getVideoRegion();
   void updateVideoRegion();
   void getClassNamesAndRectsFromConfig(StringVector &classNames, std::vector<Rect> &rects);
-  unsigned int WinVideoRegionUpdaterImpl::getInterval();
+  unsigned int getInterval();
   Region getRectsByClass(StringVector classNames);
   Region getRectsByCoords(std::vector<Rect> &rects);
 

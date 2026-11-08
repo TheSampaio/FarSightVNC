@@ -86,7 +86,7 @@ public:
   /**
    * Returns session id of this process console.
    */
-  static DWORD WTS::getProcessSessionId(LogWriter* log);
+  static DWORD getProcessSessionId(LogWriter* log);
 
   /**
   * Gets RDP console session id.
