@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Imported after every project, so it overrides their per-configuration
+     settings. MinimalRebuild (/Gm) is rejected by cl with /std:c++20 (D8016);
+     it only affects incremental build speed, not the generated code. -->
+<Project>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <MinimalRebuild>false</MinimalRebuild>
+    </ClCompile>
+  </ItemDefinitionGroup>
+</Project>
