@@ -54,13 +54,13 @@ Launch `tvnviewer.exe`, enter the server address and connect. The executable kee
 
 ```powershell
 # Open the connection dialog
-.\x64\Release\tvnviewer.exe
+.\build\bin\x64\Release\tvnviewer.exe
 
 # Connect using an explicit TCP port (double colon)
-.\x64\Release\tvnviewer.exe 192.168.1.20::5900
+.\build\bin\x64\Release\tvnviewer.exe 192.168.1.20::5900
 
 # Try the optional GPU presentation path
-.\x64\Release\tvnviewer.exe -renderer=gpu 192.168.1.20::5900
+.\build\bin\x64\Release\tvnviewer.exe -renderer=gpu 192.168.1.20::5900
 ```
 
 Renderer modes are `gdi`, `auto` and `gpu`. **GDI is the default**; GPU presentation does not move RFB decoding to the GPU. See [RenderSettings.h](tvnviewer/RenderSettings.h) for mode selection and configuration sources.
@@ -128,10 +128,10 @@ The script locates MSBuild through `vswhere` and builds the `tvnviewer` target i
 
 | Configuration | Viewer output |
 | --- | --- |
-| Release / x64 | `x64\Release\tvnviewer.exe` |
-| Debug / x64 | `x64\Debug\tvnviewer.exe` |
-| Release / Win32 | `Release\tvnviewer.exe` |
-| Debug / Win32 | `Debug\tvnviewer.exe` |
+| Release / x64 | `build\bin\x64\Release\tvnviewer.exe` |
+| Debug / x64 | `build\bin\x64\Debug\tvnviewer.exe` |
+| Release / Win32 | `build\bin\Win32\Release\tvnviewer.exe` |
+| Debug / Win32 | `build\bin\Win32\Debug\tvnviewer.exe` |
 
 Build logs are written to `build-logs/`.
 
@@ -142,16 +142,16 @@ The repository includes native regression projects and integration scripts. Choo
 ```powershell
 # Build and run the keyboard regression executable
 .\tools\build.ps1 -Project viewer-keyboard-test -Configurations Release -Platforms x64
-.\x64\Release\viewer-keyboard-test.exe
+.\build\bin\x64\Release\viewer-keyboard-test.exe
 
 # Keyboard end-to-end check against a local recording RFB server (Python 3)
-.\tools\keyboard-e2e-test.ps1 -Viewer .\x64\Release\tvnviewer.exe
+.\tools\keyboard-e2e-test.ps1 -Viewer .\build\bin\x64\Release\tvnviewer.exe
 
 # GPU presenter regression check (requires an existing Release/x64 build)
 .\tools\gpu-presenter-test.ps1
 
 # Decoder bounds regressions against a local fuzzing server (Python 3)
-.\tools\fuzz-test.ps1 -Regression -Viewer .\x64\Release\tvnviewer.exe
+.\tools\fuzz-test.ps1 -Regression -Viewer .\build\bin\x64\Release\tvnviewer.exe
 ```
 
 Additional projects cover input queue behavior (`viewer-input-queue-test`), keysyms (`viewer-keysym-test`) and favorites, toolbar and reconnection policies (`viewer-favorites-test`). Other scripts cover real-input keyboard checks, DPI/display behavior, connection smoke tests, latency measurements and long-running sessions.
