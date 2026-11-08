@@ -756,13 +756,26 @@ class Scenario:
         body = b'\x80' + self.pf.tight_cpixel((0, 255, 0))
         return [self.update(header(0, self.h, self.w, 0, ENCODINGS['tight']) + body)]
 
+    def serverinit_0x0(self):
+        # ServerInit declares a 0x0 frame buffer (the window never got a pixel format: the
+        # inherited FrameBuffer::setColor looped forever). The session must then follow a valid
+        # DesktopSize (64x48) and keep drawing: a red, then a blue full-frame Raw rectangle.
+        w, h = SCENARIO_FB
+        size = header(0, 0, w, h, ENCODINGS['desktopsize'])
+        red = header(0, 0, w, h, ENCODINGS['raw']) + self.pf.pixel((255, 0, 0)) * (w * h)
+        blue = header(0, 0, w, h, ENCODINGS['raw']) + self.pf.pixel((0, 0, 255)) * (w * h)
+        return [self.update(), self.update(size, red), self.update(blue)]
+
 
 Scenario.BUILDERS = {
     'fillrect-rre-bottom-edge': Scenario.fillrect_rre_bottom_edge,
     'fillrect-tight-bottom-edge': Scenario.fillrect_tight_bottom_edge,
     'empty-update': Scenario.empty_update,
+    'serverinit-0x0': Scenario.serverinit_0x0,
 }
 SCENARIO_FB = (64, 48)
+# Scenarios whose ServerInit frame buffer differs from SCENARIO_FB.
+SCENARIO_SERVERINIT_FB = {'serverinit-0x0': (0, 0)}
 
 
 def recv_exact(sock, count):
@@ -867,7 +880,7 @@ def main():
         parser.error('--name-bytes needs --name-length')
 
     if args.scenario:
-        width, height = SCENARIO_FB
+        width, height = SCENARIO_SERVERINIT_FB.get(args.scenario, SCENARIO_FB)
         pf = SERVER_PIXEL_FORMATS[0]
         fuzzer = Scenario(args.scenario, width, height, pf)
         label = 'scenario=%s' % args.scenario

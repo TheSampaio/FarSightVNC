@@ -23,6 +23,9 @@
 //
 // Modified for FarSightVNC on 2026-11-03: fillRect() returns early for an
 // empty clipped rectangle (heap overflow found by fuzzing).
+//
+// Modified for FarSightVNC on 2026-11-08: setColor() returns early for a frame
+// buffer without storage or pixel format (infinite loop inherited from TightVNC).
 
 #include "FrameBuffer.h"
 #include <string.h>
@@ -64,6 +67,14 @@ void FrameBuffer::setColor(UINT8 red, UINT8 green, UINT8 blue)
 {
   size_t sizeInPixels = m_dimension.area();
   int pixelSize = m_pixelFormat.bitsPerPixel / 8;
+  // Modified for FarSightVNC on 2026-11-08: a frame buffer that was never
+  // configured (no pixel format, no storage) or that is empty has nothing to
+  // fill. With pixelSize == 0 the loop below never ended (the viewer hung when
+  // the first size change was 0x0) and with a null buffer 'endPixPtr -
+  // pixelSize' was pointer arithmetic on nullptr.
+  if (m_buffer == 0 || pixelSize <= 0 || getBufferSize() < pixelSize) {
+    return;
+  }
   UINT32 redPix = (red * m_pixelFormat.redMax / 255) <<
                   m_pixelFormat.redShift;
   UINT32 greenPix = (green * m_pixelFormat.greenMax / 255) <<

@@ -1,6 +1,6 @@
 # Investigação do HANG intermitente no fuzz `desktopsize` seed 25 (T8)
 
-- Base: `0d8d429` (branch `TheSampaio/fsv-t8-hang`, a partir de `modernization/integration`). Nenhum código de produto foi alterado.
+- Base: `0d8d429` (branch `TheSampaio/fsv-t8-hang`, a partir de `modernization/integration`). A investigação não alterou código; a correção aprovada pelo coordenador está na seção "Correção aplicada".
 - Viewers comparados (ambos Debug x64): novo = build deste worktree (C++20); antigo = v0.1.1a, `fsv-t1-baseline\x64\Debug\tvnviewer.exe` (somente leitura).
 - Ambiente: Windows 11 Pro 10.0.26200, 12 processadores lógicos, Python 3.13.
 
@@ -78,7 +78,7 @@ Com o script do repositório e `-DumpOnHang`, um wrapper `-Python` que injeta `-
 
 Sim. O travamento é permanente, e não lentidão: a mesma pilha com a thread a 100 % de CPU em amostras separadas, a janela não volta em mais de 33 s, e a instrução do laço não muda. Aumentar o timeout só atrasaria o diagnóstico. A detecção `SendMessageTimeout(WM_NULL, 3000 ms)` após o timeout funciona.
 
-## Correção proposta (pequena; **não implementada**, aguardando decisão)
+## Correção proposta (pequena)
 
 1. **`rfb/FrameBuffer.cpp` — `FrameBuffer::setColor`**: sair cedo quando não há o que preencher:
 
@@ -90,10 +90,29 @@ Sim. O travamento é permanente, e não lentidão: a mesma pilha com a thread a 
    ```
 
    Cobre também `m_buffer == nullptr` com `pixelSize > 0`, em que `endPixPtr - pixelSize` dá a volta e o `memcpy` iria a um ponteiro nulo (AV). Não muda o comportamento para frame buffers válidos, nem para os de tamanho 0x0 com formato definido (o laço já não executa).
-2. **Teste de regressão**: cenário `serverinit-0x0` em `tools/fuzz-rfb-server.py` (ServerInit 0x0) mais um caso em `$regressionCases` de `tools/fuzz-test.ps1`; hoje os cenários usam o frame buffer fixo `SCENARIO_FB` (64x48).
+2. **Teste de regressão**: cenário `serverinit-0x0` em `tools/fuzz-rfb-server.py` (ServerInit 0x0) mais um caso em `$regressionCases` de `tools/fuzz-test.ps1`.
 3. Efeito esperado após a correção: com tamanho 0x0 o viewer mostra a janela vazia (ramo "preencher o viewer" de `setNewFramebuffer` + `repaint`) e continua responsivo.
 
 Compatibilidade RFB: a correção só protege o preenchimento local do frame buffer. O protocolo não muda e servidores TightVNC sem modificação não são afetados.
+
+## Correção aplicada e verificação
+
+Aplicadas as três mudanças acima: guarda em `FrameBuffer::setColor` (antes de qualquer aritmética de ponteiro), cenário `serverinit-0x0` (ServerInit 0x0, depois `DesktopSize` 64x48 e dois quadros Raw: vermelho, azul) e o caso em `$regressionCases`. Versão do produto não alterada (o coordenador sobe na integração).
+
+Auditoria do mesmo ramo: os demais laços que avançam por pixel (`fillRect`, `FrameBuffer.cpp:100` e `:393`) são limitados por contador (`x < right`, `iRow < height`) e `fillRect` já sai cedo com retângulo vazio. Não há outro laço com `pixelSize == 0` fora de `setColor`.
+
+| Verificação | Resultado |
+|---|---|
+| Servidor `serverinit-0x0` contra v0.1.1a Debug x64 | trava (`Responding=False`, 2,0 s de CPU em 2 s) |
+| idem, viewer corrigido Debug x64 | responde, 0 s de CPU, centro da janela azul (RGB 0,0,255): continua desenhando após o `DesktopSize` válido; servidor `sent=25/25 end=completed` |
+| idem, viewer corrigido Release x64 | idêntico (responde, 0 s de CPU, centro azul, 25/25) |
+| `fuzz-test.ps1 -Regression` (10 casos, viewer corrigido) | 10 OK, 0 HANG/CRASH, saída 0 |
+| `-Regression` com o viewer v0.1.1a | `raw#serverinit-0x0` HANG, saída 1 (o caso pega o defeito) |
+| Seed 25 `desktopsize`, `-Parallel 3`, 36 processos de carga, viewer corrigido Debug x64 | **0 HANG em 360 execuções** (antes: 10/270 no viewer novo, 11/270 no antigo) |
+| Fuzz completo (`-Parallel 3`, seeds 1 a 50, 7 codificações) | 350 OK, 0 HANG, 0 CRASH, 0 ERROR, saída 0 |
+| Testes de unidade Release x64 | `viewer-keyboard-test` 227/0, `viewer-input-queue-test` 39/0, `viewer-favorites-test` 88/0, todos saída 0 |
+
+Observação: na rodada de 360 execuções os dois "lados" do alternador apontaram para o mesmo viewer corrigido (não houve controle antigo nessa rodada; o controle é a taxa de 4 % medida antes, nas mesmas condições). A rodada usou cópia de `fuzz-test.ps1` com portas 5960-5999.
 
 ## Ferramenta adicionada: `fuzz-test.ps1 -DumpOnHang <pasta>`
 

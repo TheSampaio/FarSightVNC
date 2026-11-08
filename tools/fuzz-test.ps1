@@ -97,6 +97,10 @@ $regressionCases = @(
   # rectangle on the bottom edge (heap overflow, 2026-11-03).
   @{ Encoding = 'rre'; Scenario = 'fillrect-rre-bottom-edge' }
   @{ Encoding = 'tight'; Scenario = 'fillrect-tight-bottom-edge' }
+  # FrameBuffer::setColor looped forever on a frame buffer without pixel format: ServerInit
+  # 0x0 (or a first size change of 0x0) hung the viewer at 100 % CPU (inherited, 2026-11-08).
+  # The scenario then sends a valid DesktopSize and two Raw frames.
+  @{ Encoding = 'raw'; Scenario = 'serverinit-0x0' }
   @{ Encoding = 'rre'; Seed = 17 }, @{ Encoding = 'rre'; Seed = 21 }, @{ Encoding = 'rre'; Seed = 30 }
   @{ Encoding = 'rre'; Seed = 31 }, @{ Encoding = 'rre'; Seed = 41 }
   @{ Encoding = 'hextile'; Seed = 17 }, @{ Encoding = 'tight'; Seed = 34 }
