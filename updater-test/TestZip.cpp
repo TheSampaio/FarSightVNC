@@ -561,6 +561,22 @@ void testBadArguments(const TempDir &temp) {
 
 } // namespace
 
+namespace fsv::test {
+
+std::string buildSimpleZip(const std::vector<std::pair<std::string, std::string>> &files) {
+  std::vector<ZipEntry> entries;
+  for (const auto &[name, content] : files) {
+    ZipEntry entry;
+    entry.name = name;
+    entry.content = content;
+    entry.deflate = true;
+    entries.push_back(std::move(entry));
+  }
+  return buildZip(entries);
+}
+
+} // namespace fsv::test
+
 void runZipTests() {
   fsv::test::beginSuite("zip");
   const TempDir temp;

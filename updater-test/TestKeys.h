@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace fsv::test {
@@ -53,5 +54,9 @@ private:
 };
 
 std::span<const std::uint8_t> asBytes(const std::string &text);
+
+// A valid classic ZIP (deflate) with the given (entry name, content) pairs;
+// implemented next to the ZIP tests.
+std::string buildSimpleZip(const std::vector<std::pair<std::string, std::string>> &files);
 
 } // namespace fsv::test
