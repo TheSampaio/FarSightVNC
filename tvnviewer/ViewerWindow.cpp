@@ -711,6 +711,11 @@ int ViewerWindow::translateAccelToTB(int val)
   return -1;
 }
 
+void ViewerWindow::onCheckForUpdates()
+{
+  m_application->postMessage(TvnViewer::WM_USER_CHECK_UPDATES);
+}
+
 void ViewerWindow::onAbout()
 {
   m_application->postMessage(TvnViewer::WM_USER_ABOUT);
@@ -752,6 +757,9 @@ bool ViewerWindow::onCommand(WPARAM wParam, LPARAM lParam)
   switch(wParam) {
     case IDS_ABOUT_VIEWER:
       onAbout();
+      return true;
+    case IDS_CHECK_FOR_UPDATES:
+      onCheckForUpdates();
       return true;
     case IDS_TB_CONNOPTIONS:
       dialogConnectionOptions();

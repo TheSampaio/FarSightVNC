@@ -45,6 +45,18 @@ void AboutDialog::onCloseButtonClick()
   kill(IDCANCEL);
 }
 
+void AboutDialog::setCheckForUpdatesHandler(std::function<void()> handler)
+{
+  m_checkForUpdates = handler;
+}
+
+void AboutDialog::onCheckForUpdatesButtonClick()
+{
+  if (m_checkForUpdates) {
+    m_checkForUpdates();
+  }
+}
+
 void AboutDialog::onOrderSupportButtonClock()
 {
   openUrl(StringTable::getString(IDS_URL_LICENSING_FVA));
@@ -135,6 +147,9 @@ BOOL AboutDialog::onCommand(UINT controlID, UINT notificationID)
     break;
   case IDC_VISIT_WEB_SITE_BUTTON:
     onVisitSiteButtonClick();
+    break;
+  case IDC_ABOUT_CHECK_UPDATES:
+    onCheckForUpdatesButtonClick();
     break;
   }
   return FALSE;

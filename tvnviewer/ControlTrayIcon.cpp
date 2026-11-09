@@ -41,6 +41,7 @@ ControlTrayIcon::ControlTrayIcon(TvnViewer *viewerApplication)
   m_menu.appendMenu(resStr.getStrRes(IDS_LISTENING_OPTIONS), IDS_LISTENING_OPTIONS);
   m_menu.appendMenu(resStr.getStrRes(IDS_CONFIG), IDS_CONFIG);
   m_menu.appendSeparator();
+  m_menu.appendMenu(resStr.getStrRes(IDS_CHECK_FOR_UPDATES), IDS_CHECK_FOR_UPDATES);
   m_menu.appendMenu(resStr.getStrRes(IDS_ABOUT_VIEWER), IDS_ABOUT_VIEWER);
   m_menu.appendSeparator();
   m_menu.appendMenu(resStr.getStrRes(IDS_CLOSE), IDS_CLOSE);
@@ -123,6 +124,9 @@ void ControlTrayIcon::onRightButtonUp()
   case IDS_CONFIG:
     onConfiguration();
     break;
+  case IDS_CHECK_FOR_UPDATES:
+    onCheckForUpdates();
+    break;
   case IDS_ABOUT_VIEWER:
     onAboutViewer();
     break;
@@ -157,6 +161,11 @@ void ControlTrayIcon::onListeningOptions()
 void ControlTrayIcon::onConfiguration()
 {
   m_application->showConfiguration();
+}
+
+void ControlTrayIcon::onCheckForUpdates()
+{
+  m_application->postMessage(TvnViewer::WM_USER_CHECK_UPDATES);
 }
 
 void ControlTrayIcon::onAboutViewer()

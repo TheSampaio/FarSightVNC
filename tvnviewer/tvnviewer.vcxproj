@@ -335,6 +335,8 @@
     <ClCompile Include="ViewerInstance.cpp" />
     <ClCompile Include="ViewerMenu.cpp" />
     <ClCompile Include="ViewerVncAuthHandler.cpp" />
+    <ClCompile Include="UpdateController.cpp" />
+    <ClCompile Include="UpdateDialog.cpp" />
     <ClCompile Include="ViewerWindow.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -364,6 +366,8 @@
     <ClInclude Include="NewFolderDialog.h" />
     <ClInclude Include="OptionsDialog.h" />
     <ClInclude Include="resource.h" />
+    <ClInclude Include="UpdateController.h" />
+    <ClInclude Include="UpdateDialog.h" />
     <ClInclude Include="ResourceStrings.h" />
     <ClInclude Include="ScaleManager.h" />
     <ClInclude Include="TvnViewer.h" />

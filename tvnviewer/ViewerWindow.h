@@ -125,6 +125,7 @@ protected:
   void commandToolBar();
   void commandPause();
   void onAbout();
+  void onCheckForUpdates();
   void commandNewConnection();
   void commandSaveSession();
   void commandScaleIn();

@@ -27,6 +27,8 @@
 
 #include "gui/BaseDialog.h"
 
+#include <functional>
+
 /**
  * TightVNC server about dialog.
  */
@@ -42,6 +44,11 @@ public:
    */
   virtual ~AboutDialog();
 
+  /**
+   * Sets the action of the "Check for Updates..." button (FarSightVNC).
+   */
+  void setCheckForUpdatesHandler(std::function<void()> handler);
+
 protected:
   /**
    * Called when user press "Close" button.
@@ -55,6 +62,10 @@ protected:
    * Called when user press "Visit Web Site" button.
    */
   void onVisitSiteButtonClick();
+  /**
+   * Called when user press "Check for Updates..." button.
+   */
+  void onCheckForUpdatesButtonClick();
   /**
    * Opens url in default browser or shows error message on fail.
    */
@@ -81,6 +92,9 @@ protected:
    * Does nothing.
    */
   virtual BOOL onDestroy();
+
+private:
+  std::function<void()> m_checkForUpdates;
 };
 
 #endif

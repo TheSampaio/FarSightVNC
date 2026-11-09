@@ -28,6 +28,7 @@
 #include "network/socket/WindowsSocket.h"
 #include "util/ResourceLoader.h"
 #include "resource.h"
+#include "UpdateController.h"
 
 TvnViewer::TvnViewer(HINSTANCE appInstance, const TCHAR *windowClassName,
                      const TCHAR *viewerWindowClassName)
@@ -43,6 +44,7 @@ TvnViewer::TvnViewer(HINSTANCE appInstance, const TCHAR *windowClassName,
   registerViewerWindowClass();
 
   m_configurationDialog.setListenerOfUpdate(this);
+  m_aboutDialog.setCheckForUpdatesHandler([this]() { postMessage(WM_USER_CHECK_UPDATES); });
 
   // working with accelerator
   ResourceLoader *rLoader = ResourceLoader::getInstance();
@@ -54,6 +56,9 @@ TvnViewer::TvnViewer(HINSTANCE appInstance, const TCHAR *windowClassName,
 
 TvnViewer::~TvnViewer()
 {
+  // Cancels and joins the update worker thread before anything else goes away.
+  m_updateController.reset();
+
   m_logWriter.info(_T("Viewer collector: destroy all instances"));
   m_instances.destroyAllInstances();
 
@@ -182,6 +187,14 @@ void TvnViewer::createWindow(const TCHAR *className)
   SetWindowLongPtr(m_mainWindow, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
 
   SetTimer(m_mainWindow, TIMER_DELETE_DEAD_INSTANCE, TIMER_DELETE_DEAD_INSTANCE_DELAY, (TIMERPROC)NULL);
+
+  // The automatic update check runs a few seconds after start, never before
+  // the first connection or dialog is up.
+  m_updateController.reset(new UpdateController(m_mainWindow));
+  if (m_updateController->interruptedUpdateFound()) {
+    m_logWriter.info(_T("Update: an interrupted update was found, it will be repaired when the viewer exits"));
+  }
+  SetTimer(m_mainWindow, TIMER_UPDATE_STARTUP, TIMER_UPDATE_STARTUP_DELAY, (TIMERPROC)NULL);
 }
 
 void TvnViewer::registerWindowClass(WNDCLASS *wndClass)
@@ -335,6 +348,12 @@ bool TvnViewer::onTimer(WPARAM idTimer)
       shutdown();
     }
     return true;
+  case TIMER_UPDATE_STARTUP:
+    KillTimer(m_mainWindow, TIMER_UPDATE_STARTUP);
+    if (m_updateController) {
+      m_updateController->onStartupTimer();
+    }
+    return true;
   default:
     _ASSERT(false);
     return false;
@@ -364,6 +383,30 @@ LRESULT CALLBACK TvnViewer::wndProc(HWND hWnd, UINT msg, WPARAM wparam, LPARAM l
 
       case WM_USER_ABOUT:
         _this->showAboutViewer();
+        break;
+
+      case WM_USER_CHECK_UPDATES:
+        if (_this->m_updateController) {
+          _this->m_updateController->requestManualCheck();
+        }
+        break;
+
+      case WM_USER_UPDATE_CHECK_DONE:
+        if (_this->m_updateController) {
+          _this->m_updateController->onCheckDone();
+        }
+        break;
+
+      case WM_USER_UPDATE_PROGRESS:
+        if (_this->m_updateController) {
+          _this->m_updateController->onProgress();
+        }
+        break;
+
+      case WM_USER_UPDATE_STAGE_DONE:
+        if (_this->m_updateController) {
+          _this->m_updateController->onStageDone();
+        }
         break;
 
       case WM_USER_RECONNECT: {
