@@ -53,3 +53,28 @@ function(fsv_enable_pch target)
     set_source_files_properties(${source} PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
   endforeach()
 endfunction()
+
+# Settings of the updater targets (updater-lib, farsight-updater, updater-test):
+# they target Windows 7 (_WIN32_WINNT 0x0601), never include util/winhdr.h or any
+# project header outside updater-lib, build without PCH, and compile at /W4 /WX.
+function(fsv_configure_updater_target target)
+  target_compile_definitions(${target} PRIVATE
+    UNICODE _UNICODE
+    WIN32_LEAN_AND_MEAN NOMINMAX
+    _WIN32_WINNT=0x0601 WINVER=0x0601 NTDDI_VERSION=0x06010000
+    $<$<CONFIG:Debug>:_DEBUG>
+    $<$<CONFIG:Release>:NDEBUG>)
+  target_compile_options(${target} PRIVATE
+    /W4 /WX /Zc:inline
+    $<$<CONFIG:Release>:/Gy>)
+  set_target_properties(${target} PROPERTIES INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
+endfunction()
+
+# Linker settings of the updater executables (same as fsv_configure_executable).
+function(fsv_configure_updater_executable target)
+  fsv_configure_updater_target(${target})
+  target_link_options(${target} PRIVATE
+    $<$<CONFIG:Release>:/DEBUG>
+    $<$<CONFIG:Release>:/OPT:REF>
+    $<$<CONFIG:Release>:/OPT:ICF>)
+endfunction()

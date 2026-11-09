@@ -441,6 +441,9 @@
     <ProjectReference Include="..\vendor\zlib\zlib.vcxproj">
       <Project>{f9597c92-5d25-4a3c-bad6-8a2566fddd6f}</Project>
     </ProjectReference>
+    <ProjectReference Include="..\updater-lib\updater-lib.vcxproj">
+      <Project>{d1219c39-cd06-47b4-ac2d-2be4da68fd4d}</Project>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

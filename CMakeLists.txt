@@ -70,9 +70,12 @@ add_subdirectory(ft-common)
 add_subdirectory(ft-client-lib)
 add_subdirectory(gui)
 add_subdirectory(viewer-core)
+add_subdirectory(updater-lib)
 
 # Applications.
 add_subdirectory(tvnviewer)
 add_subdirectory(viewer-keyboard-test)
 add_subdirectory(viewer-input-queue-test)
 add_subdirectory(viewer-favorites-test)
+add_subdirectory(farsight-updater)
+add_subdirectory(updater-test)

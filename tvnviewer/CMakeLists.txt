@@ -52,6 +52,7 @@ target_link_libraries(tvnviewer PRIVATE
   region
   rfb
   thread
+  updater-lib
   util
   viewer-core
   win-system
