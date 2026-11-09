@@ -5,6 +5,10 @@
 
 #include "TestHarness.h"
 
+#include <windows.h>
+
+#include <cstdlib>
+#include <cstring>
 #include <exception>
 
 void runVersionTests();
@@ -33,7 +37,12 @@ void runSuite(void (*suite)()) {
 
 } // namespace
 
-int main() {
+int main(int argc, char **argv) {
+  // Helper mode: copies of this exe act as fake "tvnviewer.exe" processes.
+  if (argc >= 3 && std::strcmp(argv[1], "--sleep-ms") == 0) {
+    ::Sleep(static_cast<DWORD>(std::atol(argv[2])));
+    return 0;
+  }
   runSuite(runVersionTests);
   runSuite(runCryptoTests);
   runSuite(runFsUtilTests);
