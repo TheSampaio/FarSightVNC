@@ -428,11 +428,16 @@ CheckResult checkForUpdate(IHttpClient &http, const SelectionOptions &options) {
 }
 
 bool isAutomaticCheckDue(const UpdateSettings &settings, std::uint64_t nowUnix) {
-  if (!settings.autoCheck || nowUnix < settings.nextCheckNotBeforeUnix) {
+  if (!settings.autoCheck) {
     return false;
   }
-  const bool clockMovedBack = settings.lastCheckUnix > nowUnix;
-  return clockMovedBack || nowUnix - settings.lastCheckUnix >= kCheckIntervalSeconds;
+  // nextCheckNotBefore is the only schedule (recordCheckOutcome sets it for
+  // every outcome); lastCheck is informational. A schedule further away than
+  // any outcome can produce means the clock moved back or the value is bogus.
+  if (settings.nextCheckNotBeforeUnix > nowUnix + kMaxScheduleAheadSeconds) {
+    return true;
+  }
+  return nowUnix >= settings.nextCheckNotBeforeUnix;
 }
 
 void recordCheckOutcome(UpdateSettings &settings, const CheckResult &result,

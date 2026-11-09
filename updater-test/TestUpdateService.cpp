@@ -271,29 +271,19 @@ void testPolicy() {
   off.autoCheck = false;
   CHECK(!isAutomaticCheckDue(off, now));
 
-  UpdateSettings recent;
-  recent.lastCheckUnix = now - 3600;
-  CHECK(!isAutomaticCheckDue(recent, now));
-  recent.lastCheckUnix = now - day + 1;
-  CHECK(!isAutomaticCheckDue(recent, now));
-  recent.lastCheckUnix = now - day;
-  CHECK(isAutomaticCheckDue(recent, now));
-  recent.lastCheckUnix = now - 10 * day;
-  CHECK(isAutomaticCheckDue(recent, now));
-
-  UpdateSettings waiting;
-  waiting.lastCheckUnix = now - 10 * day;
+  UpdateSettings waiting; // only the schedule decides; lastCheck is informational
+  waiting.lastCheckUnix = now - 3600;
   waiting.nextCheckNotBeforeUnix = now + 1;
   CHECK(!isAutomaticCheckDue(waiting, now));
   waiting.nextCheckNotBeforeUnix = now;
   CHECK(isAutomaticCheckDue(waiting, now));
+  waiting.nextCheckNotBeforeUnix = now + kMaxScheduleAheadSeconds;
+  CHECK(!isAutomaticCheckDue(waiting, now));
 
-  UpdateSettings future; // the clock moved back past the last check
-  future.lastCheckUnix = now + 5 * day;
+  UpdateSettings future; // the clock moved back: schedule implausibly far ahead
+  future.lastCheckUnix = now + 30 * day;
+  future.nextCheckNotBeforeUnix = now + kMaxScheduleAheadSeconds + 1;
   CHECK(isAutomaticCheckDue(future, now));
-  future.nextCheckNotBeforeUnix = now + 1;
-  CHECK(!isAutomaticCheckDue(future, now)); // the backoff still applies
-  future.nextCheckNotBeforeUnix = now - 1;
   future.autoCheck = false;
   CHECK(!isAutomaticCheckDue(future, now));
 
@@ -311,6 +301,7 @@ void testPolicy() {
     recordCheckOutcome(s, resultOf(CheckResult::Kind::UpdateAvailable), now);
     CHECK(s.lastCheckUnix == now);
     CHECK(s.nextCheckNotBeforeUnix == now);
+    CHECK(isAutomaticCheckDue(s, now + 60)); // "Remind Me Later": offered on the next launch
     CHECK(s.skipped && *s.skipped == versionOf("0.1.0a"));
   }
   { // failure: retry after 6 h, last successful check untouched

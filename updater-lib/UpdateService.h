@@ -60,8 +60,13 @@ inline constexpr std::uint64_t kCheckIntervalSeconds = 24 * 3600;
 inline constexpr std::uint64_t kRetryAfterFailureSeconds = 6 * 3600;
 inline constexpr std::uint64_t kMinRateLimitBackoffSeconds = 3600;
 
-// autoCheck && now >= nextCheckNotBefore && (now - lastCheck >= interval
-// || lastCheck > now /*clock moved back*/).
+// Upper bound for a legitimate schedule (rate-limit resets are ~1 h; the
+// longest outcome is the 24 h interval).
+inline constexpr std::uint64_t kMaxScheduleAheadSeconds = 7 * 24 * 3600;
+
+// autoCheck && (now >= nextCheckNotBefore
+//               || nextCheckNotBefore > now + kMaxScheduleAheadSeconds /*clock moved back*/).
+// lastCheck is informational only.
 bool isAutomaticCheckDue(const UpdateSettings &settings, std::uint64_t nowUnix);
 
 // UpToDate: lastCheck = now, next = now + interval.
