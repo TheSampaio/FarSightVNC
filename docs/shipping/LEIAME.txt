@@ -1,0 +1,122 @@
+FarSightVNC Viewer v0.3.0a (alpha)
+==================================
+
+Cliente VNC para Windows baseado no TightVNC Viewer 2.8.90.
+Licença: GNU GPL versão 2 ou posterior (ver LICENSE.txt).
+Data: 2026-11-09 - branch feature/updater.
+
+
+COMO USAR
+---------
+- x64\tvnviewer.exe   -> Windows 64 bits (recomendado)
+- Win32\tvnviewer.exe -> Windows 32 bits
+
+Não precisa instalar: basta abrir o tvnviewer.exe, digitar o endereço do
+servidor (ex.: 192.168.1.20::5900) e conectar. O executável mantém o nome
+original tvnviewer.exe.
+
+Linha de comando (exemplos):
+  tvnviewer.exe 192.168.1.20::5900
+  tvnviewer.exe -renderer=gpu 192.168.1.20::5900
+
+
+COMPATIBILIDADE
+---------------
+Funciona com os servidores TightVNC existentes sem nenhuma mudança no
+servidor. O protocolo, a autenticação, as codificações, os arquivos .vnc e
+as configurações salvas no registro continuam iguais.
+
+
+ATUALIZAÇÕES (novo na v0.3.0a)
+------------------------------
+O uso como programa portátil continua funcionando sem o atualizador: você
+pode ignorá-lo e manter os arquivos onde estão.
+
+- Verificar atualizações (Check for Updates...) fica no menu da bandeja, no
+  menu do sistema da janela (ícone à esquerda da barra de título) e na janela
+  Sobre.
+- A verificação automática (no máximo uma vez por dia) é opcional: é uma
+  caixa de seleção na janela de atualização. Versões de pré-lançamento
+  (alpha/beta) também são opcionais ali.
+- Quando há uma atualização, a janela mostra as notas da versão e oferece:
+  Download and Install (baixar e instalar), Remind Me Later (lembrar depois)
+  ou Skip This Version (ignorar esta versão).
+- A atualização só é instalada depois que TODAS as janelas do FarSightVNC
+  forem fechadas. Sessões em andamento nunca são interrompidas. Seus
+  arquivos .vnc e outros arquivos da pasta não são tocados.
+- A permissão de administrador só é pedida se a pasta for protegida (por
+  exemplo, dentro de C:\Program Files).
+- Todo download é verificado com uma assinatura digital (ECDSA P-256) antes de
+  ser instalado. Uma atualização que não passa na verificação é descartada.
+  Se a instalação falhar, a versão anterior é restaurada.
+- Para desativar a verificação para todos os usuários, um administrador pode
+  definir o DWORD DisableUpdateCheck = 1 em
+  HKLM\SOFTWARE\Policies\FarSightVNC\Viewer\Updater
+- Atualização manual (sempre possível): baixe o zip em
+  https://github.com/TheSampaio/FarSightVNC/releases e extraia sobre a pasta
+  antiga.
+- Privacidade: a única requisição é ao GitHub, e a única informação enviada é
+  a versão do programa no User-Agent. Não há telemetria.
+- A v0.2.1a e anteriores não têm o atualizador: atualize manualmente uma vez.
+
+
+O QUE MUDOU NA v0.3.0a
+----------------------
+- Novo: atualizador automático opcional e portátil (ver ATUALIZAÇÕES acima).
+  Novo arquivo FarSightUpdater.exe ao lado do tvnviewer.exe, em x64\ e
+  Win32\ (mantenha-o na mesma pasta do tvnviewer.exe).
+- O protocolo VNC, o lado do servidor e as configurações salvas não mudaram.
+
+
+O QUE MUDOU NA v0.2.1a
+----------------------
+- O nome do aplicativo no Windows (ex.: Gerenciador de Tarefas) agora é só
+  "FarSightVNC", sem "(based on TightVNC Viewer)". A janela Sobre continua
+  citando o TightVNC 2.8.90, como exige a licença.
+
+
+O QUE MUDOU NA v0.2.0a (desde a v0.1.1a)
+----------------------------------------
+Correções de segurança (proteção contra servidores com dados inválidos ou
+maliciosos):
+- Nome de desktop gigante no início da conexão: agora é truncado em 64 KiB.
+  Antes, um comprimento de 4 GiB derrubava o viewer.
+- Decodificador ZRLE: toda escrita de pixel confere os limites do buffer
+  (falha latente que o viewer atual não alcançava).
+- Tela de 0x0 enviada pelo servidor: o viewer travava com a CPU em 100%
+  (falha herdada do TightVNC). Corrigido.
+
+Base técnica (sem mudança visível para quem usa):
+- Todo o código compila em C++20.
+- Bibliotecas de terceiros reorganizadas em vendor\; saída de build em
+  build\bin e build\obj.
+- Build CMake experimental (o build oficial continua sendo o Visual Studio).
+
+
+VERIFICADO NESTA VERSÃO
+-----------------------
+- Testes automáticos: atualizador 2080/0 (x64 e Win32, Release e Debug),
+  teclado 227/0, fila de entrada 39/0, favoritos 88/0.
+- Instalação da versão assinada sobre uma cópia da v0.2.1a, com o viewer
+  antigo aberto (o atualizador espera), arquivos do usuário preservados,
+  atualização adulterada rejeitada e downgrade recusado (teste automático de
+  ponta a ponta, sem rede).
+
+
+AINDA NÃO VERIFICADO
+--------------------
+- Download de uma atualização do GitHub em rede real (a primeira versão com
+  o atualizador não tem versão anterior que possa atualizar para ela) e o
+  pedido de permissão (UAC) para pastas protegidas.
+- Conexão com um TightVNC Server real nesta versão (o código de conexão não
+  mudou desde a v0.2.1a, que foi verificada com o TightVNC Server 2.8.85 em
+  127.0.0.1).
+- Uso em rede real (fora de 127.0.0.1) e com outros servidores além do
+  TightVNC.
+- Digitação real com teclado nesta versão (os testes de teclado são
+  automáticos).
+
+Esta é uma versão alpha: recomenda-se testar primeiro em uma máquina antes
+de usar em larga escala.
+
+Histórico completo: MODIFICATIONS.md no repositório.

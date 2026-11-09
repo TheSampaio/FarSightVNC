@@ -7,4 +7,4 @@
 - A versão fica em `tvnviewer/tvnviewer.rc` (UTF-16 LE): `FILEVERSION`/`PRODUCTVERSION` numéricos `MAJOR,MINOR,FIX,0` e as strings `FileVersion`/`ProductVersion` com a versão completa (ex.: `0.1.0a`). O texto "Based on TightVNC Viewer 2.8.90" continua indicando a base.
 - Registre a versão na mensagem de commit, no `MODIFICATIONS.md` e no `LEIAME.txt` (português) e no `README.txt` (inglês) do shipping, que acompanham os executáveis e o `LICENSE.txt`.
 - Shipping na área de trabalho do dono: `Desktop\FarSightVNC-v<versão>\` + `.zip` (substitui a pasta/zip anterior).
-- Versão atual: `v0.2.1a`.
+- Versão atual: `v0.3.0a`.
