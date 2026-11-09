@@ -82,6 +82,12 @@
     <ClCompile Include="AboutDialog.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="UpdateController.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="UpdateDialog.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="BuildTime.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -136,6 +142,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="ReconnectDialog.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="UpdateController.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="UpdateDialog.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="ReconnectPolicy.h">

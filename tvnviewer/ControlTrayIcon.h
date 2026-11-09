@@ -72,6 +72,9 @@ protected:
   //
   virtual void onAboutViewer();
 
+  // Ask the viewer application to check for updates
+  virtual void onCheckForUpdates();
+
   //
   // Stopping of listening daemon after click
   // "Close listening daemon" in pop-up menu of tray icon

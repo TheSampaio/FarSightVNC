@@ -38,10 +38,12 @@
 #include "thread/AutoLock.h"
 
 #include <map>
+#include <memory>
 
 class ViewerCollector;
 class ControlTrayIcon;
 class LoginDialog;
+class UpdateController;
 
 class TvnViewer : public WindowsApplication
 {
@@ -107,9 +109,26 @@ public:
   // This message need send if config is changed.
   static const int WM_USER_CONFIGURATION_RELOAD = WM_USER + 6;
 
+  // This message need send if you need to check for updates (FarSightVNC).
+  // It is posted from any thread of the application.
+  static const int WM_USER_CHECK_UPDATES = WM_USER + 10;
+
+  // Posted by the update worker thread: an update check finished.
+  static const int WM_USER_UPDATE_CHECK_DONE = WM_USER + 7;
+
+  // Posted by the update worker thread: download progress changed (coalesced).
+  static const int WM_USER_UPDATE_PROGRESS = WM_USER + 8;
+
+  // Posted by the update worker thread: downloading/staging an update finished.
+  static const int WM_USER_UPDATE_STAGE_DONE = WM_USER + 9;
+
   // This timer is used for deleting dead instances of viewer.
   static const int TIMER_DELETE_DEAD_INSTANCE = 1;
   static const int TIMER_DELETE_DEAD_INSTANCE_DELAY = 50;
+
+  // One-shot timer of the automatic update check (FarSightVNC).
+  static const int TIMER_UPDATE_STARTUP = 2;
+  static const int TIMER_UPDATE_STARTUP_DELAY = 5000;
 
 protected:
   void startListeningServer(const int listeningPort);
@@ -149,6 +168,7 @@ private:
   LoginDialog *m_loginDialog;
   ControlTrayIcon *m_trayIcon;
   ConnectionListener *m_conListener;
+  std::unique_ptr<UpdateController> m_updateController;
 
   WNDCLASS m_viewerWndClass;
 };

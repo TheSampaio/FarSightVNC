@@ -25,6 +25,8 @@ add_executable(tvnviewer WIN32
   ResourceStrings.cpp
   ScaleManager.cpp
   TvnViewer.cpp
+  UpdateController.cpp
+  UpdateDialog.cpp
   ViewerCmdLine.cpp
   ViewerCollector.cpp
   ViewerInstance.cpp
