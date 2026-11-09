@@ -173,9 +173,24 @@ bool validate(const Options &options, InstallTarget &target) {
   }
   target = detectInstallTarget(options.viewer, buildArchitecture());
   const std::wstring expected = updateStateDirectory(target.root);
+  if (target.root.empty() || expected.empty() || !isAbsolutePath(options.stateDir)) {
+    return false;
+  }
+  if (options.elevated) {
+    // With over-the-shoulder UAC (a standard user approving with another
+    // administrator's credentials) the elevated child runs in a different
+    // profile, so its own %LOCALAPPDATA% is not the parent's. Accept the
+    // parent's state directory by shape: ...\FarSightVNC\Updates\<hash of root>.
+    // Trust does not depend on this location: every staged byte is checked
+    // against the signed manifest after being copied into the install folder.
+    const std::wstring state = fullPath(options.stateDir);
+    const std::wstring updates = parentDirectory(state);
+    return _wcsicmp(fileName(state).c_str(), fileName(expected).c_str()) == 0 &&
+           _wcsicmp(fileName(updates).c_str(), L"Updates") == 0 &&
+           _wcsicmp(fileName(parentDirectory(updates)).c_str(), L"FarSightVNC") == 0;
+  }
   const std::wstring base = updatesBaseDirectory();
-  return !target.root.empty() && !expected.empty() && !base.empty() &&
-         pathsEqual(options.stateDir, expected) &&
+  return !base.empty() && pathsEqual(options.stateDir, expected) &&
          pathsEqual(parentDirectory(fullPath(options.stateDir)), base);
 }
 
