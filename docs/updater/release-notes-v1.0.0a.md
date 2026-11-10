@@ -85,4 +85,4 @@ The manifest and the signature must stay attached to the release. Without them t
 - **SmartScreen:** the executables are not Authenticode-signed, so Windows may warn on first launch.
 - **Shared settings:** settings are shared with TightVNC Viewer (`HKCU\Software\TightVNC\Viewer`).
 
-**Source:** commit `5087629` (branch `feature/updater`). TightVNC copyright © GlavSoft LLC is retained. The full list of changes is in `MODIFICATIONS.md`.
+**Source:** commit `b122244` (branch `feature/updater`). TightVNC copyright © GlavSoft LLC is retained. The full list of changes is in `MODIFICATIONS.md`.
