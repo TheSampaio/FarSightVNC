@@ -33,7 +33,6 @@ constexpr std::size_t kMaxJournalEntries = 4096;
 constexpr wchar_t kNewDirName[] = L"new";
 constexpr wchar_t kBackupDirName[] = L"backup";
 constexpr wchar_t kJournalName[] = L"journal";
-constexpr wchar_t kViewerExeName[] = L"tvnviewer.exe";
 
 bool equalsNoCase(std::wstring_view a, std::wstring_view b) {
   if (a.size() != b.size()) {
@@ -589,11 +588,13 @@ InstallTarget detectInstallTarget(const std::wstring &viewerExePath, std::string
         target.arch = std::string(arch);
         const std::wstring viewerDir = parentDirectory(fullPath(viewerExePath));
         const std::wstring dirName = fileName(viewerDir);
-        const std::wstring parent = parentDirectory(viewerDir);
-        const bool archFolder = equalsNoCase(dirName, L"x64") || equalsNoCase(dirName, L"Win32");
-        if (archFolder && !parent.empty() && fileExists(joinPath(parent, L"LICENSE.txt"))) {
+        const std::wstring binDir = parentDirectory(viewerDir);
+        const std::wstring root = binDir.empty() ? std::wstring() : parentDirectory(binDir);
+        const bool archFolder = equalsNoCase(dirName, L"x64") || equalsNoCase(dirName, L"x86");
+        const bool inBin = !binDir.empty() && equalsNoCase(fileName(binDir), kBinDirName);
+        if (archFolder && inBin && !root.empty() && fileExists(joinPath(root, L"LICENSE.txt"))) {
           target.layout = InstallLayout::Full;
-          target.root = parent;
+          target.root = root;
         } else {
           target.layout = InstallLayout::Standalone;
           target.root = viewerDir;
@@ -608,7 +609,7 @@ std::vector<PlannedFile> planInstall(const Manifest &manifest, const std::wstrin
   return guarded(
       [&] {
         std::vector<PlannedFile> plan;
-        const std::string prefix = target.arch + "/";
+        const std::string prefix = "bin/" + target.arch + "/";
         for (const ManifestFile &file : manifest.files) {
           std::string installPath = file.path;
           if (target.layout == InstallLayout::Standalone) {

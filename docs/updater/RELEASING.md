@@ -15,7 +15,7 @@ The public key that the viewer trusts is compiled into
    `farsight-updater/farsight-updater.rc`, both numeric and string fields;
    `CLAUDE.md`, `AGENTS.md`, `README.md`, `MODIFICATIONS.md`).
 2. Commit. The tag of the release must be exactly `v<version>` (for example
-   `v0.3.0a`). The signed manifest version must equal the tag without the `v`,
+   `v1.0.0a`). The signed manifest version must equal the tag without the `v`,
    otherwise the viewer refuses the update.
 
 ## 2. Build
@@ -34,18 +34,21 @@ powershell -NoProfile -Command "& .\tools\build.ps1 -Project updater-test, farsi
 
 ```
 FarSightVNC-v<version>\
-  x64\tvnviewer.exe
-  x64\FarSightUpdater.exe
-  Win32\tvnviewer.exe
-  Win32\FarSightUpdater.exe
+  bin\x64\fsvnc-viewer.exe
+  bin\x64\fsvnc-updater.exe
+  bin\x86\fsvnc-viewer.exe
+  bin\x86\fsvnc-updater.exe
   LICENSE.txt
   README.txt      (English)
   LEIAME.txt      (Portuguese)
 ```
 
+`bin\x86` holds the 32-bit build (the MSBuild platform `Win32`); `bin\x64` the 64-bit one.
+
 `README.txt` and `LEIAME.txt` carry the version and the changes of this release;
-their sources are in `docs/shipping/`. Copy the executables from
-`build\bin\x64\Release` and `build\bin\Win32\Release`. Do not add any other
+their sources are in `docs/shipping/`. Copy `fsvnc-viewer.exe` and
+`fsvnc-updater.exe` from `build\bin\x64\Release` to `bin\x64` and from
+`build\bin\Win32\Release` to `bin\x86`. Do not add any other
 file: every file in the folder is installed on the user's machine and is listed
 in the signed manifest (at most 64 files, each at most 64 MiB, paths of at most
 four segments of `A-Z a-z 0-9 . _ -`).
@@ -53,12 +56,12 @@ four segments of `A-Z a-z 0-9 . _ -`).
 ## 4. Zip
 
 The zip must be named `FarSightVNC-v<version>.zip`, with the entries at the
-root (`x64/tvnviewer.exe`, ...) and `/` separators. Do not use
+root (`bin/x64/fsvnc-viewer.exe`, ...) and `/` separators. Do not use
 `Compress-Archive` (it writes `\` separators on Windows PowerShell 5.1).
 
 ```powershell
 Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
-$dir = "$env:USERPROFILE\Desktop\FarSightVNC-v0.3.0a"
+$dir = "$env:USERPROFILE\Desktop\FarSightVNC-v1.0.0a"
 $zip = "$dir.zip"
 if (Test-Path $zip) { Remove-Item $zip }
 $archive = [IO.Compression.ZipFile]::Open($zip, 'Create')
@@ -74,9 +77,9 @@ try {
 
 ```powershell
 .\tools\release\New-UpdateManifest.ps1 `
-  -ShippingDirectory $env:USERPROFILE\Desktop\FarSightVNC-v0.3.0a `
-  -ZipPath $env:USERPROFILE\Desktop\FarSightVNC-v0.3.0a.zip `
-  -Version 0.3.0a `
+  -ShippingDirectory $env:USERPROFILE\Desktop\FarSightVNC-v1.0.0a `
+  -ZipPath $env:USERPROFILE\Desktop\FarSightVNC-v1.0.0a.zip `
+  -Version 1.0.0a `
   -PrivateKeyPath $env:USERPROFILE\.farsightvnc-signing\update-key-1.private.blob `
   -OutDirectory $env:USERPROFILE\Desktop
 ```
@@ -92,7 +95,7 @@ The script already self-verifies. The strongest check is the production code
 path against the real files, with no network:
 
 ```powershell
-build\bin\x64\Release\updater-test.exe --stage-local v0.3.0a <folder with the three assets> <empty state dir> <previous version>
+build\bin\x64\Release\updater-test.exe --stage-local v1.0.0a <folder with the three assets> <empty state dir> <previous version>
 ```
 
 It runs `stageUpdate` with the compiled-in production keys on the local files and
@@ -101,7 +104,9 @@ exits 0 only if the signature, the version binding and every hash are accepted.
 release over a copy of the previous shipping folder (waiting for a running
 viewer, keeping user files, rejecting a tampered staging, refusing a downgrade).
 Run it with `-ReleaseDir` (the folder holding the three assets) and
-`-OldShipping` (the previous shipping folder).
+`-OldShipping` (an older shipping folder, in the current `bin\x64`/`bin\x86` layout or in
+the legacy `x64`/`Win32` layout, which the script converts). Use `-Arch x86` to test the
+32-bit build.
 
 ## 7. Publish on GitHub
 

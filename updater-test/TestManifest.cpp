@@ -33,8 +33,8 @@ std::string fileLine(const std::string &path, const std::string &size = "10",
 const std::string kHeader = "FarSightVNC-Update-Manifest 1\n";
 
 std::string validManifest() {
-  return kHeader + "version 0.3.0a\n" + packageLine() + fileLine("x64/tvnviewer.exe", "100") +
-         fileLine("Win32/tvnviewer.exe", "0") + fileLine("LICENSE.txt");
+  return kHeader + "version 0.3.0a\n" + packageLine() + fileLine("bin/x64/fsvnc-viewer.exe", "100") +
+         fileLine("bin/x86/fsvnc-viewer.exe", "0") + fileLine("LICENSE.txt");
 }
 
 void expectRejected(const std::string &text, const char *what) {
@@ -45,7 +45,7 @@ void expectRejected(const std::string &text, const char *what) {
 }
 
 void testSafeRelativePath() {
-  const char *const good[] = {"LICENSE.txt",       "x64/tvnviewer.exe", "Win32/FarSightUpdater.exe",
+  const char *const good[] = {"LICENSE.txt",       "bin/x64/fsvnc-viewer.exe", "bin/x86/fsvnc-updater.exe",
                               "a",                 "a/b/c/d",           "a-b_c.d",
                               "x64/COM10.dll",     "x64/console.txt",   "x64/null",
                               "README.txt",        "a.b.c"};
@@ -116,7 +116,7 @@ void testParseManifestValid() {
   CHECK(toHex(parsed->packageSha256) == kHashA);
   CHECK(parsed->files.size() == 3);
   if (parsed->files.size() == 3) {
-    CHECK(parsed->files[0].path == "x64/tvnviewer.exe");
+    CHECK(parsed->files[0].path == "bin/x64/fsvnc-viewer.exe");
     CHECK(parsed->files[0].size == 100);
     CHECK(toHex(parsed->files[0].sha256) == kHashB);
     CHECK(parsed->files[1].size == 0);
@@ -389,7 +389,7 @@ void testPowerShellManifest() {
   bool hasX64 = false;
   for (const ManifestFile &file : parsed->files) {
     hasLicense = hasLicense || file.path == "LICENSE.txt";
-    hasX64 = hasX64 || file.path == "x64/tvnviewer.exe";
+    hasX64 = hasX64 || file.path == "bin/x64/fsvnc-viewer.exe";
   }
   CHECK(hasLicense);
   CHECK(hasX64);

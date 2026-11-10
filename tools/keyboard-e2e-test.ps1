@@ -4,7 +4,7 @@
 
 .DESCRIPTION
   Starts tools/fake-rfb-keyrecorder.py on 127.0.0.1 (default port 5921, never
-  5900), starts the built tvnviewer.exe against it and delivers keystrokes
+  5900), starts the built fsvnc-viewer.exe against it and delivers keystrokes
   ONLY by PostMessage(WM_KEYDOWN/WM_KEYUP) with a complete lParam to the
   viewer's own desktop child window (same path as the fullscreen keyboard
   hook). Nothing is injected into the real desktop (no SendInput/keybd_event)
@@ -18,10 +18,10 @@
   removed only when this run created it. All started processes are stopped.
 
 .EXAMPLE
-  .\tools\keyboard-e2e-test.ps1 -Viewer .\build\bin\x64\Release\tvnviewer.exe
+  .\tools\keyboard-e2e-test.ps1 -Viewer .\build\bin\x64\Release\fsvnc-viewer.exe
 #>
 param(
-  [string]$Viewer = (Join-Path $PSScriptRoot '..\build\bin\x64\Release\tvnviewer.exe'),
+  [string]$Viewer = (Join-Path $PSScriptRoot '..\build\bin\x64\Release\fsvnc-viewer.exe'),
   [int]$Port = 5921,
   [string]$Python = 'python',
   [int]$StepDelayMs = 60

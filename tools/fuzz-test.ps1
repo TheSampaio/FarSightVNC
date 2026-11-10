@@ -63,7 +63,7 @@ param(
   [ValidateSet('tight', 'zrle', 'hextile', 'rre', 'copyrect', 'richcursor', 'desktopsize')]
   [string[]]$Encodings = @('tight', 'zrle', 'hextile', 'rre', 'copyrect', 'richcursor', 'desktopsize'),
   [int[]]$Seeds = @(1..50),
-  [string]$Viewer = (Join-Path $PSScriptRoot '..\build\bin\x64\Debug\tvnviewer.exe'),
+  [string]$Viewer = (Join-Path $PSScriptRoot '..\build\bin\x64\Debug\fsvnc-viewer.exe'),
   [string]$Python = '',
   [int]$BasePort = 5933,
   [ValidateRange(1, 13)]

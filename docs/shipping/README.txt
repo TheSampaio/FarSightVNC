@@ -1,4 +1,4 @@
-FarSightVNC Viewer v0.3.0a (alpha)
+FarSightVNC Viewer v1.0.0a (alpha)
 ==================================
 
 VNC client for Windows based on TightVNC Viewer 2.8.90.
@@ -6,18 +6,28 @@ License: GNU GPL version 2 or later (see LICENSE.txt).
 Date: 2026-11-09 - branch feature/updater.
 
 
+*** BREAKING CHANGE in v1.0.0a ***
+The program is now bin\x64\fsvnc-viewer.exe (64-bit) or
+bin\x86\fsvnc-viewer.exe (32-bit). Update shortcuts and scripts that pointed
+to tvnviewer.exe. Settings, .vnc files and command-line options are unchanged.
+
+
 HOW TO USE
 ----------
-- x64\tvnviewer.exe   -> 64-bit Windows (recommended)
-- Win32\tvnviewer.exe -> 32-bit Windows
+- bin\x64\fsvnc-viewer.exe -> 64-bit Windows (recommended)
+- bin\x86\fsvnc-viewer.exe -> 32-bit Windows
 
-No installation needed: open tvnviewer.exe, enter the server address
-(e.g. 192.168.1.20::5900) and connect. The executable keeps its original
-name, tvnviewer.exe.
+No installation needed: open fsvnc-viewer.exe, enter the server address
+(e.g. 192.168.1.20::5900) and connect.
+
+Folder layout (keep it as is; the updater relies on it):
+  bin\x64\fsvnc-viewer.exe, fsvnc-updater.exe
+  bin\x86\fsvnc-viewer.exe, fsvnc-updater.exe
+  LICENSE.txt, README.txt, LEIAME.txt
 
 Command line (examples):
-  tvnviewer.exe 192.168.1.20::5900
-  tvnviewer.exe -renderer=gpu 192.168.1.20::5900
+  fsvnc-viewer.exe 192.168.1.20::5900
+  fsvnc-viewer.exe -renderer=gpu 192.168.1.20::5900
 
 
 COMPATIBILITY
@@ -27,7 +37,7 @@ protocol, authentication, encodings, .vnc files and the settings stored in
 the registry are unchanged.
 
 
-UPDATES (new in v0.3.0a)
+UPDATES (new in v1.0.0a)
 ------------------------
 Using the viewer as a portable program still works without the updater: you
 can ignore it and keep the files where they are.
@@ -54,15 +64,26 @@ can ignore it and keep the files where they are.
   old folder.
 - Privacy: the only request is to GitHub, and the only information sent is the
   program version in the User-Agent. There is no telemetry.
-- v0.2.1a and older do not have the updater: update them manually once.
+- v0.2.1a and older do not have the updater: update them manually once. Because
+  v1.0.0a changes the file names and the folder layout, extract it into a NEW
+  folder (do not extract it over the old x64\ and Win32\ folders, which can then
+  be deleted).
+- The updater only works with the layout above (bin\x64 or bin\x86 next to
+  LICENSE.txt). If fsvnc-viewer.exe is moved elsewhere on its own, the update
+  replaces only that executable and the updater next to it.
 
 
-CHANGES IN v0.3.0a
-------------------
+CHANGES IN v1.0.0a (first public release with the updater)
+-----------------------------------------------------------
+- BREAKING: the executable is now fsvnc-viewer.exe (it was tvnviewer.exe) and
+  the folders are bin\x64\ (64-bit) and bin\x86\ (32-bit) (they were x64\ and
+  Win32\). Update shortcuts and scripts. The command-line options, .vnc files
+  and settings stored in the registry are unchanged.
 - New: optional, portable auto-updater (see UPDATES above). New file
-  FarSightUpdater.exe next to tvnviewer.exe, in x64\ and Win32\ (keep it in
-  the same folder as tvnviewer.exe).
+  fsvnc-updater.exe next to fsvnc-viewer.exe, in bin\x64\ and bin\x86\ (keep it
+  in the same folder as fsvnc-viewer.exe).
 - The VNC protocol, the server side and the saved settings are unchanged.
+- (v0.3.0a was an internal build that was never published.)
 
 
 CHANGES IN v0.2.1a
@@ -92,9 +113,10 @@ Technical base (no visible change for users):
 
 VERIFIED IN THIS VERSION
 ------------------------
-- Automated tests: updater 2080/0 (x64 and Win32, Release and Debug),
+- Automated tests: updater 2097/0 (x64 and Win32, Release and Debug),
   keyboard 227/0, input queue 39/0, favorites 88/0.
-- Installation of the signed release over a copy of v0.2.1a, with the old
+- Installation of the signed release (64-bit and 32-bit) over a copy of the
+  v0.2.1a executables placed in the new bin\x64 / bin\x86 layout, with the old
   viewer open (the updater waits), user files kept, a tampered update
   rejected and a downgrade refused (automatic end-to-end test, no network).
 

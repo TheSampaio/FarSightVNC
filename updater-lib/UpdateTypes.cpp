@@ -101,7 +101,7 @@ const char *buildArchitecture() {
 #if defined(_M_X64)
   return "x64";
 #elif defined(_M_IX86)
-  return "Win32";
+  return "x86";
 #else
   return "";
 #endif

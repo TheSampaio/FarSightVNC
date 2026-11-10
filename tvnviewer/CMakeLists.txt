@@ -37,6 +37,7 @@ add_executable(tvnviewer WIN32
   dpi-aware.manifest)
 
 fsv_configure_executable(tvnviewer)
+set_target_properties(tvnviewer PROPERTIES OUTPUT_NAME fsvnc-viewer)
 target_include_directories(tvnviewer PRIVATE ${FSV_ROOT})
 
 # The libraries of the ProjectReference items; comctl32 comes from AdditionalDependencies.

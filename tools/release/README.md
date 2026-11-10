@@ -17,14 +17,19 @@ the manifest grammar is in `updater-lib/Manifest.h`.
   that the zip holds exactly the same files with identical hashes. Any mismatch exits with code 1.
 - `Test-ReleaseScripts.ps1 [-TestExe <path>]`
   End-to-end check against `updater-test.exe` (default `build\bin\x64\Release\updater-test.exe`):
-  throw-away key, fake shipping folder and zip, manifest verified by the C++ code, tampering
-  rejected. Uses `%TEMP%` and cleans up.
+  throw-away key, fake shipping folder (`bin\x64`, `bin\x86`) and zip, manifest verified by the C++
+  code, tampering rejected. Uses `%TEMP%` and cleans up.
+- `Test-EndToEndInstall.ps1 -ReleaseDir <dir> -OldShipping <dir> [-Arch x64|x86]`
+  Installs the real signed release over a copy of an older version (waits for the running old
+  viewer, keeps user files, rejects a tampered staging, refuses a downgrade). `-OldShipping` is a
+  folder in the current layout or a legacy `x64\tvnviewer.exe` / `Win32\tvnviewer.exe` folder, from
+  which a `bin\x64` / `bin\x86` "old installation" is built. Uses `%TEMP%` and cleans up.
 
 ## Release assets (per GitHub release)
 
 | Asset | Content |
 |---|---|
-| `FarSightVNC-v<version>.zip` | the shipping layout (`x64/`, `Win32/`, `LICENSE.txt`, `README.txt`, `LEIAME.txt`) |
+| `FarSightVNC-v<version>.zip` | the shipping layout (`bin/x64/`, `bin/x86/` with `fsvnc-viewer.exe` and `fsvnc-updater.exe` each, `LICENSE.txt`, `README.txt`, `LEIAME.txt`) |
 | `farsightvnc-update.manifest` | signed manifest |
 | `farsightvnc-update.manifest.sig` | raw 64-byte P1363 signature of the manifest bytes |
 

@@ -361,17 +361,17 @@ void testExecutableVersion() {
   CHECK(!readExecutableVersion(notExe).has_value());
 
   const std::wstring updater =
-      joinPath(parentDirectory(currentModulePath()), L"FarSightUpdater.exe");
+      joinPath(parentDirectory(currentModulePath()), L"fsvnc-updater.exe");
   if (!fileExists(updater)) {
-    fsv::test::note("FarSightUpdater.exe not found next to updater-test.exe; "
+    fsv::test::note("fsvnc-updater.exe not found next to updater-test.exe; "
                     "readExecutableVersion on a real binary skipped (build farsight-updater first)");
     return;
   }
   const auto version = readExecutableVersion(updater);
   CHECK(version.has_value());
   if (version) {
-    std::printf("  FarSightUpdater.exe ProductVersion: %s\n", version->toString().c_str());
-    CHECK(*version >= Version{0, 3, 0, Channel::Alpha});
+    std::printf("  fsvnc-updater.exe ProductVersion: %s\n", version->toString().c_str());
+    CHECK(*version >= Version{1, 0, 0, Channel::Alpha});
   }
 }
 

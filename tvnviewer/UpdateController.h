@@ -44,7 +44,7 @@ private:
 };
 
 // Called by main() after the viewer has been destroyed: starts
-// FarSightUpdater.exe detached if an update is staged or an interrupted
+// fsvnc-updater.exe detached if an update is staged or an interrupted
 // installation must be repaired. Does nothing otherwise.
 void launchPendingUpdaterAtExit();
 

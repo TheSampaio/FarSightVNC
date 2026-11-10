@@ -1,7 +1,7 @@
 // Copyright (C) 2026 FarSightVNC contributors.
 // Licensed under the GNU GPL, version 2 or (at your option) any later version.
 //
-// Small file-system helpers shared by the viewer, FarSightUpdater and tests.
+// Small file-system helpers shared by the viewer, fsvnc-updater and tests.
 
 #pragma once
 

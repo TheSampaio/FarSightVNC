@@ -46,8 +46,16 @@ struct Version {
 
 using Sha256Digest = std::array<std::uint8_t, 32>;
 
-// The architecture this binary was compiled for: "x64", "Win32" or "" (other).
+// The architecture this binary was compiled for: "x64", "x86" or "" (other).
+// Matches the distribution folder names bin/x64 and bin/x86 (the MSBuild
+// platform "Win32" is only a build-output name).
 const char *buildArchitecture();
+
+// Output names and distribution layout (see docs/updater/DESIGN.md):
+//   <root>/bin/x64/fsvnc-viewer.exe, <root>/bin/x86/..., <root>/LICENSE.txt
+inline constexpr wchar_t kViewerExeName[] = L"fsvnc-viewer.exe";
+inline constexpr wchar_t kUpdaterExeName[] = L"fsvnc-updater.exe";
+inline constexpr wchar_t kBinDirName[] = L"bin";
 
 // Official update source (see docs/updater/DESIGN.md). Never configurable at
 // run time.

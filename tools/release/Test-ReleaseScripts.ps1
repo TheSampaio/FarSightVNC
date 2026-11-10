@@ -24,7 +24,7 @@ if (-not (Test-Path -LiteralPath $TestExe)) { throw "updater-test.exe not found:
 
 $keyScript = Join-Path $PSScriptRoot 'New-UpdateSigningKey.ps1'
 $manifestScript = Join-Path $PSScriptRoot 'New-UpdateManifest.ps1'
-$version = '0.3.0a'
+$version = '1.0.0a'
 $work = Join-Path ([System.IO.Path]::GetTempPath()) ('fsv-release-test-' + [Guid]::NewGuid().ToString('N'))
 $failures = 0
 
@@ -73,16 +73,16 @@ try {
   Assert-That (-not (Test-Path $insideRepo)) 'no key directory was created inside the repository'
 
   # --- fake shipping folder + zip
-  $ship = Join-Path $work 'FarSightVNC-v0.3.0a'
-  New-TestFile (Join-Path $ship 'x64\tvnviewer.exe') 150000 1
-  New-TestFile (Join-Path $ship 'x64\FarSightUpdater.exe') 40000 2
-  New-TestFile (Join-Path $ship 'Win32\tvnviewer.exe') 120000 3
-  New-TestFile (Join-Path $ship 'Win32\FarSightUpdater.exe') 30000 4
+  $ship = Join-Path $work 'FarSightVNC-v1.0.0a'
+  New-TestFile (Join-Path $ship 'bin\x64\fsvnc-viewer.exe') 150000 1
+  New-TestFile (Join-Path $ship 'bin\x64\fsvnc-updater.exe') 40000 2
+  New-TestFile (Join-Path $ship 'bin\x86\fsvnc-viewer.exe') 120000 3
+  New-TestFile (Join-Path $ship 'bin\x86\fsvnc-updater.exe') 30000 4
   [System.IO.File]::WriteAllText((Join-Path $ship 'LICENSE.txt'), "license`n")
   [System.IO.File]::WriteAllText((Join-Path $ship 'README.txt'), "readme`n")
   [System.IO.File]::WriteAllText((Join-Path $ship 'LEIAME.txt'), "leiame`n")
   Add-Type -AssemblyName System.IO.Compression.FileSystem
-  $zip = Join-Path $work 'FarSightVNC-v0.3.0a.zip'
+  $zip = Join-Path $work 'FarSightVNC-v1.0.0a.zip'
   [System.IO.Compression.ZipFile]::CreateFromDirectory($ship, $zip, [System.IO.Compression.CompressionLevel]::Optimal, $false)
 
   # --- manifest + signature
@@ -100,9 +100,9 @@ try {
   $lines = [System.Text.Encoding]::UTF8.GetString($manifestBytes).TrimEnd("`n").Split("`n")
   Assert-That ($lines[0] -ceq 'FarSightVNC-Update-Manifest 1') 'manifest header'
   Assert-That ($lines[1] -ceq "version $version") 'manifest version line'
-  Assert-That ($lines[2] -like 'package FarSightVNC-v0.3.0a.zip * *') 'manifest package line'
+  Assert-That ($lines[2] -like 'package FarSightVNC-v1.0.0a.zip * *') 'manifest package line'
   Assert-That (($lines | Where-Object { $_ -like 'file *' }).Count -eq 7) 'manifest lists 7 files'
-  Assert-That ($lines -contains ('file x64/tvnviewer.exe 150000 ' + (Get-FileHash (Join-Path $ship 'x64\tvnviewer.exe') -Algorithm SHA256).Hash.ToLowerInvariant())) 'x64/tvnviewer.exe line is correct'
+  Assert-That ($lines -contains ('file bin/x64/fsvnc-viewer.exe 150000 ' + (Get-FileHash (Join-Path $ship 'bin\x64\fsvnc-viewer.exe') -Algorithm SHA256).Hash.ToLowerInvariant())) 'bin/x64/fsvnc-viewer.exe line is correct'
 
   # --- C++ verifier accepts the PowerShell output
   Copy-Item $publicKey (Join-Path $out 'update-key-test.public.blob')
@@ -115,7 +115,7 @@ try {
   $bad = Join-Path $work 'out-tampered'
   Copy-Item -Recurse $out $bad
   $tamperedBytes = [System.IO.File]::ReadAllBytes((Join-Path $bad 'farsightvnc-update.manifest'))
-  $index = [System.Text.Encoding]::ASCII.GetString($tamperedBytes).IndexOf('tvnviewer.exe 150000') + 15
+  $index = [System.Text.Encoding]::ASCII.GetString($tamperedBytes).IndexOf('fsvnc-viewer.exe 150000') + 18
   $tamperedBytes[$index] = [byte][char]'9'
   [System.IO.File]::WriteAllBytes((Join-Path $bad 'farsightvnc-update.manifest'), $tamperedBytes)
   $env:FSV_PS_MANIFEST_DIR = $bad
@@ -125,7 +125,7 @@ try {
   Remove-Item Env:\FSV_PS_MANIFEST_DIR, Env:\FSV_PS_EXPECT_VERSION -ErrorAction SilentlyContinue
 
   # --- the manifest script fails loudly on bad input
-  Assert-That ((Invoke-Script $manifestScript ($manifestArgs[0..4] + @('v0.3.0a') + $manifestArgs[6..9])) -ne 0) 'rejects a version with a leading v'
+  Assert-That ((Invoke-Script $manifestScript ($manifestArgs[0..4] + @('v1.0.0a') + $manifestArgs[6..9])) -ne 0) 'rejects a version with a leading v'
   $badOut = Join-Path $work 'out-bad'
   $argsBadVersion = @('-ShippingDirectory', $ship, '-ZipPath', $zip, '-Version', '1.0', '-PrivateKeyPath', $privateKey, '-OutDirectory', $badOut)
   Assert-That ((Invoke-Script $manifestScript $argsBadVersion) -ne 0) 'rejects a malformed version'

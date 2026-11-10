@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.3.0a-blue" alt="Version 0.3.0a">
+  <img src="https://img.shields.io/badge/version-1.0.0a-blue" alt="Version 1.0.0a">
   <img src="https://img.shields.io/badge/status-alpha-orange" alt="Alpha status">
   <img src="https://img.shields.io/badge/platform-Windows-0078D4" alt="Platform: Windows">
   <img src="https://img.shields.io/badge/language-C%2B%2B-00599C" alt="Language: C++">
@@ -31,7 +31,7 @@ FarSightVNC is a **fork of TightVNC 2.8.90**, focused on improving the Windows V
 
 It keeps the native C++/Win32 foundation and RFB protocol implementation of TightVNC, with targeted changes rather than a rewrite. The repository also retains the upstream server, shared libraries and installer projects; FarSightVNC development currently centers on the **Viewer**.
 
-**Current version: v0.3.0a (alpha).** Features and behavior are still evolving. The original TightVNC version remains the upstream baseline, separate from FarSightVNC's own version number. See [MODIFICATIONS.md](MODIFICATIONS.md) for the dated modification history.
+**Current version: v1.0.0a (alpha).** Features and behavior are still evolving. The original TightVNC version remains the upstream baseline, separate from FarSightVNC's own version number. See [MODIFICATIONS.md](MODIFICATIONS.md) for the dated modification history.
 
 ## Highlights
 
@@ -50,17 +50,17 @@ The Viewer also retains TightVNC capabilities such as multiple RFB encodings, vi
 
 You need a running VNC server and a built Viewer executable. To build your own, follow [Building from source](#building-from-source).
 
-Launch `tvnviewer.exe`, enter the server address and connect. The executable keeps its upstream filename even though the application is branded FarSightVNC.
+Launch `fsvnc-viewer.exe` (`bin\x64` for 64-bit Windows, `bin\x86` for 32-bit Windows in the release zip), enter the server address and connect. **Breaking change in v1.0.0a:** the executable was `tvnviewer.exe` in earlier versions; update shortcuts and scripts that point to it. Settings, `.vnc` files and command-line options are unchanged.
 
 ```powershell
 # Open the connection dialog
-.\build\bin\x64\Release\tvnviewer.exe
+.\build\bin\x64\Release\fsvnc-viewer.exe
 
 # Connect using an explicit TCP port (double colon)
-.\build\bin\x64\Release\tvnviewer.exe 192.168.1.20::5900
+.\build\bin\x64\Release\fsvnc-viewer.exe 192.168.1.20::5900
 
 # Try the optional GPU presentation path
-.\build\bin\x64\Release\tvnviewer.exe -renderer=gpu 192.168.1.20::5900
+.\build\bin\x64\Release\fsvnc-viewer.exe -renderer=gpu 192.168.1.20::5900
 ```
 
 Renderer modes are `gdi`, `auto` and `gpu`. **GDI is the default**; GPU presentation does not move RFB decoding to the GPU. See [RenderSettings.h](tvnviewer/RenderSettings.h) for mode selection and configuration sources.
@@ -128,10 +128,10 @@ The script locates MSBuild through `vswhere` and builds the `tvnviewer` target i
 
 | Configuration | Viewer output |
 | --- | --- |
-| Release / x64 | `build\bin\x64\Release\tvnviewer.exe` |
-| Debug / x64 | `build\bin\x64\Debug\tvnviewer.exe` |
-| Release / Win32 | `build\bin\Win32\Release\tvnviewer.exe` |
-| Debug / Win32 | `build\bin\Win32\Debug\tvnviewer.exe` |
+| Release / x64 | `build\bin\x64\Release\fsvnc-viewer.exe` |
+| Debug / x64 | `build\bin\x64\Debug\fsvnc-viewer.exe` |
+| Release / Win32 | `build\bin\Win32\Release\fsvnc-viewer.exe` |
+| Debug / Win32 | `build\bin\Win32\Debug\fsvnc-viewer.exe` |
 
 Build logs are written to `build-logs/`.
 
@@ -157,13 +157,13 @@ The repository includes native regression projects and integration scripts. Choo
 .\build\bin\x64\Release\viewer-keyboard-test.exe
 
 # Keyboard end-to-end check against a local recording RFB server (Python 3)
-.\tools\keyboard-e2e-test.ps1 -Viewer .\build\bin\x64\Release\tvnviewer.exe
+.\tools\keyboard-e2e-test.ps1 -Viewer .\build\bin\x64\Release\fsvnc-viewer.exe
 
 # GPU presenter regression check (requires an existing Release/x64 build)
 .\tools\gpu-presenter-test.ps1
 
 # Decoder bounds regressions against a local fuzzing server (Python 3)
-.\tools\fuzz-test.ps1 -Regression -Viewer .\build\bin\x64\Release\tvnviewer.exe
+.\tools\fuzz-test.ps1 -Regression -Viewer .\build\bin\x64\Release\fsvnc-viewer.exe
 ```
 
 Additional projects cover input queue behavior (`viewer-input-queue-test`), keysyms (`viewer-keysym-test`) and favorites, toolbar and reconnection policies (`viewer-favorites-test`). Other scripts cover real-input keyboard checks, DPI/display behavior, connection smoke tests, latency measurements and long-running sessions.

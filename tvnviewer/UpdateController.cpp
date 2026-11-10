@@ -21,7 +21,6 @@ using namespace fsv::update;
 
 namespace {
 
-const wchar_t UPDATER_EXE_NAME[] = L"FarSightUpdater.exe";
 const size_t MAX_NOTES_BYTES = 64 * 1024;
 const DWORD PROGRESS_POST_INTERVAL_MS = 100;
 
@@ -655,11 +654,12 @@ void launchPendingUpdaterAtExit()
 
     // Run the updater from the state directory: it replaces the viewer folder.
     std::wstring binDir = joinPath(stateDir, L"bin");
-    std::wstring binExe = joinPath(binDir, UPDATER_EXE_NAME);
-    std::wstring source = joinPath(parentDirectory(viewerPath), UPDATER_EXE_NAME);
+    std::wstring binExe = joinPath(binDir, kUpdaterExeName);
+    std::wstring source = joinPath(parentDirectory(viewerPath), kUpdaterExeName);
     if (!fileExists(source) && install) {
-      std::wstring stagedArch = utf8ToWide(arch);
-      source = joinPath(joinPath(joinPath(pending, L"files"), stagedArch), UPDATER_EXE_NAME);
+      // Staged files keep the manifest layout: files/bin/<arch>/fsvnc-updater.exe.
+      std::wstring stagedDir = joinPath(joinPath(pending, L"files"), kBinDirName);
+      source = joinPath(joinPath(stagedDir, utf8ToWide(arch)), kUpdaterExeName);
     }
     if (!ensureDirectory(binDir)) {
       return;

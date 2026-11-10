@@ -7,10 +7,10 @@
 // size and SHA-256. Grammar (UTF-8, LF or CRLF, no other lines, single spaces):
 //
 //   FarSightVNC-Update-Manifest 1
-//   version 0.3.0a
-//   package FarSightVNC-v0.3.0a.zip <size> <sha256-hex>
-//   file x64/tvnviewer.exe <size> <sha256-hex>
-//   file x64/FarSightUpdater.exe <size> <sha256-hex>
+//   version 1.0.0a
+//   package FarSightVNC-v1.0.0a.zip <size> <sha256-hex>
+//   file bin/x64/fsvnc-viewer.exe <size> <sha256-hex>
+//   file bin/x64/fsvnc-updater.exe <size> <sha256-hex>
 //   ...
 
 #pragma once

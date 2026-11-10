@@ -1,11 +1,11 @@
-// Version resource of FarSightUpdater.exe. The binary is the same release as
+// Version resource of fsvnc-updater.exe. The binary is the same release as
 // the viewer; keep these numbers in step with tvnviewer.rc.
 
 #include <winver.h>
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 0,3,0,0
- PRODUCTVERSION 0,3,0,0
+ FILEVERSION 1,0,0,0
+ PRODUCTVERSION 1,0,0,0
  FILEFLAGSMASK 0x17L
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -22,12 +22,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "FarSightVNC contributors"
             VALUE "FileDescription", "FarSightVNC Updater"
-            VALUE "FileVersion", "0.3.0a"
-            VALUE "InternalName", "FarSightUpdater"
+            VALUE "FileVersion", "1.0.0a"
+            VALUE "InternalName", "fsvnc-updater"
             VALUE "LegalCopyright", "Copyright (C) 2026 FarSightVNC contributors. Licensed under the GNU GPL, version 2 or (at your option) any later version. Based on TightVNC Viewer 2.8.90."
-            VALUE "OriginalFilename", "FarSightUpdater.exe"
+            VALUE "OriginalFilename", "fsvnc-updater.exe"
             VALUE "ProductName", "FarSightVNC"
-            VALUE "ProductVersion", "0.3.0a"
+            VALUE "ProductVersion", "1.0.0a"
         END
     END
     BLOCK "VarFileInfo"

@@ -17,13 +17,13 @@
   Grammar: see updater-lib/Manifest.h.
 
 .PARAMETER ShippingDirectory
-  The folder that was zipped (x64\, Win32\, LICENSE.txt, README.txt, ...).
+  The folder that was zipped (bin\x64\, bin\x86\, LICENSE.txt, README.txt, ...).
 
 .PARAMETER ZipPath
-  The release zip, for example FarSightVNC-v0.3.0a.zip.
+  The release zip, for example FarSightVNC-v1.0.0a.zip.
 
 .PARAMETER Version
-  Release version without a leading 'v', for example 0.3.0a.
+  Release version without a leading 'v', for example 1.0.0a.
 
 .PARAMETER PrivateKeyPath
   update-key-<Id>.private.blob from New-UpdateSigningKey.ps1.
@@ -32,8 +32,8 @@
   Where the manifest and signature are written (default: the zip's folder).
 
 .EXAMPLE
-  .\tools\release\New-UpdateManifest.ps1 -ShippingDirectory $env:USERPROFILE\Desktop\FarSightVNC-v0.3.0a `
-    -ZipPath $env:USERPROFILE\Desktop\FarSightVNC-v0.3.0a.zip -Version 0.3.0a `
+  .\tools\release\New-UpdateManifest.ps1 -ShippingDirectory $env:USERPROFILE\Desktop\FarSightVNC-v1.0.0a `
+    -ZipPath $env:USERPROFILE\Desktop\FarSightVNC-v1.0.0a.zip -Version 1.0.0a `
     -PrivateKeyPath $env:USERPROFILE\.farsightvnc-signing\update-key-1.private.blob
 #>
 param(
