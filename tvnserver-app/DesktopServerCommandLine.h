@@ -45,7 +45,7 @@ public:
    * @param cmdLine command line to parse.
    * @throws Exception on fail.
    */
-  virtual void parse(const CommandLineArgs *cmdArgs) throw(Exception);
+  virtual void parse(const CommandLineArgs *cmdArgs);
 
   /**
    * Puts specified in command line path to log directory into output parameter.

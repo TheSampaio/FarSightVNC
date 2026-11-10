@@ -51,9 +51,9 @@ public:
   void toString(StringStorage *address) const;
 
   // Returns socket port number 
-  unsigned short SocketAddressIPv4::getPort() const;
+  unsigned short getPort() const;
 
-  static SocketAddressIPv4 resolve(const TCHAR *host, unsigned short port) throw(SocketException);
+  static SocketAddressIPv4 resolve(const TCHAR *host, unsigned short port);
 
 protected:
   WsaStartup m_wsaStartup;

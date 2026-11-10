@@ -65,8 +65,7 @@ public:
    * @return application exit code (0 means accept connection, 1 means reject connection).
    * @throws Exception on fail.
    */
-  static int execute(const TCHAR *peerAddr, bool acceptByDefault, DWORD timeOutSec)
-         throw(Exception);
+  static int execute(const TCHAR *peerAddr, bool acceptByDefault, DWORD timeOutSec);
 
 private:
   StringStorage m_cmdLine;

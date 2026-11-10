@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.1.1a-blue" alt="Version 0.1.1a">
+  <img src="https://img.shields.io/badge/version-1.0.0a-blue" alt="Version 1.0.0a">
   <img src="https://img.shields.io/badge/status-alpha-orange" alt="Alpha status">
   <img src="https://img.shields.io/badge/platform-Windows-0078D4" alt="Platform: Windows">
   <img src="https://img.shields.io/badge/language-C%2B%2B-00599C" alt="Language: C++">
@@ -31,7 +31,7 @@ FarSightVNC is a **fork of TightVNC 2.8.90**, focused on improving the Windows V
 
 It keeps the native C++/Win32 foundation and RFB protocol implementation of TightVNC, with targeted changes rather than a rewrite. The repository also retains the upstream server, shared libraries and installer projects; FarSightVNC development currently centers on the **Viewer**.
 
-**Current version: v0.1.1a (alpha).** Features and behavior are still evolving. The original TightVNC version remains the upstream baseline, separate from FarSightVNC's own version number. See [MODIFICATIONS.md](MODIFICATIONS.md) for the dated modification history.
+**Current version: v1.0.0a (alpha).** Features and behavior are still evolving. The original TightVNC version remains the upstream baseline, separate from FarSightVNC's own version number. See [MODIFICATIONS.md](MODIFICATIONS.md) for the dated modification history.
 
 ## Highlights
 
@@ -50,17 +50,17 @@ The Viewer also retains TightVNC capabilities such as multiple RFB encodings, vi
 
 You need a running VNC server and a built Viewer executable. To build your own, follow [Building from source](#building-from-source).
 
-Launch `tvnviewer.exe`, enter the server address and connect. The executable keeps its upstream filename even though the application is branded FarSightVNC.
+Launch `fsvncviewer.exe` (at the root of the release zip; 64-bit Windows 10/11 only), enter the server address and connect. **Breaking change in v1.0.0a:** the executable was `tvnviewer.exe` in earlier versions and the 32-bit version is no longer provided; update shortcuts and scripts that point to it. Settings, `.vnc` files and command-line options are unchanged.
 
 ```powershell
 # Open the connection dialog
-.\x64\Release\tvnviewer.exe
+.\build\bin\x64\Release\fsvncviewer.exe
 
 # Connect using an explicit TCP port (double colon)
-.\x64\Release\tvnviewer.exe 192.168.1.20::5900
+.\build\bin\x64\Release\fsvncviewer.exe 192.168.1.20::5900
 
 # Try the optional GPU presentation path
-.\x64\Release\tvnviewer.exe -renderer=gpu 192.168.1.20::5900
+.\build\bin\x64\Release\fsvncviewer.exe -renderer=gpu 192.168.1.20::5900
 ```
 
 Renderer modes are `gdi`, `auto` and `gpu`. **GDI is the default**; GPU presentation does not move RFB decoding to the GPU. See [RenderSettings.h](tvnviewer/RenderSettings.h) for mode selection and configuration sources.
@@ -97,7 +97,7 @@ The diagram shows the main session paths; configuration, file transfer and platf
 | [`gui/`](gui/), [`win-system/`](win-system/) | Native UI helpers, DPI utilities, keyboard hooks and Windows integration. |
 | [`client-config-lib/`](client-config-lib/), [`config-lib/`](config-lib/) | Viewer options, favorites, connection history and configuration infrastructure. |
 | [`ft-client-lib/`](ft-client-lib/), [`ft-common/`](ft-common/) | Client-side file transfer and shared transfer protocol code. |
-| [`zlib/`](zlib/), [`libjpeg/`](libjpeg/) | Bundled compression and JPEG dependencies. |
+| [`vendor/zlib/`](vendor/zlib/), [`vendor/libjpeg/`](vendor/libjpeg/) | Bundled compression and JPEG dependencies. |
 | `tvnserver/`, `tvnserver-app/`, `rfb-sconn/` | Retained upstream server implementation. |
 | [`tools/`](tools/), [`docs/`](docs/) | Build scripts, test servers, regression tools, measurements and engineering reports. |
 
@@ -120,7 +120,7 @@ From the repository root:
 # Build the Viewer and its dependencies: Release, 64-bit
 .\tools\build.ps1 -Configurations Release -Platforms x64
 
-# Build the default matrix: Release + Debug, x64 + Win32
+# Build the default matrix: Release + Debug, x64 (FarSightVNC is 64-bit only)
 .\tools\build.ps1
 ```
 
@@ -128,12 +128,24 @@ The script locates MSBuild through `vswhere` and builds the `tvnviewer` target i
 
 | Configuration | Viewer output |
 | --- | --- |
-| Release / x64 | `x64\Release\tvnviewer.exe` |
-| Debug / x64 | `x64\Debug\tvnviewer.exe` |
-| Release / Win32 | `Release\tvnviewer.exe` |
-| Debug / Win32 | `Debug\tvnviewer.exe` |
+| Release / x64 | `build\bin\x64\Release\fsvncviewer.exe` |
+| Debug / x64 | `build\bin\x64\Debug\fsvncviewer.exe` |
+
+FarSightVNC is 64-bit only. The solution still contains the upstream Win32 configurations, but they are unsupported: they are not built, tested or shipped, and a 32-bit build has the updater unavailable.
 
 Build logs are written to `build-logs/`.
+
+### Build with CMake (experimental)
+
+A CMake build of the Viewer, its libraries (including `vendor/zlib` and `vendor/libjpeg`) and the three viewer tests runs alongside MSBuild. **`tightvnc2017.sln` remains the official build**; the server projects are not covered. It needs CMake 4.2 or later (for the `Visual Studio 18 2026` generator; the `CMakeLists.txt` files themselves need 3.25) and C++20 (`/std:c++20`).
+
+```powershell
+cmake --preset x64-release          # also: x64-debug, win32-release, win32-debug
+cmake --build --preset x64-release --parallel
+ctest --preset x64-release          # viewer-keyboard-test, viewer-input-queue-test, viewer-favorites-test
+```
+
+Output goes to `build\cmake\<preset>\bin\<Configuration>\` (separate from `build\bin` and `build\obj`). Precompiled headers (`cmake/fsv_pch.h`: `util/winhdr.h` plus the STL headers in use) are on by default; pass `-DFSV_USE_PCH=OFF` at configure time to compare. Sources whose include order the header would change are excluded from it, listed in each `CMakeLists.txt`. Each PCH target keeps its own `.pch` (about 100 MB per library in Debug), so a Debug preset needs roughly 2 GB of disk.
 
 ## Testing
 
@@ -142,16 +154,16 @@ The repository includes native regression projects and integration scripts. Choo
 ```powershell
 # Build and run the keyboard regression executable
 .\tools\build.ps1 -Project viewer-keyboard-test -Configurations Release -Platforms x64
-.\x64\Release\viewer-keyboard-test.exe
+.\build\bin\x64\Release\viewer-keyboard-test.exe
 
 # Keyboard end-to-end check against a local recording RFB server (Python 3)
-.\tools\keyboard-e2e-test.ps1 -Viewer .\x64\Release\tvnviewer.exe
+.\tools\keyboard-e2e-test.ps1 -Viewer .\build\bin\x64\Release\fsvncviewer.exe
 
 # GPU presenter regression check (requires an existing Release/x64 build)
 .\tools\gpu-presenter-test.ps1
 
 # Decoder bounds regressions against a local fuzzing server (Python 3)
-.\tools\fuzz-test.ps1 -Regression -Viewer .\x64\Release\tvnviewer.exe
+.\tools\fuzz-test.ps1 -Regression -Viewer .\build\bin\x64\Release\fsvncviewer.exe
 ```
 
 Additional projects cover input queue behavior (`viewer-input-queue-test`), keysyms (`viewer-keysym-test`) and favorites, toolbar and reconnection policies (`viewer-favorites-test`). Other scripts cover real-input keyboard checks, DPI/display behavior, connection smoke tests, latency measurements and long-running sessions.
@@ -174,7 +186,7 @@ This project is derived from **[TightVNC](https://www.tightvnc.com/) 2.8.90**, C
 
 Bundled third-party components retain their own license terms:
 
-- **zlib** — see [`zlib/LICENSE`](zlib/LICENSE).
-- **Independent JPEG Group's JPEG library** — see the **LEGAL ISSUES** section of [`libjpeg/README`](libjpeg/README).
+- **zlib** — see [`vendor/zlib/LICENSE`](vendor/zlib/LICENSE).
+- **Independent JPEG Group's JPEG library** — see the **LEGAL ISSUES** section of [`vendor/libjpeg/README`](vendor/libjpeg/README).
 
 The software is provided **without warranty**, as described in the license. Thanks to the TightVNC authors and the open-source projects that make this fork possible.

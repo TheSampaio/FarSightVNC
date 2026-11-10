@@ -47,7 +47,7 @@ public:
    * @throws Exception when cannot create mutex or when throwIfExist flag is set
    * and mutex already exist.
    */
-  GlobalMutex(const TCHAR *name = 0, bool interSession = false, bool throwIfExist = false) throw(Exception);
+  GlobalMutex(const TCHAR *name = 0, bool interSession = false, bool throwIfExist = false);
 
   /**
    * Deletes global mutex.

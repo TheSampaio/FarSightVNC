@@ -34,7 +34,7 @@ public:
   Deflater();
   ~Deflater();
 
-  void deflate() throw(ZLibException);
+  void deflate();
 protected:
   z_stream m_zlibStream;
 };

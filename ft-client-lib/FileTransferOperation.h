@@ -68,7 +68,7 @@ public:
   // Method must be overrided by child classes.
   //
 
-  virtual void start() throw(IOException) = 0;
+  virtual void start() = 0;
 
   //
   // Sets terminating flag to true in this operation.

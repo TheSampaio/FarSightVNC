@@ -45,7 +45,7 @@ public:
    * Creates TightVNC configuration registry entry security attributes.
    * @throws SystemException if failed to create security attributes.
    */
-  RegistrySecurityAttributes() throw(SystemException);
+  RegistrySecurityAttributes();
   virtual ~RegistrySecurityAttributes();
 
   /**

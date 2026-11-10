@@ -13,7 +13,7 @@
   server, desktop content and network conditions.
 
 .EXAMPLE
-  .\tools\measure-baseline.ps1 -Viewers @{ built = '.\x64\Release\tvnviewer.exe'; official = 'C:\...\tvnviewer.exe' } -Password <test password>
+  .\tools\measure-baseline.ps1 -Viewers @{ built = '.\build\bin\x64\Release\fsvncviewer.exe'; official = 'C:\...\tvnviewer.exe' } -Password <test password>
 #>
 param(
   [Parameter(Mandatory = $true)][hashtable]$Viewers,

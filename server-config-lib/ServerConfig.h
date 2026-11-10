@@ -73,7 +73,7 @@ public:
    * @throws Exception on io error.
    * @fixme stub.
    */
-  void serialize(DataOutputStream *output) throw(Exception);
+  void serialize(DataOutputStream *output);
 
   /**
    * Deserializes server config from input stream.
@@ -81,7 +81,7 @@ public:
    * @throws Exception on io error.
    * @fixme stub.
    */
-  void deserialize(DataInputStream *input) throw(Exception);
+  void deserialize(DataInputStream *input);
 
   //
   // Inherited from Lockable abstract class.

@@ -16,10 +16,10 @@
   only; the history entry of the test host is removed when this run created it.
 
 .EXAMPLE
-  .\tools\keyboard-sendinput-test.ps1 -Viewer .\x64\Release\tvnviewer.exe
+  .\tools\keyboard-sendinput-test.ps1 -Viewer .\build\bin\x64\Release\fsvncviewer.exe
 #>
 param(
-  [string]$Viewer = (Join-Path $PSScriptRoot '..\x64\Release\tvnviewer.exe'),
+  [string]$Viewer = (Join-Path $PSScriptRoot '..\build\bin\x64\Release\fsvncviewer.exe'),
   [int]$Port = 5922,
   [string]$Python = 'python',
   [int]$StepDelayMs = 80

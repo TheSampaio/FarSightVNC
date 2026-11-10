@@ -43,7 +43,7 @@ public:
    * @param parameters execute parameters.
    * @throws SystemException on fail.
    */
-  static void runAsAdmin(const TCHAR *pathToFile, const TCHAR *parameters) throw(SystemException);
+  static void runAsAdmin(const TCHAR *pathToFile, const TCHAR *parameters);
 
   /**
    * Opens file with default action specified in Windows.
@@ -54,7 +54,7 @@ public:
    */
   static void open(const TCHAR *file,
                    const TCHAR *parameters,
-                   const TCHAR *workDirectory) throw(SystemException);
+                   const TCHAR *workDirectory);
 private:
   /**
    * Don't allow instanizing of class.

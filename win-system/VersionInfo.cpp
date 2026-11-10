@@ -57,7 +57,7 @@ VersionInfo::VersionInfo(const TCHAR *pathToFile)
   // Convert special numbers used for beta versions (third number > 100).
   // 2.0.105.0 should be considered a beta version and convert to 2.1beta5,
   // 1.99.101 converts to 2.0beta1, 1.99.101.23 converts to 2.0beta1.23 etc.
-  TCHAR *secondDelimiter = _T(".");
+  const TCHAR *secondDelimiter = _T(".");
   if (c > 100) {
     secondDelimiter = _T("beta");
     c -= 100;

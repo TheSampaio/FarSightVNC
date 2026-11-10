@@ -34,8 +34,8 @@ public:
   HttpReply(DataOutputStream *dataOutput);
   virtual ~HttpReply();
 
-  void send200() throw(IOException);
-  void send404() throw(IOException);
+  void send200();
+  void send404();
 
 protected:
   DataOutputStream *m_dataOutput;

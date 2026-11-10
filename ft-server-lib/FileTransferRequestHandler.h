@@ -127,7 +127,7 @@ protected:
    * for example, winlogon desktop is active) or access denied (for example,
    * when view-only mode is enabled).
    */
-  void checkAccess() throw(SystemException);
+  void checkAccess();
 
 protected:
   //

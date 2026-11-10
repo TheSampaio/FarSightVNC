@@ -27,9 +27,9 @@
 
 #include <vector>
 
-using namespace std;
-
 #include "util/StringStorage.h"
+
+using namespace std;
 
 typedef vector<StringStorage> StringVector;
 

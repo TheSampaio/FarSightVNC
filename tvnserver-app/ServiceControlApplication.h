@@ -64,27 +64,26 @@ private:
    * used to avoid infinite elevation loop).
    * @throws SystemException on failure.
    */
-  void runElevatedInstance() const throw(SystemException);
+  void runElevatedInstance() const;
   /**
    * Perform the action specified in cmdLine (install, reinstall, remove,
    * start or stop the service).
    * @param cmdLine pointer to the parsed command line.
    * @throws SystemException on failure.
    */
-  void executeCommand(const ServiceControlCommandLine *cmdLine) const
-    throw(SystemException);
+  void executeCommand(const ServiceControlCommandLine *cmdLine) const;
   /**
    * Writes tvncontrol entry to registry to start it in every session.
    * @throws SystemException when failed to write to registry.
    */
   // FIXME: Move this function to TvnService, call from TvnService::install().
-  void setTvnControlStartEntry() const throw(SystemException);
+  void setTvnControlStartEntry() const;
   /**
    * Removes tvncontrol start entry from registry.
    * @throws SystemException when failed delete registry key.
    */
   // FIXME: Move this function to TvnService, call from TvnService::remove().
-  void removeTvnControlStartEntry() const throw(SystemException);
+  void removeTvnControlStartEntry() const;
   /**
    * Report an error using error description from a SCMClientException object.
    * @param cmdLine pointer to command line parser.

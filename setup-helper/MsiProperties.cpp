@@ -40,7 +40,8 @@ void MsiProperties::getValue(const TCHAR *name, StringStorage *out)
 {
   out->setString(_T(""));
   DWORD charCount = 0;
-  UINT retVal = MsiGetProperty(m_handle, name, _T(""), &charCount);
+  TCHAR emptyValue[] = _T("");
+  UINT retVal = MsiGetProperty(m_handle, name, emptyValue, &charCount);
   if (retVal == ERROR_MORE_DATA) {
     charCount++;
     std::vector<TCHAR> value(charCount);

@@ -16,6 +16,12 @@ Encodings: tight, zrle, hextile, rre, copyrect, richcursor, desktopsize.
 --scenario sends a fixed, hand-written sequence instead (regression cases for
 defects found by fuzzing).
 
+--name-length N runs a handshake test instead: ServerInit declares a desktop
+name of N bytes (decimal or 0x..., up to 0xFFFFFFFF) and sends --name-bytes of
+them (default: N; the name is the letter "N" repeated). If fewer bytes than
+declared are sent the server closes the connection right after them. After the
+handshake it answers update requests with empty FramebufferUpdates.
+
 One connection is served. The server stops when the client disconnects, after
 --messages updates plus --linger seconds, or after --duration seconds. It
 prints "LISTENING 127.0.0.1:<port>" when ready and one "DONE ..." line with the
@@ -723,6 +729,9 @@ class Scenario:
 
     BUILDERS = {}
 
+    def empty_update(self):
+        return [self.update()]
+
     def __init__(self, name, width, height, pf):
         self.name, self.w, self.h, self.pf = name, width, height, pf
         self.descs = []
@@ -747,12 +756,26 @@ class Scenario:
         body = b'\x80' + self.pf.tight_cpixel((0, 255, 0))
         return [self.update(header(0, self.h, self.w, 0, ENCODINGS['tight']) + body)]
 
+    def serverinit_0x0(self):
+        # ServerInit declares a 0x0 frame buffer (the window never got a pixel format: the
+        # inherited FrameBuffer::setColor looped forever). The session must then follow a valid
+        # DesktopSize (64x48) and keep drawing: a red, then a blue full-frame Raw rectangle.
+        w, h = SCENARIO_FB
+        size = header(0, 0, w, h, ENCODINGS['desktopsize'])
+        red = header(0, 0, w, h, ENCODINGS['raw']) + self.pf.pixel((255, 0, 0)) * (w * h)
+        blue = header(0, 0, w, h, ENCODINGS['raw']) + self.pf.pixel((0, 0, 255)) * (w * h)
+        return [self.update(), self.update(size, red), self.update(blue)]
+
 
 Scenario.BUILDERS = {
     'fillrect-rre-bottom-edge': Scenario.fillrect_rre_bottom_edge,
     'fillrect-tight-bottom-edge': Scenario.fillrect_tight_bottom_edge,
+    'empty-update': Scenario.empty_update,
+    'serverinit-0x0': Scenario.serverinit_0x0,
 }
 SCENARIO_FB = (64, 48)
+# Scenarios whose ServerInit frame buffer differs from SCENARIO_FB.
+SCENARIO_SERVERINIT_FB = {'serverinit-0x0': (0, 0)}
 
 
 def recv_exact(sock, count):
@@ -800,7 +823,7 @@ class Session:
         self.closed.set()
 
 
-def handshake(sock, width, height, pf):
+def handshake(sock, width, height, pf, name_length=None, name_bytes=None):
     sock.sendall(b'RFB 003.008\n')
     version = recv_exact(sock, 12)
     if version[:4] != b'RFB ':
@@ -815,8 +838,17 @@ def handshake(sock, width, height, pf):
     else:
         sock.sendall(struct.pack('>I', 1))
     recv_exact(sock, 1)
-    name = b'FarSightVNC fuzz server'
-    sock.sendall(struct.pack('>HH', width, height) + pf.pack() + struct.pack('>I', len(name)) + name)
+    if name_length is None:
+        name = b'FarSightVNC fuzz server'
+        sock.sendall(struct.pack('>HH', width, height) + pf.pack() + struct.pack('>I', len(name)) + name)
+        return
+    sock.sendall(struct.pack('>HH', width, height) + pf.pack() + struct.pack('>I', name_length))
+    remaining = name_length if name_bytes is None else name_bytes
+    block = b'N' * (1 << 16)
+    while remaining > 0:
+        count = min(remaining, len(block))
+        sock.sendall(block[:count])
+        remaining -= count
 
 
 def main():
@@ -826,6 +858,10 @@ def main():
     parser.add_argument('--seed', type=int)
     parser.add_argument('--scenario', choices=sorted(Scenario.BUILDERS),
                         help='send a fixed regression sequence instead of --encoding/--seed')
+    parser.add_argument('--name-length', type=lambda v: int(v, 0), metavar='N',
+                        help='handshake test: declared desktop name length in bytes (0..0xFFFFFFFF)')
+    parser.add_argument('--name-bytes', type=lambda v: int(v, 0), metavar='N',
+                        help='with --name-length: bytes of the name actually sent (default N)')
     parser.add_argument('--messages', type=int, default=25, help='updates to send (default 25)')
     parser.add_argument('--wait', type=float, default=0.3, help='max seconds to wait for each update request')
     parser.add_argument('--linger', type=float, default=0.8, help='seconds to keep the socket open at the end')
@@ -834,11 +870,23 @@ def main():
     if not 1024 <= args.port <= 65535:
         parser.error('invalid port')
 
+    if args.name_length is not None:
+        if not 0 <= args.name_length <= 0xFFFFFFFF:
+            parser.error('--name-length must be in 0..0xFFFFFFFF')
+        if args.name_bytes is not None and not 0 <= args.name_bytes <= args.name_length:
+            parser.error('--name-bytes must be in 0..--name-length')
+        args.scenario = 'empty-update'
+    elif args.name_bytes is not None:
+        parser.error('--name-bytes needs --name-length')
+
     if args.scenario:
-        width, height = SCENARIO_FB
+        width, height = SCENARIO_SERVERINIT_FB.get(args.scenario, SCENARIO_FB)
         pf = SERVER_PIXEL_FORMATS[0]
         fuzzer = Scenario(args.scenario, width, height, pf)
         label = 'scenario=%s' % args.scenario
+        if args.name_length is not None:
+            label = 'name-length=%d name-bytes=%d' % (
+                args.name_length, args.name_length if args.name_bytes is None else args.name_bytes)
     else:
         if args.encoding is None or args.seed is None:
             parser.error('--encoding and --seed are required without --scenario')
@@ -869,7 +917,10 @@ def main():
     sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
     sent, end = 0, 'completed'
     try:
-        handshake(sock, width, height, pf)
+        handshake(sock, width, height, pf, args.name_length, args.name_bytes)
+        if args.name_bytes is not None and args.name_bytes < args.name_length:
+            end = 'name cut short'
+            raise ConnectionError(end)
         session = Session(sock, fuzzer)
         threading.Thread(target=session.read_loop, daemon=True).start()
         session.requests.acquire(timeout=3.0)      # first FramebufferUpdateRequest

@@ -33,7 +33,7 @@ public:
   CommonControlsEx();
   virtual ~CommonControlsEx();
 
-  static void init() throw(Exception);
+  static void init();
 };
 
 #endif

@@ -149,7 +149,7 @@ void MirrorDriverClient::open()
   m_isDriverOpened = true;
 }
 
-void MirrorDriverClient::extractDeviceInfo(TCHAR *driverName)
+void MirrorDriverClient::extractDeviceInfo(const TCHAR *driverName)
 {
   memset(&m_deviceInfo, 0, sizeof(m_deviceInfo));
   m_deviceInfo.cb = sizeof(m_deviceInfo);
@@ -175,7 +175,7 @@ void MirrorDriverClient::extractDeviceInfo(TCHAR *driverName)
   }
 }
 
-void MirrorDriverClient::openDeviceRegKey(TCHAR *miniportName)
+void MirrorDriverClient::openDeviceRegKey(const TCHAR *miniportName)
 {
   StringStorage deviceKey(m_deviceInfo.DeviceKey);
   deviceKey.toUpperCase();

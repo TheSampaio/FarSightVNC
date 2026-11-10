@@ -40,7 +40,7 @@ public:
                               const TCHAR *pathToTargetRoot);
   virtual ~RemoteFolderCreateOperation();
 
-  virtual void start() throw(IOException);
+  virtual void start();
 
 protected:
   virtual void onMkdirReply(DataInputStream *input);

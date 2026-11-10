@@ -57,7 +57,7 @@ public:
    * Flushes inner buffer to real output stream.
    * @throws IOException on error.
    */
-  virtual void flush() throw(IOException);
+  virtual void flush();
 
 private:
   /**

@@ -55,7 +55,8 @@ UpdateSender::UpdateSender(RfbCodeRegistrator *codeRegtor,
   m_cursorUpdates(log)
 {
   // FIXME: argument must be defined
-  m_updateKeeper = new UpdateKeeper(&Rect());
+  Rect borderRect;
+  m_updateKeeper = new UpdateKeeper(&borderRect);
 
   // Capabilities
   codeRegtor->addEncCap(EncodingDefs::COPYRECT,          VendorDefs::STANDARD,
@@ -135,7 +136,8 @@ void UpdateSender::init(const Dimension *viewPortDimension,
     m_clientDim = *viewPortDimension;
   }
   m_lastViewPortDim = *viewPortDimension;
-  m_updateKeeper->setBorderRect(&viewPortDimension->getRect());
+  const Rect viewPortRect = viewPortDimension->getRect();
+  m_updateKeeper->setBorderRect(&viewPortRect);
 }
 
 void UpdateSender::newUpdates(const UpdateContainer *updateContainer,
@@ -249,7 +251,8 @@ void UpdateSender::sendFbInClientDim(const EncodeOptions *encodeOptions,
   blankFrameBuffer.setColor(0, 0, 0);
   blankFrameBuffer.copyFrom(fb, 0, 0);
 
-  Region region(&dim->getRect());
+  const Rect dimRect = dim->getRect();
+  Region region(&dimRect);
   std::vector<Rect> rects;
   splitRegion(m_enbox.getEncoder(), &region, &rects, &blankFrameBuffer, encodeOptions);
 
@@ -273,7 +276,8 @@ void UpdateSender::sendCursorShapeUpdate(const PixelFormat *fmt,
 
   FrameBuffer fbConverted;
   fbConverted.setProperties(&dim, fmt);
-  m_pixelConverter.convert(&dim.getRect(), &fbConverted,
+  const Rect dimRect = dim.getRect();
+  m_pixelConverter.convert(&dimRect, &fbConverted,
                            cursorShape->getPixels());
 
   if (fbConverted.getBufferSize()) {
@@ -400,10 +404,11 @@ void UpdateSender::sendUpdate()
       m_clientDim = m_lastViewPortDim;
       clientDim = m_clientDim;
     } 
-    m_updateKeeper->setBorderRect(&lastViewPortDim.getRect());
-    updCont.changedRegion.crop(&lastViewPortDim.getRect());
+    const Rect lastViewPortRect = lastViewPortDim.getRect();
+    m_updateKeeper->setBorderRect(&lastViewPortRect);
+    updCont.changedRegion.crop(&lastViewPortRect);
     // Dazzle changedRegion
-    updCont.changedRegion.addRect(&lastViewPortDim.getRect());
+    updCont.changedRegion.addRect(&lastViewPortRect);
     m_updateKeeper->dazzleChangedReg();
 	m_updateKeeper->setCursorPosChanged();
 	m_updateKeeper->setCursorShapeChanged();
@@ -436,8 +441,9 @@ void UpdateSender::sendUpdate()
       sendNewFBSize(&lastViewPortDim, encodeOptions.desktopConfigurationEnabled());
     } else {
       m_log->debug(_T("Desktop resize is disabled, sending blank screen"));
+      const PixelFormat frameBufferPixelFormat = frameBuffer->getPixelFormat();
       sendFbInClientDim(&encodeOptions, frameBuffer, &clientDim,
-                        &frameBuffer->getPixelFormat());
+                        &frameBufferPixelFormat);
     }
     // FIXME: "Dazzle" does not seem like a good word here.
     m_log->debug(_T("Dazzle changed region"));
@@ -951,7 +957,8 @@ void UpdateSender::updateFrameBuffer(UpdateContainer *updCont,
   Region changedAndCopyRgns = updCont->changedRegion;
   changedAndCopyRgns.add(&updCont->copiedRegion);
   changedAndCopyRgns.add(&updCont->videoRegion);
-  changedAndCopyRgns.addRect(&m_cursorUpdates.getBackgroundRect());
+  const Rect backgroundRect = m_cursorUpdates.getBackgroundRect();
+  changedAndCopyRgns.addRect(&backgroundRect);
   {
     AutoLock al(&m_reqRectLocMut);
     changedAndCopyRgns.add(&m_requestedFullReg);

@@ -46,7 +46,7 @@ public:
   Impersonates calling process as user that logged on current console session.
   @throws SystemException if impersonation fails.
   */
-  virtual void impersonateAsLoggedUser() throw(SystemException);
+  virtual void impersonateAsLoggedUser();
 
   /**
   Impersonates calling process as user with given token.
@@ -58,7 +58,7 @@ public:
   Cancels effect of impersonateAsLoggedUser method call.
   @throws SystemException on fail.
   */
-  virtual void revertToSelf() throw(SystemException);
+  virtual void revertToSelf();
 
   virtual bool sessionIsLocked(bool rdpEnabled);
 

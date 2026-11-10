@@ -38,13 +38,12 @@ public:
   /**
    * Doesn't lock gate.
    */
-  ControlAuth(ControlGate *gate, const TCHAR *password)
-    throw(IOException, ControlAuthException, Exception);
+  ControlAuth(ControlGate *gate, const TCHAR *password);
 
   virtual ~ControlAuth();
 
 protected:
-  void authRfb() throw(IOException, ControlAuthException);
+  void authRfb();
 
 protected:
   ControlGate *m_gate;

@@ -29,6 +29,7 @@
 
 #include "io-lib/DataInputStream.h"
 #include "util/Inflater.h"
+#include "rfb/PixelFormat.h"
 
 class ZrleDecoder : public DecoderOfRectangle
 {
@@ -44,6 +45,24 @@ protected:
                       FrameBuffer *frameBuffer,
                       const Rect *dstRect);
 
+
+  //
+  // Computes m_pixelSize, m_cpixelSize and m_cpixelOffset for the pixel
+  // format of the frame buffer (RFB CPIXEL, see the .cpp).
+  // Throws Exception for a format with an unsupported bits per pixel.
+  //
+  void setPixelLayout(const PixelFormat &pxFormat);
+
+  // Expands one CPIXEL (m_cpixelSize bytes) into a frame buffer pixel
+  // (m_pixelSize bytes, the unused byte is 0).
+  void expandPixel(const char *cpixel, char *pixel) const;
+
+  // Reads one CPIXEL from input as a frame buffer pixel (m_pixelSize bytes).
+  void readPixel(DataInputStream *input, char *pixel);
+
+  // Stores a frame buffer pixel at pixel index indexPixel of a tile buffer;
+  // throws Exception instead of writing past the end of the buffer.
+  void putPixel(vector<char> &pixels, size_t indexPixel, const char *pixel) const;
 
   void readAndInflate(RfbInputGate *input, size_t maximalUnpackedSize);
 
@@ -83,8 +102,15 @@ protected:
                 const vector<char> *pixels);
 
   Inflater m_inflater;
-  size_t m_bytesPerPixel;
-  size_t m_numberFirstByte;
+
+  // Frame buffer bytes per pixel (1, 2 or 4). Tiles and palettes hold pixels
+  // of this size.
+  size_t m_pixelSize;
+  // Bytes per CPIXEL in the stream (1, 2, 3 or 4).
+  size_t m_cpixelSize;
+  // Offset of the first CPIXEL byte inside a frame buffer pixel in memory:
+  // 0 or 1 (1 when the 3 byte CPIXEL occupies bytes 1..3 of the 4 byte pixel).
+  size_t m_cpixelOffset;
 
 private:
   static const int TILE_SIZE = 64;

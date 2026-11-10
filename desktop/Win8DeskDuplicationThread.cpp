@@ -176,8 +176,9 @@ void Win8DeskDuplication::processMoveRects(size_t moveCount, size_t out)
     sourceRect = destinationRect;
     POINT srcPoint = m_moveRects[iRect].SourcePoint;
     sourceRect.setLocation(srcPoint.x, srcPoint.y);
-    rotateRectInsideStage(&destinationRect, &getStageDimension(out), rotation);
-    rotateRectInsideStage(&sourceRect, &getStageDimension(out), rotation);
+    const Dimension stageDimension = getStageDimension(out);
+    rotateRectInsideStage(&destinationRect, &stageDimension, rotation);
+    rotateRectInsideStage(&sourceRect, &stageDimension, rotation);
     // Translate the rect and point to the frame buffer coordinates.
     destinationRect.move(targetRect.left, targetRect.top);
     sourceRect.move(targetRect.left, targetRect.top);
@@ -232,7 +233,8 @@ void Win8DeskDuplication::processDirtyRects(size_t dirtyCount,
     m_log->debug(_T("Destination dirty rect = %d, %d, %dx%d"), dstRect.left, dstRect.top, dstRect.getWidth(), dstRect.getHeight());
 
     stageDim.width = static_cast<int> (autoMapSurface.getStride() / 4);
-    m_auxiliaryFrameBuffer.setPropertiesWithoutResize(&stageDim, &m_targetFb->getPixelFormat());
+    const PixelFormat targetPixelFormat = m_targetFb->getPixelFormat();
+    m_auxiliaryFrameBuffer.setPropertiesWithoutResize(&stageDim, &targetPixelFormat);
     m_auxiliaryFrameBuffer.setBuffer(autoMapSurface.getBuffer());
     switch (rotation)
     {

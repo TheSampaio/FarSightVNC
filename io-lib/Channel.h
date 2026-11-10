@@ -47,7 +47,7 @@ public:
    * @throw Exception on error.
    * @fixme why Exception, but not IOException?
    */
-  virtual void close() throw(Exception)= 0;
+  virtual void close()= 0;
 };
 
 #endif

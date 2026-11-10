@@ -37,12 +37,12 @@ public:
 
   virtual void sendRectangle(const Rect *rect,
                              const FrameBuffer *serverFb,
-                             const EncodeOptions *options) throw(IOException);
+                             const EncodeOptions *options);
 
 private:
   template <class PIXEL_T>
     void hextileFunction(const Rect &r,
-                         const FrameBuffer *frameBuffer) throw(IOException);
+                         const FrameBuffer *frameBuffer);
 };
 
 #endif // __RFB_HEXTILE_ENCODER_H_INCLUDED__

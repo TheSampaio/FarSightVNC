@@ -29,6 +29,7 @@
 #include "ConnectionListener.h"
 #include "ViewerCmdLine.h"
 #include "util/ResourceLoader.h"
+#include "UpdateController.h"
 
 int APIENTRY _tWinMain(HINSTANCE hInstance, HINSTANCE,
                        LPTSTR lpCmdLine, int nCmdShow)
@@ -94,6 +95,10 @@ int APIENTRY _tWinMain(HINSTANCE hInstance, HINSTANCE,
                MB_OK | MB_ICONERROR);
     logWriter.debug(ex.getMessage());
   }
+
+  // TvnViewer is destroyed here: hand over to fsvncupdater if an update is
+  // staged (or an interrupted one must be repaired). Never blocks.
+  launchPendingUpdaterAtExit();
 
   return result;
 }

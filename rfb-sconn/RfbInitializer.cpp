@@ -98,7 +98,8 @@ void RfbInitializer::initVersion()
     } else {
       m_output->writeUInt8(0);
     }
-    AnsiStringStorage reason(&StringStorage(e.getMessage()));
+    StringStorage message(e.getMessage());
+    AnsiStringStorage reason(&message);
     unsigned int reasonLen = (unsigned int)reason.getLength();
     _ASSERT(reasonLen == reason.getLength());
 
@@ -261,7 +262,8 @@ void RfbInitializer::initAuthenticate()
     // FIXME: The authentication result must be sent in protocols 3.3 and 3.7
     //        as well, unless the authentication was set to AuthDefs::NONE.
     if (m_minorVerNum >= 8) {
-      AnsiStringStorage reason(&StringStorage(e.getMessage()));
+      StringStorage message(e.getMessage());
+      AnsiStringStorage reason(&message);
       unsigned int reasonLen = (unsigned int)reason.getLength();
       _ASSERT(reasonLen == reason.getLength());
 

@@ -30,7 +30,8 @@
 
 Utf8StringStorage::Utf8StringStorage()
 {
-  fromStringStorage(&StringStorage(_T("")));
+  StringStorage emptyString(_T(""));
+  fromStringStorage(&emptyString);
 }
 
 Utf8StringStorage::Utf8StringStorage(const std::vector<char> *utf8Buffer)

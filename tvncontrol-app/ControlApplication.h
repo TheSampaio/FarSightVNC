@@ -106,7 +106,7 @@ protected:
    *   failures (together with the connectService flag).
    * @throws Exception on errors.
    */
-  void connect(bool controlService, bool slave) throw(Exception);
+  void connect(bool controlService, bool slave);
 
   /**
    * Inherited from Thread class.

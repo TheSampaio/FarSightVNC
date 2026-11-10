@@ -79,8 +79,8 @@ private:
 
   void dispose();
 
-  void extractDeviceInfo(TCHAR *driverName);
-  void openDeviceRegKey(TCHAR *miniportName);
+  void extractDeviceInfo(const TCHAR *driverName);
+  void openDeviceRegKey(const TCHAR *miniportName);
 
   void initScreenPropertiesByCurrent();
   // value - true to attach, false to detach.

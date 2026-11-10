@@ -3,6 +3,7 @@
 // Используется tvnviewer.rc
 // Modified for FarSightVNC on 2026-11-03: IDs of the Options dialog tab pages.
 // Modified for FarSightVNC on 2026-11-03: IDs of the login dialog favorite and recent controls.
+// Modified for FarSightVNC on 2026-11-09: IDs of the update dialog and IDS_CHECK_FOR_UPDATES.
 //
 #define IDB_TOOLBAR                     101
 #define IDI_CNOCURSOR                   102
@@ -79,10 +80,12 @@
 #define IDS_TB_SCALEAUTO                214
 #define IDS_TB_FULLSCREEN               215
 #define IDS_TB_CONFIGURATION            216
+#define IDS_CHECK_FOR_UPDATES           217
 #define IDD_FS_WARNING                  230
 #define IDD_OPTIONS_DISPLAY             232
 #define IDD_OPTIONS_INPUT               233
 #define IDD_OPTIONS_NETWORK             234
+#define IDD_UPDATE_DIALOG               235
 #define IDC_LABEL                       1001
 #define IDC_FILENAME_EDIT               1002
 #define IDC_FILENAME_LABEL              1004
@@ -172,6 +175,30 @@
 #define IDC_OPTIONS_TAB                 1093
 #define IDC_FAVORITE                    1094
 #define IDC_REMOVE_RECENT               1095
+#define IDC_UPDATE_STATUS               1100
+#define IDC_UPDATE_CAP_CURRENT          1101
+#define IDC_UPDATE_CURRENT              1102
+#define IDC_UPDATE_CAP_AVAILABLE        1103
+#define IDC_UPDATE_AVAILABLE            1104
+#define IDC_UPDATE_CAP_DATE             1105
+#define IDC_UPDATE_DATE                 1106
+#define IDC_UPDATE_CAP_CHANNEL          1107
+#define IDC_UPDATE_CHANNEL              1108
+#define IDC_UPDATE_NOTES_LABEL          1109
+#define IDC_UPDATE_NOTES                1110
+#define IDC_UPDATE_NOTE                 1111
+#define IDC_UPDATE_GITHUB_LINK          1112
+#define IDC_UPDATE_PROGRESS             1113
+#define IDC_UPDATE_PROGRESS_TEXT        1114
+#define IDC_UPDATE_AUTOCHECK            1115
+#define IDC_UPDATE_PRERELEASE           1116
+#define IDC_UPDATE_DOWNLOAD             1117
+#define IDC_UPDATE_LATER                1118
+#define IDC_UPDATE_SKIP                 1119
+#define IDC_UPDATE_RELEASES             1120
+#define IDC_UPDATE_CANCEL_DOWNLOAD      1121
+#define IDC_UPDATE_CANCEL_STAGED        1122
+#define IDC_ABOUT_CHECK_UPDATES         1123
 #define ID_CONN_OPTIONS                 40001
 #define ID_CONN_INFO                    40002
 #define ID_SHOW_TOOLBAR                 40004
@@ -184,9 +211,9 @@
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        235
+#define _APS_NEXT_RESOURCE_VALUE        236
 #define _APS_NEXT_COMMAND_VALUE         40010
-#define _APS_NEXT_CONTROL_VALUE         1096
+#define _APS_NEXT_CONTROL_VALUE         1124
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

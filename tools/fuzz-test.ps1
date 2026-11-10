@@ -31,6 +31,23 @@
   stopped (by PID); history subkeys 127.0.0.1::<port> created by the runs are
   removed.
 
+  With -Handshake the cases are ServerInit desktop name lengths instead
+  (fuzz-rfb-server.py --name-length): 0, 10, 65536, 65537, 1 MiB (all bytes
+  sent) and 0xFFFFFFFF (a few bytes, then the server closes). The ports come
+  from 5960-5999 (-HandshakeBasePort) and "title=<n>" in the detail column is
+  the length of the viewer's main window title and "server sent" the updates
+  the fake server delivered after the handshake (3/3 = the stream stayed in
+  sync). Windows refuses a window title of about 64K characters, so for the
+  longest names the title is empty (title=0) even though the name was kept.
+
+  With -DumpOnHang <folder> a full-memory minidump (MiniDumpWriteDump, MiniDumpWithFullMemory)
+  of the viewer process is written to <folder> at the moment a HANG is
+  detected, before the process is stopped. The script then keeps probing the
+  window for up to 10 s and appends "dump=<file>; recovered after <n> s" or
+  "dump=<file>; still hung after 10 s" to the HANG detail, which tells a
+  permanent hang from slowness. Dumps are large (tens of MB each): keep them
+  out of the repository.
+
   Build the viewer first (Debug x64 adds /RTC1 and the debug CRT heap):
     & .\tools\build.ps1 -Configurations Debug -Platforms x64 -Project tvnviewer
 
@@ -39,26 +56,34 @@
   .\tools\fuzz-test.ps1 -Encodings zrle -Seeds 17 -Parallel 1
   .\tools\fuzz-test.ps1 -Seeds (1..100) -Use8Bit
   .\tools\fuzz-test.ps1 -Regression
+  .\tools\fuzz-test.ps1 -Encodings desktopsize -Seeds 25 -Parallel 1 -DumpOnHang $env:TEMP\fsvnc-dumps
+  .\tools\fuzz-test.ps1 -Handshake -Parallel 1 -TimeoutSeconds 6
 #>
 param(
   [ValidateSet('tight', 'zrle', 'hextile', 'rre', 'copyrect', 'richcursor', 'desktopsize')]
   [string[]]$Encodings = @('tight', 'zrle', 'hextile', 'rre', 'copyrect', 'richcursor', 'desktopsize'),
   [int[]]$Seeds = @(1..50),
-  [string]$Viewer = (Join-Path $PSScriptRoot '..\x64\Debug\tvnviewer.exe'),
+  [string]$Viewer = (Join-Path $PSScriptRoot '..\build\bin\x64\Debug\fsvncviewer.exe'),
   [string]$Python = '',
-  [ValidateRange(5933, 5945)]
   [int]$BasePort = 5933,
   [ValidateRange(1, 13)]
   [int]$Parallel = 3,
   [int]$TimeoutSeconds = 20,
   [int]$Messages = 25,
   [switch]$Regression,
+  [switch]$Handshake,
+  [ValidateRange(5960, 5999)]
+  [int]$HandshakeBasePort = 5960,
   [switch]$Use8Bit,
-  [string]$CsvPath = ''
+  [string]$CsvPath = '',
+  [string]$DumpOnHang = ''
 )
 
 $ErrorActionPreference = 'Stop'
-if ($BasePort + $Parallel - 1 -gt 5945) { throw 'Ports must stay within 5933-5945.' }
+if ($Handshake) {
+  $BasePort = $HandshakeBasePort
+  if ($BasePort + $Parallel - 1 -gt 5999) { throw 'Handshake ports must stay within 5960-5999.' }
+} elseif ($BasePort -lt 5933 -or $BasePort + $Parallel - 1 -gt 5945) { throw 'Ports must stay within 5933-5945.' }
 $Viewer = (Resolve-Path $Viewer).Path
 $serverScript = Join-Path $PSScriptRoot 'fuzz-rfb-server.py'
 if (-not $Python) { $Python = (Get-Command python -ErrorAction Stop).Source }
@@ -72,6 +97,10 @@ $regressionCases = @(
   # rectangle on the bottom edge (heap overflow, 2026-11-03).
   @{ Encoding = 'rre'; Scenario = 'fillrect-rre-bottom-edge' }
   @{ Encoding = 'tight'; Scenario = 'fillrect-tight-bottom-edge' }
+  # FrameBuffer::setColor looped forever on a frame buffer without pixel format: ServerInit
+  # 0x0 (or a first size change of 0x0) hung the viewer at 100 % CPU (inherited, 2026-11-08).
+  # The scenario then sends a valid DesktopSize and two Raw frames.
+  @{ Encoding = 'raw'; Scenario = 'serverinit-0x0' }
   @{ Encoding = 'rre'; Seed = 17 }, @{ Encoding = 'rre'; Seed = 21 }, @{ Encoding = 'rre'; Seed = 30 }
   @{ Encoding = 'rre'; Seed = 31 }, @{ Encoding = 'rre'; Seed = 41 }
   @{ Encoding = 'hextile'; Seed = 17 }, @{ Encoding = 'tight'; Seed = 34 }
@@ -94,7 +123,28 @@ public static class FuzzWin {
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr hwnd, StringBuilder text, int max);
   [DllImport("user32.dll")] static extern IntPtr SendMessageTimeout(IntPtr hwnd, uint msg, IntPtr w, IntPtr l, uint flags, uint timeout, out IntPtr result);
   [DllImport("user32.dll")] static extern bool PostMessage(IntPtr hwnd, uint msg, IntPtr w, IntPtr l);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowTextLength(IntPtr hwnd);
   [DllImport("kernel32.dll")] public static extern uint SetErrorMode(uint mode);
+  [DllImport("kernel32.dll", SetLastError = true)] static extern IntPtr OpenProcess(uint access, bool inherit, uint pid);
+  [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);
+  [DllImport("dbghelp.dll", SetLastError = true)] static extern bool MiniDumpWriteDump(
+    IntPtr process, uint pid, Microsoft.Win32.SafeHandles.SafeFileHandle file, uint type, IntPtr exception, IntPtr user, IntPtr callback);
+
+  // Full-memory minidump of the process (data segments, handles, thread info, unloaded modules).
+  // Returns an empty string on success, otherwise the failure reason.
+  public static string WriteDump(int pid, string path) {
+    IntPtr process = OpenProcess(0x0400 | 0x0010 /* QUERY_INFORMATION | VM_READ */, false, (uint)pid);
+    if (process == IntPtr.Zero) return "OpenProcess error " + Marshal.GetLastWin32Error();
+    try {
+      using (var file = new System.IO.FileStream(path, System.IO.FileMode.Create, System.IO.FileAccess.Write)) {
+        // MiniDumpWithFullMemory | WithHandleData | WithUnloadedModules | WithFullMemoryInfo | WithThreadInfo
+        const uint type = 0x2 | 0x4 | 0x20 | 0x800 | 0x1000;
+        if (!MiniDumpWriteDump(process, (uint)pid, file.SafeFileHandle, type, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero))
+          return "MiniDumpWriteDump error " + Marshal.GetLastWin32Error();
+      }
+      return "";
+    } finally { CloseHandle(process); }
+  }
 
   static List<IntPtr> TopWindows(uint pid) {
     var list = new List<IntPtr>();
@@ -151,6 +201,15 @@ public static class FuzzWin {
     return hung;
   }
 
+  // Title lengths (characters) of the visible non-dialog top-level windows of the process.
+  public static int[] TitleLengths(int pid) {
+    var result = new List<int>();
+    foreach (var h in TopWindows((uint)pid)) {
+      if (Class(h) != "#32770") result.Add(GetWindowTextLength(h));
+    }
+    return result.ToArray();
+  }
+
   public static int WindowCount(int pid) { return TopWindows((uint)pid).Count; }
 }
 '@
@@ -171,7 +230,21 @@ foreach ($port in $ports) {
   if (Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue) { throw "Port $port is already in use." }
 }
 
-if ($Regression) {
+# ServerInit desktop name cases: declared length and bytes actually sent
+# (the viewer keeps at most 64 KiB of the name; the title is that name).
+$handshakeCases = @(
+  @{ Encoding = 'name'; Label = 'len0'; Args = @('--name-length', '0') }
+  @{ Encoding = 'name'; Label = 'len10'; Args = @('--name-length', '10') }
+  @{ Encoding = 'name'; Label = 'len65536'; Args = @('--name-length', '65536') }
+  @{ Encoding = 'name'; Label = 'len65537'; Args = @('--name-length', '65537') }
+  @{ Encoding = 'name'; Label = 'len1MiB'; Args = @('--name-length', '1048576') }
+  @{ Encoding = 'name'; Label = 'lenFFFFFFFF'; Args = @('--name-length', '0xFFFFFFFF', '--name-bytes', '16') }
+)
+
+if ($Handshake) {
+  $queue = New-Object System.Collections.Queue
+  foreach ($case in $handshakeCases) { $queue.Enqueue($case) }
+} elseif ($Regression) {
   $queue = New-Object System.Collections.Queue
   foreach ($case in $regressionCases) { $queue.Enqueue($case) }
   if ($queue.Count -eq 0) { Write-Host 'No regression cases defined.'; exit 0 }
@@ -183,7 +256,11 @@ if ($Regression) {
 function Format-ExitCode([int]$code) { '0x{0:X8}' -f $code }
 
 function Start-Case($case, [int]$port) {
-  if ($case.Scenario) {
+  if ($case.Args) {
+    $label = $case.Label
+    # Stay connected after the few empty updates so the title can be read.
+    $caseArgs = $case.Args + @('--linger', '30')
+  } elseif ($case.Scenario) {
     $label = $case.Scenario
     $caseArgs = @('--scenario', $case.Scenario)
   } else {
@@ -194,10 +271,10 @@ function Start-Case($case, [int]$port) {
   $out = Join-Path $workDir "$tag.out"
   $err = Join-Path $workDir "$tag.err"
   $server = Start-Process -FilePath $Python -PassThru -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err `
-    -ArgumentList (@('-I', "`"$serverScript`"", '--port', $port) + $caseArgs + @('--messages', $Messages))
+    -ArgumentList (@('-I', "`"$serverScript`"", '--port', $port) + $caseArgs + @('--messages', $(if ($case.Args) { 3 } else { $Messages })))
   [pscustomobject]@{ Encoding = $case.Encoding; Seed = $label; Port = $port; Server = $server; Viewer = $null
     Out = $out; Err = $err; Phase = 'listen'; Started = [DateTime]::UtcNow; Mark = [DateTime]::UtcNow
-    Result = ''; Detail = '' }
+    Result = ''; Detail = ''; TitleLen = -1 }
 }
 
 function Read-ServerLine($state, [string]$prefix) {
@@ -235,6 +312,27 @@ function Complete-Case($state, [string]$result, [string]$detail) {
   $state.Phase = 'done'
 }
 
+# HANG: with -DumpOnHang, dump the live viewer first (Stop-Case kills it later) and probe
+# whether the window ever answers again.
+function Complete-Hang($state, [string]$detail) {
+  if ($DumpOnHang) {
+    New-Item -ItemType Directory -Force $DumpOnHang | Out-Null
+    $file = Join-Path $DumpOnHang ('hang-{0}-{1}-pid{2}-{3}.dmp' -f $state.Encoding, $state.Seed, $state.Viewer.Id, (Get-Date -Format 'yyyyMMdd-HHmmss'))
+    $failure = [FuzzWin]::WriteDump($state.Viewer.Id, $file)
+    if ($failure) { $detail += "; dump failed: $failure" }
+    else {
+      $watch = [Diagnostics.Stopwatch]::StartNew()
+      $recovered = $false
+      while ($watch.Elapsed.TotalSeconds -lt 10 -and -not $state.Viewer.HasExited) {
+        if ([FuzzWin]::HungWindows($state.Viewer.Id, 1000) -eq 0) { $recovered = $true; break }
+      }
+      $probe = if ($recovered) { 'recovered after {0:N1} s' -f $watch.Elapsed.TotalSeconds } else { 'still hung after 10 s' }
+      $detail += "; dump=$file; $probe"
+    }
+  }
+  Complete-Case $state 'HANG' $detail
+}
+
 function Test-Running($state) {
   $v = $state.Viewer
   $elapsed = ([DateTime]::UtcNow - $state.Mark).TotalSeconds
@@ -247,6 +345,9 @@ function Test-Running($state) {
     Complete-Case $state 'OK' ("exit {0}" -f $code); return
   }
   $dialogs = @([FuzzWin]::Dialogs($v.Id))
+  if ($Handshake) {
+    foreach ($t in [FuzzWin]::TitleLengths($v.Id)) { if ($t -gt $state.TitleLen) { $state.TitleLen = $t } }
+  }
   $crash = $dialogs | Where-Object { $_ -match $crashPattern } | Select-Object -First 1
   if ($crash) { Complete-Case $state 'CRASH' $crash; return }
   if ($state.Phase -eq 'run') {
@@ -263,8 +364,8 @@ function Test-Running($state) {
       return
     }
     if ($elapsed -ge $TimeoutSeconds) {
-      if ([FuzzWin]::HungWindows($v.Id, 3000) -gt 0) { Complete-Case $state 'HANG' 'window not responding'; return }
-      Complete-Case $state 'OK' 'nodialog'
+      if ([FuzzWin]::HungWindows($v.Id, 3000) -gt 0) { Complete-Hang $state 'window not responding'; return }
+      Complete-Case $state 'OK' ('nodialog' + $(if ($Handshake) { " title=$($state.TitleLen)" } else { '' }))
     }
     return
   }
@@ -274,8 +375,8 @@ function Test-Running($state) {
     [void][FuzzWin]::DismissDialogs($v.Id)
   }
   if ($elapsed -ge 10) {
-    if ([FuzzWin]::HungWindows($v.Id, 3000) -gt 0) { Complete-Case $state 'HANG' 'window not responding after message'; return }
-    Complete-Case $state 'HANG' 'viewer did not exit after its message was dismissed'
+    if ([FuzzWin]::HungWindows($v.Id, 3000) -gt 0) { Complete-Hang $state 'window not responding after message'; return }
+    Complete-Hang $state 'viewer did not exit after its message was dismissed'
   }
 }
 
@@ -322,10 +423,12 @@ try {
         Stop-Case $state
         $active.Remove($port)
         [void]$results.Add($state)
-        if ($state.Result -ne 'OK') {
+        if ($Handshake) { $sent = if ($state.ServerDone -match 'sent=(\d+/\d+)') { $Matches[1] } else { '?' }
+          Write-Host ('{0,-5} name {1}: {2} (server sent {3} updates)' -f $state.Result, $state.Seed, $state.Detail, $sent) }
+        elseif ($state.Result -ne 'OK') {
           $last = if ($state.ServerDone) { ($state.ServerDone -replace '^DONE ', '') } else { '' }
           if ($last.Length -gt 220) { $last = $last.Substring(0, 220) + '...' }
-          $detail = if ($state.Detail.Length -gt 160) { $state.Detail.Substring(0, 160) + '...' } else { $state.Detail }
+          $detail = if ($state.Detail.Length -gt 160 -and -not $DumpOnHang) { $state.Detail.Substring(0, 160) + '...' } else { $state.Detail }
           Write-Host ("{0,-5} {1}#{2}: {3} [{4}]" -f $state.Result, $state.Encoding, $state.Seed, $detail, $last)
         }
       }
@@ -342,7 +445,7 @@ if ($CsvPath) {
 }
 $summary = foreach ($group in ($results | Group-Object Encoding)) {
   $ok = @($group.Group | Where-Object Result -eq 'OK')
-  $noDialog = @($ok | Where-Object Detail -eq 'nodialog').Count
+  $noDialog = @($ok | Where-Object Detail -like 'nodialog*').Count
   '{0}: ok={1} (nodialog={2}) hang={3} crash={4} error={5}' -f $group.Name, $ok.Count, $noDialog,
     @($group.Group | Where-Object Result -eq 'HANG').Count, @($group.Group | Where-Object Result -eq 'CRASH').Count,
     @($group.Group | Where-Object Result -eq 'ERROR').Count

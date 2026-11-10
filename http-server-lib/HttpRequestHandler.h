@@ -37,7 +37,7 @@ public:
   virtual ~HttpRequestHandler();
 
   // Reads HTTP request from input and sends responce to output.
-  virtual void processRequest() throw(IOException);
+  virtual void processRequest();
 
 protected:
   DataInputStream *m_dataInput;

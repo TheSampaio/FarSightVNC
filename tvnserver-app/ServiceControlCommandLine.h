@@ -62,7 +62,7 @@ public:
    * @param commandLine command line string to parse.
    * @throws Exception on parse error.
    */
-  void parse(const CommandLineArgs *cmdArgs) throw(Exception);
+  void parse(const CommandLineArgs *cmdArgs);
 
   /**
    * Checks if key is specified.

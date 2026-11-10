@@ -313,11 +313,14 @@ bool RemoteViewerCore::updatePixelFormat()
     AutoLock al(&m_fbLock);
     // FIXME: here isn't accept true-colour flag.
     // PixelFormats may be equal, if isn't.
-    if (pxFormat.isEqualTo(&m_frameBuffer.getPixelFormat())) {
+    const PixelFormat currentPixelFormat = m_frameBuffer.getPixelFormat();
+    if (pxFormat.isEqualTo(&currentPixelFormat)) {
       return false;
     }
-    if (m_frameBuffer.getBuffer() != 0)
-      setFbProperties(&m_frameBuffer.getDimension(), &pxFormat);
+    if (m_frameBuffer.getBuffer() != 0) {
+      const Dimension currentDimension = m_frameBuffer.getDimension();
+      setFbProperties(&currentDimension, &pxFormat);
+    }
   }
 
   RfbSetPixelFormatClientMessage pixelFormatMessage(&pxFormat);
@@ -1130,7 +1133,9 @@ void RemoteViewerCore::processPseudoEncoding(const Rect *rect,
     m_logWriter.info(_T("Changed size of desktop"));
     {
       AutoLock al(&m_fbLock);
-      setFbProperties(&Dimension(rect), &m_frameBuffer.getPixelFormat());
+      const Dimension rectDimension(rect);
+      const PixelFormat currentPixelFormat = m_frameBuffer.getPixelFormat();
+      setFbProperties(&rectDimension, &currentPixelFormat);
     }
     break;
     
@@ -1334,7 +1339,8 @@ void RemoteViewerCore::handshake()
   m_logWriter.info(_T("Send to server protocol version: %s"), getProtocolString().getString());
 
   AnsiStringStorage clientProtocolAnsi;
-  clientProtocolAnsi.fromStringStorage(&getProtocolString());
+  const StringStorage protocolString = getProtocolString();
+  clientProtocolAnsi.fromStringStorage(&protocolString);
   m_output->writeFully(clientProtocolAnsi.getString(), 12);
   m_output->flush();
 }
@@ -1371,10 +1377,27 @@ void RemoteViewerCore::clientAndServerInit()
     setFbProperties(&screenDimension, &serverPixelFormat);
   }
 
-  UINT32 sizeInBytes = m_input->readUInt32();
-  std::vector<char> buffer(sizeInBytes + 1);
-  m_input->read(&buffer.front(), sizeInBytes);
-  buffer[sizeInBytes] = '\0';
+  // The name length comes from the server: keep at most MAX_DESKTOP_NAME_BYTES
+  // of it and consume the rest in small blocks so the stream stays in sync.
+  static const UINT32 MAX_DESKTOP_NAME_BYTES = 64 * 1024;
+  static const UINT32 DISCARD_BLOCK_BYTES = 4096;
+  const UINT32 declaredBytes = m_input->readUInt32();
+  const UINT32 keptBytes = std::min(declaredBytes, MAX_DESKTOP_NAME_BYTES);
+  std::vector<char> buffer(static_cast<size_t>(keptBytes) + 1, '\0');
+  if (keptBytes > 0) {
+    m_input->readFully(&buffer.front(), keptBytes);
+  }
+  if (declaredBytes > keptBytes) {
+    m_logWriter.warning(_T("Server desktop name is %u bytes long, truncated to %u bytes"),
+                        declaredBytes, keptBytes);
+    char discard[DISCARD_BLOCK_BYTES];
+    UINT32 remaining = declaredBytes - keptBytes;
+    while (remaining > 0) {
+      const UINT32 block = std::min(remaining, DISCARD_BLOCK_BYTES);
+      m_input->readFully(discard, block);
+      remaining -= block;
+    }
+  }
   AnsiStringStorage ansiStr;
   ansiStr.setString(&buffer[0]);
   ansiStr.toStringStorage(&m_remoteDesktopName);
@@ -1536,7 +1559,8 @@ void RemoteViewerCore::sendEncodings()
     return;
   }
 
-  RfbSetEncodingsClientMessage encodingsMessage(&m_decoderStore.getDecoderIds());
+  vector<INT32> decoderIds = m_decoderStore.getDecoderIds();
+  RfbSetEncodingsClientMessage encodingsMessage(&decoderIds);
   encodingsMessage.send(m_output);
 }
 

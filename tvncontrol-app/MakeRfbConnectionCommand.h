@@ -57,7 +57,7 @@ public:
    *
    * @throws IOException on io error, Exception on server side error.
    */
-  virtual void execute() throw(IOException, RemoteException);
+  virtual void execute();
 
 private:
   /**

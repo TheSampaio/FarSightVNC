@@ -36,7 +36,8 @@ UpdateHandlerImpl::UpdateHandlerImpl(UpdateListener *externalUpdateListener, Scr
                                                         &m_fbLocMut, log);
   // At this point the screen driver must contain valid screen properties.
   m_backupFrameBuffer.assignProperties(m_screenDriver->getScreenBuffer());
-  m_updateKeeper.setBorderRect(&m_screenDriver->getScreenDimension().getRect());
+  const Rect screenRect = m_screenDriver->getScreenDimension().getRect();
+  m_updateKeeper.setBorderRect(&screenRect);
   m_updateFilter = new UpdateFilter(m_screenDriver,
                                     &m_backupFrameBuffer,
                                     &m_fbLocMut, log);
@@ -84,8 +85,9 @@ void UpdateHandlerImpl::extract(UpdateContainer *updateContainer)
   m_updateFilter->filter(updateContainer);
 
   if (!m_absoluteRect.isEmpty()) {
-    updateContainer->changedRegion.addRect(&m_screenDriver->getScreenBuffer()->
-                                           getDimension().getRect());
+    const Rect screenBufferRect = m_screenDriver->getScreenBuffer()->
+                                  getDimension().getRect();
+    updateContainer->changedRegion.addRect(&screenBufferRect);
     m_absoluteRect.clear();
   }
 
@@ -129,7 +131,8 @@ void UpdateHandlerImpl::extract(UpdateContainer *updateContainer)
   // Checking for mouse shape changing
   if (updateContainer->cursorShapeChanged || m_fullUpdateRequested) {
     // Update cursor shape
-    m_screenDriver->grabCursorShape(&m_backupFrameBuffer.getPixelFormat());
+    const PixelFormat backupPixelFormat = m_backupFrameBuffer.getPixelFormat();
+    m_screenDriver->grabCursorShape(&backupPixelFormat);
     // Store cursor shape
     m_cursorShape.clone(m_screenDriver->getCursorShape());
 

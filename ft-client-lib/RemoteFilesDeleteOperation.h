@@ -59,20 +59,20 @@ public:
   // Starts executing this delete operation
   //
 
-  virtual void start() throw(IOException);
+  virtual void start();
 
   //
   // File transfer message(accepted by this operation) handlers
   //
 
-  void onFileListReply(DataInputStream *input) throw(IOException);
-  void onRmReply(DataInputStream *input) throw(IOException);
-  void onLastRequestFailedReply(DataInputStream *input) throw(IOException);
+  void onFileListReply(DataInputStream *input);
+  void onRmReply(DataInputStream *input);
+  void onLastRequestFailedReply(DataInputStream *input);
 
 private:
 
-  void remove(bool removeIfFolder) throw(IOException);
-  void gotoNext() throw(IOException);
+  void remove(bool removeIfFolder);
+  void gotoNext();
   void killOp();
 
 protected:

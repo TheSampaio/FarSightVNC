@@ -4,7 +4,7 @@
 param([switch]$BuildOnly)
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$libDir = Join-Path $repo 'x64\Release'
+$libDir = Join-Path $repo 'build\bin\x64\Release'
 $buildDir = Join-Path $repo 'build-logs\gpu-presenter-test'
 $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
 $vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath

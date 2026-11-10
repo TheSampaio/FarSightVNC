@@ -129,7 +129,7 @@ Rect CursorPainter::showCursor()
 
     m_cursorOverlay.copyFrom(m_fb, corner.x, corner.y);
 
-    Rect overlayRect(&m_cursor.getDimension().getRect());
+    Rect overlayRect(m_cursor.getDimension().getRect());
     overlayRect.move(corner.x, corner.y);
 
     m_fb->overlay(&overlayRect, m_cursor.getPixels(), 0, 0, m_cursor.getMask());

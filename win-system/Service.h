@@ -55,7 +55,7 @@ public:
   /**
    * Starts service execution.
    */
-  void run() throw(Exception);
+  void run();
 
 protected:
   /**

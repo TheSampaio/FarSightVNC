@@ -47,7 +47,7 @@ public:
    * Inherited from superclass.
    * @remark just delegates call to real output stream.
    */
-  virtual size_t write(const void *buffer, size_t len) throw(IOException);
+  virtual size_t write(const void *buffer, size_t len);
 
   /**
    * Writes exacly specified count of bytes to stream.
@@ -57,24 +57,24 @@ public:
    * @fixme really it can throw any kind of exception (depends on implementation
    * of output stream passed to costructor of DataOutputStream).
    */
-  void writeFully(const void *buffer, size_t len) throw(IOException);
+  void writeFully(const void *buffer, size_t len);
 
-  void writeUInt8(UINT8 x) throw(IOException);
-  void writeUInt16(UINT16 x) throw(IOException);
-  void writeUInt32(UINT32 x) throw(IOException);
-  void writeUInt64(UINT64 x) throw(IOException);
+  void writeUInt8(UINT8 x);
+  void writeUInt16(UINT16 x);
+  void writeUInt32(UINT32 x);
+  void writeUInt64(UINT64 x);
 
-  void writeInt8(INT8 x) throw(IOException);
-  void writeInt16(INT16 x) throw(IOException);
-  void writeInt32(INT32 x) throw(IOException);
-  void writeInt64(INT64 x) throw(IOException);
+  void writeInt8(INT8 x);
+  void writeInt16(INT16 x);
+  void writeInt32(INT32 x);
+  void writeInt64(INT64 x);
 
-  void writeUTF8(const TCHAR *string) throw(IOException);
+  void writeUTF8(const TCHAR *string);
 
   /**
    * Flushes inner output stream.
    */
-  virtual void flush() throw(IOException);
+  virtual void flush();
 protected:
   OutputStream *m_outStream;
 };

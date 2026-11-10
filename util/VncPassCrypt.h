@@ -46,7 +46,7 @@ public:
 
   // Decrypt the encrypted password and fills by decrypted values the
   // plainPassword[8] array.
-  static void VncPassCrypt::getPlainPass(UINT8 plainPassword[VNC_PASSWORD_SIZE],
+  static void getPlainPass(UINT8 plainPassword[VNC_PASSWORD_SIZE],
                                          const UINT8 encryptedPass[VNC_PASSWORD_SIZE]);
 
   // Returns true if it's matched.

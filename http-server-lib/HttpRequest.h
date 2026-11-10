@@ -36,7 +36,7 @@ public:
   virtual ~HttpRequest();
 
   // Reads HTTP header.
-  void readHeader() throw(IOException);
+  void readHeader();
 
   // Parse read header.
   // Returns true if header is valid, false otherwise.
@@ -54,12 +54,12 @@ public:
 
 protected:
   // Skips HTTP headers until end.
-  void skipHeader(bool lastWasEndLn) throw(IOException);
+  void skipHeader(bool lastWasEndLn);
   // Reads line that ends with specified character from data input stream
   // and storage it output buffer parameter.
   // If line is more than specified max size that string will be trunkated to
   // maxSize.
-  void readLine(char endLnChar, char *buffer, size_t maxSize) throw(IOException);
+  void readLine(char endLnChar, char *buffer, size_t maxSize);
 
 protected:
   static const size_t REQUEST_BUFFER_SIZE = 2048;

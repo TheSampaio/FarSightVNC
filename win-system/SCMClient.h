@@ -85,7 +85,7 @@ public:
    * for details).
    * @throws SystemException on fail.
    */
-  SCMClient(DWORD desiredAccess = SC_MANAGER_ALL_ACCESS) throw(SystemException);
+  SCMClient(DWORD desiredAccess = SC_MANAGER_ALL_ACCESS);
   /**
    * Destructor, closes SCMClient.
    */
@@ -99,13 +99,13 @@ public:
    * @throws SystemException on fail.
    */
   void installService(const TCHAR *name, const TCHAR *nameToDisplay,
-                      const TCHAR *binPath, const TCHAR *dependencies = _T("")) throw(SystemException);
+                      const TCHAR *binPath, const TCHAR *dependencies = _T(""));
   /**
    * Unregisters existing service from services.
    * @param name name of service to unregister.
    * @throws SystemException on fail.
    */
-  void removeService(const TCHAR *name) throw(SystemException);
+  void removeService(const TCHAR *name);
   /**
    * Starts existing service.
    * @param name name of service to start.
@@ -113,8 +113,7 @@ public:
    *   SERVICE_RUNNING.
    * @throws SystemException, SCMClientException on fail.
    */
-  void startService(const TCHAR *name, bool waitCompletion = false)
-    throw(SystemException, SCMClientException);
+  void startService(const TCHAR *name, bool waitCompletion = false);
   /**
    * Stops running service execution.
    * @param name name of service to stop.
@@ -122,8 +121,7 @@ public:
    *   SERVICE_STOPPED.
    * @throws SystemException, SCMClientException on fail.
    */
-  void stopService(const TCHAR *name, bool waitCompletion = false)
-    throw(SystemException, SCMClientException);
+  void stopService(const TCHAR *name, bool waitCompletion = false);
 
 private:
   /**
@@ -132,7 +130,7 @@ private:
    * @return current service state.
    * @throws SystemException on failure.
    */
-  DWORD getServiceState(SC_HANDLE hService) const throw(SystemException);
+  DWORD getServiceState(SC_HANDLE hService) const;
 
 private:
   /** Service client manager handle. */

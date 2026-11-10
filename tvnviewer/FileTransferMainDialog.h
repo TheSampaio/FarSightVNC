@@ -97,8 +97,8 @@ protected:
   //
 
   virtual BOOL onInitDialog();
-  virtual BOOL onNotify(UINT controlID, LPARAM data) throw(IOException);
-  virtual BOOL onCommand(UINT controlID, UINT notificationID) throw(IOException);
+  virtual BOOL onNotify(UINT controlID, LPARAM data);
+  virtual BOOL onCommand(UINT controlID, UINT notificationID);
   virtual BOOL onDestroy();
 
   virtual void onMessageReceived(UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -110,10 +110,10 @@ protected:
   void onCancelButtonClick();
   void onCancelOperationButtonClick();
 
-  void onRenameRemoteButtonClick() throw(IOException);
-  void onMkDirRemoteButtonClick() throw(IOException);
-  void onRemoveRemoteButtonClick() throw(IOException);
-  void onRefreshRemoteButtonClick() throw(IOException);
+  void onRenameRemoteButtonClick();
+  void onMkDirRemoteButtonClick();
+  void onRemoveRemoteButtonClick();
+  void onRefreshRemoteButtonClick();
 
   void onRenameLocalButtonClick();
   void onMkDirLocalButtonClick();
@@ -124,13 +124,13 @@ protected:
   void onDownloadButtonClick();
 
   void moveUpLocalFolder();
-  void moveUpRemoteFolder() throw(IOException);
+  void moveUpRemoteFolder();
 
   //
   // List view event handlers
   //
 
-  void onRemoteListViewDoubleClick() throw(IOException);
+  void onRemoteListViewDoubleClick();
   void onLocalListViewDoubleClick();
 
   void onRemoteListViewKeyDown(UINT key);
@@ -175,7 +175,7 @@ private:
   // Refreshes remote file list
   //
 
-  void refreshRemoteFileList() throw(IOException);
+  void refreshRemoteFileList();
 
   //
   // Displays file list of pathToFile folder of local machine
@@ -189,7 +189,7 @@ private:
   // in remote file list view
   //
 
-  void tryListRemoteFolder(const TCHAR *pathToFile) throw(IOException);
+  void tryListRemoteFolder(const TCHAR *pathToFile);
 
   //
   // Filenames helper methods

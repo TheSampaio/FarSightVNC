@@ -45,7 +45,7 @@ public:
   
   virtual void sendRectangle(const Rect *rect,
                              const FrameBuffer *serverFb,
-                             const EncodeOptions *options) throw(IOException);
+                             const EncodeOptions *options);
 
 private:
   // Determine the class of rectangle and call necessary function for this type.
@@ -53,25 +53,25 @@ private:
     void sendRect(const Rect *rect,
                   const FrameBuffer *serverFb,
                   const FrameBuffer *clientFb,
-                  const EncodeOptions *options) throw(IOException);
+                  const EncodeOptions *options);
 
   // Send raw tile.
   template <class PIXEL_T>
     void writeRawTile(const Rect *tileRect,
-                      const FrameBuffer *fb) throw(IOException);
+                      const FrameBuffer *fb);
 
   // Send a solid-color tile.
-    void writeSolidTile() throw(IOException);
+    void writeSolidTile();
   
   // Send packed palette tile.
   template <class PIXEL_T>
     void writePackedPaletteTile(const Rect *tileRect,
-                                const FrameBuffer *fb) throw(IOException);
+                                const FrameBuffer *fb);
 
   // Send palette RLE tile.
   template <class PIXEL_T>
     void writePaletteRleTile(const Rect *tileRect,
-                             const FrameBuffer *fb) throw(IOException);
+                             const FrameBuffer *fb);
 
   // Write data from runLength (used in plain Rle encoding).
   void pushRunLengthRle(int runLength);

@@ -36,7 +36,7 @@ public:
                      const StringStorage *shareWindowName);
   virtual ~ShareWindowCommand();
 
-  virtual void execute() throw(IOException, RemoteException);
+  virtual void execute();
 private:
   ControlProxy *m_proxy;
   StringStorage m_shareWindowName;

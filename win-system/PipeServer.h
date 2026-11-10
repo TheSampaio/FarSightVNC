@@ -53,7 +53,7 @@ public:
    */
   PipeServer(const TCHAR *name, unsigned int bufferSize,
              SecurityAttributes *secAttr = 0,
-             DWORD milliseconds = INFINITE) throw(Exception);
+             DWORD milliseconds = INFINITE);
   /**
    * Destroys pipe server.
    */
@@ -67,13 +67,13 @@ public:
    *
    * @fixme stub.
    */
-  NamedPipe *accept() throw(Exception);
+  NamedPipe *accept();
 
   /**
    * Closes pipe server.
    * @throws PipeException on fail.
    */
-  void close() throw(Exception);
+  void close();
 
   /**
    * @deprecated.
@@ -85,7 +85,7 @@ public:
   virtual void closeConnection();
 
 private:
-  void createServerPipe() throw(Exception);
+  void createServerPipe();
 
   // returns True on every error 
   bool checkOtherSideBinaryName(HANDLE hPipe);

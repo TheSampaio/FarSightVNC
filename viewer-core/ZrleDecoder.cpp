@@ -21,6 +21,10 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-08: CPIXEL handling rewritten with
+// explicit, bounds-checked byte offsets (RFC 6143 section 7.7.5); see the
+// notes at ZrleDecoder::setPixelLayout().
+//
 
 #include "ZrleDecoder.h"
 
@@ -62,29 +66,7 @@ void ZrleDecoder::decode(RfbInputGate *input,
                                                unpackedData.size());
   DataInputStream unpackedDataStream(&unpackedByteArrayStream);
 
-  m_numberFirstByte = 0;
-  PixelFormat pxFormat = frameBuffer->getPixelFormat();
-
-  if (pxFormat.bitsPerPixel == 8) {
-    m_bytesPerPixel = 1;
-  } else if (pxFormat.bitsPerPixel == 16) {
-    m_bytesPerPixel = 2;
-  } else if (pxFormat.bitsPerPixel == 32) {
-    UINT32 colorMaxValue =  pxFormat.blueMax  << pxFormat.blueShift  |
-                            pxFormat.greenMax << pxFormat.greenShift |
-                            pxFormat.redMax   << pxFormat.redShift;
-    //for CPIXELS
-    if ((colorMaxValue & (0xFF000000))==0) {
-      m_bytesPerPixel = 3;
-      m_numberFirstByte = 0;
-    } else if ((colorMaxValue & 0xFF)==0) {
-      m_bytesPerPixel = 3;
-      m_numberFirstByte = 1;
-    } else /*for other cases*/{
-      m_bytesPerPixel = 4;
-      m_numberFirstByte = 0;
-    }
-  }
+  setPixelLayout(frameBuffer->getPixelFormat());
 
   for (int y = dstRect->top; y < dstRect->bottom; y += TILE_SIZE) {
     for (int x = dstRect->left; x < dstRect->right; x += TILE_SIZE) {
@@ -101,7 +83,8 @@ void ZrleDecoder::decode(RfbInputGate *input,
         throw Exception(_T("Incorrect size of ZRLE tile."));
       }
       size_t tileLength = tileRect.area();
-      size_t tileBytesLength = tileLength * m_bytesPerPixel;
+      size_t tileBytesLength = tileLength * m_pixelSize;
+      // Frame buffer pixels (m_pixelSize bytes each, zero-initialized).
       vector<char> pixels;
       pixels.resize(tileBytesLength);
 
@@ -117,16 +100,19 @@ void ZrleDecoder::decode(RfbInputGate *input,
         // packed palette
         readPackedPaletteTile(&unpackedDataStream, pixels, &tileRect, type);
       } else if (type >= 17 && type <= 127) {
-        // unused (no advantage over palette RLE)
-      } if (type == 128) {
+        // Unused (no advantage over palette RLE). Kept as in the original
+        // TightVNC code: no data is read and the tile is drawn black (all
+        // zero pixels). Do not change without a decision on protocol
+        // compatibility: a conforming server never sends these types.
+      } else if (type == 128) {
         // plain rle
         readPlainRleTile(&unpackedDataStream, pixels, &tileRect);
-      } if (type == 129) {
+      } else if (type == 129) {
         // invalid type
         StringStorage error;
         error.format(_T("Bad data received from the server: Unused ZRLE subencoding type (%d)."), type);
         throw Exception(error.getString());
-      } if (type >= 130 && type <= 255) {
+      } else if (type >= 130 && type <= 255) {
         // palette rle
         readPaletteRleTile(&unpackedDataStream, pixels, &tileRect, type);
       }
@@ -134,6 +120,86 @@ void ZrleDecoder::decode(RfbInputGate *input,
       drawTile(frameBuffer, &tileRect, &pixels);
     } // tile(x, y)
   } // tile(..., y)
+}
+
+//
+// Pixel layout (RFC 6143 section 7.7.5).
+//
+// A ZRLE tile stores CPIXELs. A CPIXEL is the frame buffer PIXEL, except for
+// a 32 bpp true colour format whose colour bits all fit in the least
+// significant 3 bytes or all in the most significant 3 bytes of the 32-bit
+// pixel value: then the CPIXEL has only those 3 significant bytes and the
+// empty byte is not sent. The CPIXEL bytes keep the byte order of the pixel
+// (big-endian flag), so the position of the 3 bytes inside the 4 bytes of a
+// pixel in memory is:
+//
+//   empty byte        little endian   big endian
+//   most significant  bytes 0..2      bytes 1..3
+//   least significant bytes 1..3      bytes 0..2
+//
+// The decoder keeps tiles and palettes as frame buffer pixels (m_pixelSize
+// bytes, unused byte 0): CPIXELs are expanded when they are read, so the
+// other code never sees the 3 byte form.
+//
+void ZrleDecoder::setPixelLayout(const PixelFormat &pxFormat)
+{
+  if (pxFormat.bitsPerPixel != 8 && pxFormat.bitsPerPixel != 16 &&
+      pxFormat.bitsPerPixel != 32) {
+    throw Exception(_T("Unsupported pixel format in ZRLE decoder (only 8, 16 or 32 bits per pixel)."));
+  }
+
+  m_pixelSize = pxFormat.bitsPerPixel / 8;
+  m_cpixelSize = m_pixelSize;
+  m_cpixelOffset = 0;
+
+  if (pxFormat.bitsPerPixel == 32) {
+    // A shift of 32 or more has no bits inside a 32-bit pixel (and shifting
+    // by it is undefined): such a format keeps full 4 byte pixels.
+    bool validShifts = pxFormat.redShift < 32 && pxFormat.greenShift < 32 &&
+                       pxFormat.blueShift < 32;
+    UINT32 colorMaxValue = 0xFFFFFFFF;
+    if (validShifts) {
+      colorMaxValue = (static_cast<UINT32>(pxFormat.blueMax)  << pxFormat.blueShift)  |
+                      (static_cast<UINT32>(pxFormat.greenMax) << pxFormat.greenShift) |
+                      (static_cast<UINT32>(pxFormat.redMax)   << pxFormat.redShift);
+    }
+    bool emptyMostSignificantByte = (colorMaxValue & 0xFF000000) == 0;
+    bool emptyLeastSignificantByte = (colorMaxValue & 0x000000FF) == 0;
+    if (emptyMostSignificantByte || emptyLeastSignificantByte) {
+      // The most significant byte is the first in memory only if big endian.
+      // (Both bytes empty: the original rule, most significant first, stays.)
+      m_cpixelSize = 3;
+      m_cpixelOffset = (emptyMostSignificantByte == pxFormat.bigEndian) ? 1 : 0;
+    }
+  }
+
+  if (m_cpixelOffset + m_cpixelSize > m_pixelSize || m_pixelSize > sizeof(unsigned int)) {
+    throw Exception(_T("Inconsistent pixel layout in ZRLE decoder."));
+  }
+}
+
+void ZrleDecoder::expandPixel(const char *cpixel, char *pixel) const
+{
+  // setPixelLayout() guarantees m_cpixelOffset + m_cpixelSize <= m_pixelSize <= 4.
+  memset(pixel, 0, m_pixelSize);
+  memcpy(pixel + m_cpixelOffset, cpixel, m_cpixelSize);
+}
+
+void ZrleDecoder::readPixel(DataInputStream *input, char *pixel)
+{
+  char cpixel[4] = {0, 0, 0, 0};
+  input->readFully(cpixel, m_cpixelSize);
+  expandPixel(cpixel, pixel);
+}
+
+void ZrleDecoder::putPixel(vector<char> &pixels,
+                           size_t indexPixel,
+                           const char *pixel) const
+{
+  if ((indexPixel + 1) * m_pixelSize > pixels.size()) {
+    throw Exception(_T("Bad data received from the server: ZRLE pixel is outside of the tile."));
+  }
+  memcpy(&pixels[indexPixel * m_pixelSize], pixel, m_pixelSize);
 }
 
 void ZrleDecoder::readAndInflate(RfbInputGate *input, size_t maximalUnpackedSize)
@@ -183,7 +249,9 @@ void ZrleDecoder::readPalette(DataInputStream *input,
   palette->resize(paletteSize);
 
   for (int i = 0; i < paletteSize; i++) {
-    input->readFully(&(*palette)[i] + m_numberFirstByte, m_bytesPerPixel);
+    // An entry is a frame buffer pixel in its first m_pixelSize bytes.
+    (*palette)[i] = 0;
+    readPixel(input, reinterpret_cast<char *>(&(*palette)[i]));
   }
 }
 
@@ -191,8 +259,23 @@ void ZrleDecoder::readRawTile(DataInputStream *input,
                               vector<char> &pixels,
                               const Rect *tileRect)
 {
-  size_t tileBytesLength = tileRect->area() * m_bytesPerPixel;
-  input->readFully(&pixels.front(), tileBytesLength);
+  size_t tileLength = tileRect->area();
+  if (pixels.size() != tileLength * m_pixelSize) {
+    throw Exception(_T("Inconsistent tile buffer in ZRLE decoder."));
+  }
+
+  if (m_cpixelSize == m_pixelSize) {
+    input->readFully(&pixels.front(), pixels.size());
+    return;
+  }
+
+  // Expand the CPIXELs (3 bytes) into frame buffer pixels (4 bytes).
+  vector<char> cpixels;
+  cpixels.resize(tileLength * m_cpixelSize);
+  input->readFully(&cpixels.front(), cpixels.size());
+  for (size_t i = 0; i < tileLength; i++) {
+    expandPixel(&cpixels[i * m_cpixelSize], &pixels[i * m_pixelSize]);
+  }
 }
 
 void ZrleDecoder::readSolidTile(DataInputStream *input,
@@ -202,13 +285,11 @@ void ZrleDecoder::readSolidTile(DataInputStream *input,
   size_t tileLength = tileRect->area();
   char solid[4] = {0, 0, 0, 0};
 
-  input->readFully(solid + m_numberFirstByte, m_bytesPerPixel);
-  
-  char *pixelsPtr = &pixels.front();
+  readPixel(input, solid);
+
   // TODO: Can we optimize this?
   for (size_t i = 0; i < tileLength; i++) {
-    memcpy(pixelsPtr + m_numberFirstByte, solid, m_bytesPerPixel); 
-    pixelsPtr += m_bytesPerPixel;
+    putPixel(pixels, i, solid);
   }
 }
 
@@ -263,8 +344,8 @@ void ZrleDecoder::readPackedPaletteTile(DataInputStream *input,
         throw Exception(_T("Bad data received from the server: ZRLE color index exceeds palette size."));
       }
 
-      size_t count = y * width + x;
-      memcpy(&pixels[count * m_bytesPerPixel], &palette[color], m_bytesPerPixel);
+      size_t count = static_cast<size_t>(y) * width + x;
+      putPixel(pixels, count, reinterpret_cast<const char *>(&palette[color]));
     }
   }
 }
@@ -274,19 +355,19 @@ void ZrleDecoder::readPlainRleTile(DataInputStream *input,
                                    const Rect *tileRect)
 {
   size_t tileLength = tileRect->area();
-  for (size_t indexByte = 0; indexByte < tileLength * m_bytesPerPixel;) {
+  for (size_t indexPixel = 0; indexPixel < tileLength;) {
     char color[4] = {0, 0, 0, 0};
-    input->readFully(color + m_numberFirstByte, m_bytesPerPixel);
+    readPixel(input, color);
 
     size_t runLength = readRunLength(input);
-    if (indexByte + runLength * m_bytesPerPixel > pixels.size()) {
+    if (runLength > tileLength - indexPixel) {
       throw Exception(_T("Bad data received from the server: ZRLE run length is too long in plain RLE tile."));
     }
 
     for (size_t i = 0; i < runLength; i++) {
-      memcpy(&pixels[indexByte], color, m_bytesPerPixel);
-      indexByte += m_bytesPerPixel; 
+      putPixel(pixels, indexPixel + i, color);
     }
+    indexPixel += runLength;
   }
 }
 
@@ -316,10 +397,8 @@ void ZrleDecoder::readPaletteRleTile(DataInputStream *input,
       throw Exception(_T("Bad data received from the server: ZRLE color index exceeds palette size."));
     }
 
-    char * pixelsPtr = &pixels[indexPixel * m_bytesPerPixel];
     for(size_t i = 0; i < runLength; i++) {
-      memcpy(pixelsPtr, &palette[color], m_bytesPerPixel);
-      pixelsPtr += m_bytesPerPixel;
+      putPixel(pixels, indexPixel + i, reinterpret_cast<const char *>(&palette[color]));
     }
     indexPixel += runLength;
   }
@@ -330,23 +409,20 @@ void ZrleDecoder::drawTile(FrameBuffer *fb,
                            const vector<char> *pixels)
 {
   int width = tileRect->getWidth();
-  size_t fbBytesPerPixel = m_bytesPerPixel;
+  int height = tileRect->getHeight();
+  size_t rowBytes = static_cast<size_t>(width) * m_pixelSize;
 
-  if (fbBytesPerPixel == 3) {
-    fbBytesPerPixel = 4;
+  // The tile was checked against the frame buffer dimension by decode(); the
+  // tile buffer holds frame buffer pixels (see setPixelLayout()).
+  if (fb->getBytesPerPixel() != m_pixelSize ||
+      pixels->size() != rowBytes * height) {
+    throw Exception(_T("Inconsistent tile buffer in ZRLE decoder."));
   }
 
-  int tileLength = tileRect->area();
-
-  int x = tileRect->left;
-  int y = tileRect->top;
-   
   const char *pixelsPtr = &pixels->front();
-  char *bufferPtr = 0;
-  for (int i = 0; i < tileLength; i++) {
-    bufferPtr = (char*)fb->getBufferPtr(x + i % width, y + i / width);
-    memset(bufferPtr, 0, fbBytesPerPixel);
-    memcpy(bufferPtr, pixelsPtr, m_bytesPerPixel);
-    pixelsPtr+=m_bytesPerPixel;
+  for (int row = 0; row < height; row++) {
+    char *bufferPtr = (char*)fb->getBufferPtr(tileRect->left, tileRect->top + row);
+    memcpy(bufferPtr, pixelsPtr, rowBytes);
+    pixelsPtr += rowBytes;
   }
 }

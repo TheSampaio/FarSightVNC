@@ -22,9 +22,9 @@
 //-------------------------------------------------------------------------
 //
 
+#include "util/CommonHeader.h"
 #include "ArgList.h"
 
-#include "util/CommonHeader.h"
 #include <vector>
 
 ArgList::ArgList(const char *argString)

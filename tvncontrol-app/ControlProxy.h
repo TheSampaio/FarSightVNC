@@ -70,7 +70,7 @@ public:
    * @throws RemoteException on error on server.
    * @throws IOException on io error.
    */
-  TvnServerInfo getServerInfo() throw(IOException, RemoteException);
+  TvnServerInfo getServerInfo();
 
   /**
    * Gets rfb client list.
@@ -78,7 +78,7 @@ public:
    * @throws RemoteException on error on server.
    * @throws IOException on io error.
    */
-  void getClientsList(list<RfbClientInfo *> *clients) throw(IOException, RemoteException);
+  void getClientsList(list<RfbClientInfo *> *clients);
 
   /**
    * Reloads rfb server configuration.
@@ -86,21 +86,21 @@ public:
    * @throws IOException on io error.
    * @deprecated.
    */
-  void reloadServerConfig() throw(IOException, RemoteException);
+  void reloadServerConfig();
   
   /**
    * Disconnects all existing rfb clients from server.
    * @throws RemoteException on error on server.
    * @throws IOException on io error.
    */
-  void disconnectAllClients() throw(IOException, RemoteException);
+  void disconnectAllClients();
 
   /**
    * Shutdowns TightVNC server.
    * @throws RemoteException on error on server.
    * @throws IOException on io error.
    */
-  void shutdownTightVnc() throw(IOException, RemoteException);
+  void shutdownTightVnc();
 
   /**
    * Initialized outgoing rfb connection.
@@ -109,7 +109,7 @@ public:
    * @throws RemoteException on error on server.
    * @throws IOException on io error.
    */
-  void makeOutgoingConnection(const TCHAR *connectString, bool viewOnly) throw(IOException, RemoteException);
+  void makeOutgoingConnection(const TCHAR *connectString, bool viewOnly);
 
   /**
    * Initialized connection to a TcpDispatcher.
@@ -145,7 +145,7 @@ public:
    * @throws RemoteException on error on server.
    * @throws IOException on io error.
    */
-  void setServerConfig(ServerConfig *config) throw(IOException, RemoteException);
+  void setServerConfig(ServerConfig *config);
 
   /**
    * Gets current configuration from server.
@@ -153,13 +153,13 @@ public:
    * @throws RemoteException on error on server.
    * @throws IOException on io error.
    */
-  void getServerConfig(ServerConfig *config) throw(IOException, RemoteException);
+  void getServerConfig(ServerConfig *config);
 
   /**
    * Checks if TvnControl must show icon in tray.
    * @throws IOException on io error, RemoteException on error on server side.
    */
-  bool getShowTrayIconFlag() throw(IOException, RemoteException);
+  bool getShowTrayIconFlag();
 
   /**
    * Updates TvnControl application process id on server side.
@@ -167,7 +167,7 @@ public:
    * @throws RemoteException on error on server.
    * @throws IOException on io error.
    */
-  void updateTvnControlProcessId(DWORD processId) throw(IOException, RemoteException);
+  void updateTvnControlProcessId(DWORD processId);
 
 protected:
   /**
