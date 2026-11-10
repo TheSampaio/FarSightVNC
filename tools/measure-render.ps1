@@ -26,7 +26,7 @@
   100 percent (the 1280x800 window shows the top-left part of the screen).
 
 .EXAMPLE
-  .\tools\measure-render.ps1 -Viewers ([ordered]@{ official = 'C:\...\tvnviewer.exe'; built = '.\build\bin\x64\Release\fsvnc-viewer.exe' })
+  .\tools\measure-render.ps1 -Viewers ([ordered]@{ official = 'C:\...\tvnviewer.exe'; built = '.\build\bin\x64\Release\fsvncviewer.exe' })
   .\tools\measure-render.ps1 -Viewers $v -Size 1920x1080 -Rects 8 -Repetitions 5 -DurationSeconds 30
 #>
 param(

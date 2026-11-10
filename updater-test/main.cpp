@@ -183,7 +183,7 @@ int main(int argc, char **argv) {
     ::LocalFree(wide);
     return code;
   }
-  // Helper mode: copies of this exe act as fake "fsvnc-viewer.exe" processes.
+  // Helper mode: copies of this exe act as fake "fsvncviewer.exe" processes.
   if (argc >= 3 && std::strcmp(argv[1], "--sleep-ms") == 0) {
     ::Sleep(static_cast<DWORD>(std::atol(argv[2])));
     return 0;

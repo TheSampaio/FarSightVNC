@@ -74,10 +74,8 @@ try {
 
   # --- fake shipping folder + zip
   $ship = Join-Path $work 'FarSightVNC-v1.0.0a'
-  New-TestFile (Join-Path $ship 'bin\x64\fsvnc-viewer.exe') 150000 1
-  New-TestFile (Join-Path $ship 'bin\x64\fsvnc-updater.exe') 40000 2
-  New-TestFile (Join-Path $ship 'bin\x86\fsvnc-viewer.exe') 120000 3
-  New-TestFile (Join-Path $ship 'bin\x86\fsvnc-updater.exe') 30000 4
+  New-TestFile (Join-Path $ship 'fsvncviewer.exe') 150000 1
+  New-TestFile (Join-Path $ship 'fsvncupdater.exe') 40000 2
   [System.IO.File]::WriteAllText((Join-Path $ship 'LICENSE.txt'), "license`n")
   [System.IO.File]::WriteAllText((Join-Path $ship 'README.txt'), "readme`n")
   [System.IO.File]::WriteAllText((Join-Path $ship 'LEIAME.txt'), "leiame`n")
@@ -101,8 +99,8 @@ try {
   Assert-That ($lines[0] -ceq 'FarSightVNC-Update-Manifest 1') 'manifest header'
   Assert-That ($lines[1] -ceq "version $version") 'manifest version line'
   Assert-That ($lines[2] -like 'package FarSightVNC-v1.0.0a.zip * *') 'manifest package line'
-  Assert-That (($lines | Where-Object { $_ -like 'file *' }).Count -eq 7) 'manifest lists 7 files'
-  Assert-That ($lines -contains ('file bin/x64/fsvnc-viewer.exe 150000 ' + (Get-FileHash (Join-Path $ship 'bin\x64\fsvnc-viewer.exe') -Algorithm SHA256).Hash.ToLowerInvariant())) 'bin/x64/fsvnc-viewer.exe line is correct'
+  Assert-That (($lines | Where-Object { $_ -like 'file *' }).Count -eq 5) 'manifest lists 5 files'
+  Assert-That ($lines -contains ('file fsvncviewer.exe 150000 ' + (Get-FileHash (Join-Path $ship 'fsvncviewer.exe') -Algorithm SHA256).Hash.ToLowerInvariant())) 'fsvncviewer.exe line is correct'
 
   # --- C++ verifier accepts the PowerShell output
   Copy-Item $publicKey (Join-Path $out 'update-key-test.public.blob')
@@ -115,7 +113,7 @@ try {
   $bad = Join-Path $work 'out-tampered'
   Copy-Item -Recurse $out $bad
   $tamperedBytes = [System.IO.File]::ReadAllBytes((Join-Path $bad 'farsightvnc-update.manifest'))
-  $index = [System.Text.Encoding]::ASCII.GetString($tamperedBytes).IndexOf('fsvnc-viewer.exe 150000') + 18
+  $index = [System.Text.Encoding]::ASCII.GetString($tamperedBytes).IndexOf('fsvncviewer.exe 150000') + 18
   $tamperedBytes[$index] = [byte][char]'9'
   [System.IO.File]::WriteAllBytes((Join-Path $bad 'farsightvnc-update.manifest'), $tamperedBytes)
   $env:FSV_PS_MANIFEST_DIR = $bad

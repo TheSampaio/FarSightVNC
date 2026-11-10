@@ -3,32 +3,32 @@ FarSightVNC Viewer v1.0.0a (alpha)
 
 Cliente VNC para Windows baseado no TightVNC Viewer 2.8.90.
 Licença: GNU GPL versão 2 ou posterior (ver LICENSE.txt).
-Data: 2026-11-09 - branch feature/updater.
+Data: 2026-11-10 - branch feature/updater.
 
 
 *** MUDANÇA INCOMPATÍVEL na v1.0.0a ***
-O programa agora é bin\x64\fsvnc-viewer.exe (64 bits) ou
-bin\x86\fsvnc-viewer.exe (32 bits). Atualize atalhos e scripts que apontavam
-para o tvnviewer.exe. As configurações, os arquivos .vnc e as opções de linha
-de comando continuam iguais.
+O programa agora é o fsvncviewer.exe, na raiz da pasta. Ele é apenas de
+64 bits (Windows 10/11 de 64 bits): a versão de 32 bits não é mais
+fornecida. Atualize atalhos e scripts que apontavam para o FarSightVNC.exe ou
+para o tvnviewer.exe. As configurações, os arquivos .vnc e as opções de
+linha de comando continuam iguais.
 
 
 COMO USAR
 ---------
-- bin\x64\fsvnc-viewer.exe -> Windows 64 bits (recomendado)
-- bin\x86\fsvnc-viewer.exe -> Windows 32 bits
+Requer Windows 10 ou 11 de 64 bits.
 
-Não precisa instalar: basta abrir o fsvnc-viewer.exe, digitar o endereço do
+Não precisa instalar: basta abrir o fsvncviewer.exe, digitar o endereço do
 servidor (ex.: 192.168.1.20::5900) e conectar.
 
-Estrutura de pastas (mantenha como está; o atualizador depende dela):
-  bin\x64\fsvnc-viewer.exe, fsvnc-updater.exe
-  bin\x86\fsvnc-viewer.exe, fsvnc-updater.exe
-  LICENSE.txt, README.txt, LEIAME.txt
+Estrutura de pastas (plana; mantenha os arquivos juntos, o atualizador
+depende disso):
+  fsvncviewer.exe, fsvncupdater.exe
+  LEIAME.txt, LICENSE.txt, README.txt
 
 Linha de comando (exemplos):
-  fsvnc-viewer.exe 192.168.1.20::5900
-  fsvnc-viewer.exe -renderer=gpu 192.168.1.20::5900
+  fsvncviewer.exe 192.168.1.20::5900
+  fsvncviewer.exe -renderer=gpu 192.168.1.20::5900
 
 
 COMPATIBILIDADE
@@ -72,20 +72,27 @@ pode ignorá-lo e manter os arquivos onde estão.
   Como a v1.0.0a muda os nomes dos arquivos e a estrutura de pastas, extraia-a
   em uma pasta NOVA (não extraia sobre as pastas antigas x64\ e Win32\, que
   depois podem ser apagadas).
-- O atualizador só funciona com a estrutura acima (bin\x64 ou bin\x86 ao lado
-  do LICENSE.txt). Se o fsvnc-viewer.exe for movido sozinho para outro lugar, a
-  atualização troca apenas esse executável e o atualizador ao lado dele.
+- Onde a atualização é instalada: sempre na pasta do fsvncviewer.exe em
+  execução. Se essa pasta tem o LICENSE.txt (o pacote extraído), os cinco
+  arquivos são atualizados. Se não tem (por exemplo, um fsvncviewer.exe
+  sozinho em uma pasta compartilhada com outros programas), apenas o
+  fsvncviewer.exe e o fsvncupdater.exe são trocados ou adicionados; nenhum
+  documento (README.txt, ...) é gravado ali, então um README.txt seu continua
+  como está.
 
 
 O QUE MUDOU NA v1.0.0a (primeira versão pública com o atualizador)
 -------------------------------------------------------------------
-- INCOMPATÍVEL: o executável agora é fsvnc-viewer.exe (era tvnviewer.exe) e as
-  pastas são bin\x64\ (64 bits) e bin\x86\ (32 bits) (eram x64\ e Win32\).
-  Atualize atalhos e scripts. As opções de linha de comando, os arquivos .vnc e
-  as configurações salvas no registro não mudaram.
+- INCOMPATÍVEL: o executável agora é fsvncviewer.exe (era tvnviewer.exe), na
+  raiz da pasta. Só há suporte para Windows 10/11 de 64 bits: a versão de 32
+  bits (Win32\) não é mais fornecida. Atualize atalhos e scripts. As opções
+  de linha de comando, os arquivos .vnc e as configurações salvas no registro
+  não mudaram.
 - Novo: atualizador automático opcional e portátil (ver ATUALIZAÇÕES acima).
-  Novo arquivo fsvnc-updater.exe ao lado do fsvnc-viewer.exe, em bin\x64\ e
-  bin\x86\ (mantenha-o na mesma pasta do fsvnc-viewer.exe).
+  Novo arquivo fsvncupdater.exe ao lado do fsvncviewer.exe (mantenha-o na
+  mesma pasta).
+- O pacote é plano: fsvncviewer.exe, fsvncupdater.exe, LEIAME.txt, LICENSE.txt
+  e README.txt, sem subpastas.
 - O protocolo VNC, o lado do servidor e as configurações salvas não mudaram.
 - (A v0.3.0a foi uma versão interna que nunca foi publicada.)
 
@@ -117,13 +124,14 @@ Base técnica (sem mudança visível para quem usa):
 
 VERIFICADO NESTA VERSÃO
 -----------------------
-- Testes automáticos: atualizador 2097/0 (x64 e Win32, Release e Debug),
-  teclado 227/0, fila de entrada 39/0, favoritos 88/0.
-- Instalação da versão assinada (64 e 32 bits) sobre uma cópia dos
-  executáveis da v0.2.1a colocados na nova estrutura bin\x64 / bin\x86, com o
-  viewer antigo aberto (o atualizador espera), arquivos do usuário
-  preservados, atualização adulterada rejeitada e downgrade recusado (teste
-  automático de ponta a ponta, sem rede).
+- Testes automáticos: atualizador 2103/0 (x64, Release e Debug), teclado
+  227/0, fila de entrada 39/0, favoritos 88/0.
+- Instalação da versão assinada sobre uma cópia do executável x64 da v0.2.1a
+  colocado na nova estrutura plana, com o viewer antigo aberto (o atualizador
+  espera), arquivos do usuário preservados, atualização adulterada rejeitada
+  e downgrade recusado. Também o caso de um executável sozinho em uma pasta
+  compartilhada (só os dois .exe são gravados; um README.txt seu continua
+  intacto). Teste automático de ponta a ponta, sem rede.
 
 
 AINDA NÃO VERIFICADO

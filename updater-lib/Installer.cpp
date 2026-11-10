@@ -45,13 +45,16 @@ bool equalsNoCase(std::wstring_view a, std::wstring_view b) {
                                 static_cast<int>(b.size()), TRUE) == CSTR_EQUAL;
 }
 
-bool startsWithNoCase(std::string_view text, std::string_view prefix) {
-  if (text.size() < prefix.size()) {
+// A top-level ".exe" manifest entry (no sub-folder).
+bool isTopLevelExecutable(std::string_view path) {
+  constexpr std::string_view extension = ".exe";
+  if (path.size() <= extension.size() || path.find('/') != std::string_view::npos) {
     return false;
   }
-  for (std::size_t i = 0; i < prefix.size(); ++i) {
-    const auto lower = [](char c) { return (c >= 'A' && c <= 'Z') ? static_cast<char>(c + 32) : c; };
-    if (lower(text[i]) != lower(prefix[i])) {
+  const std::string_view tail = path.substr(path.size() - extension.size());
+  for (std::size_t i = 0; i < extension.size(); ++i) {
+    const char c = tail[i] >= 'A' && tail[i] <= 'Z' ? static_cast<char>(tail[i] + 32) : tail[i];
+    if (c != extension[i]) {
       return false;
     }
   }
@@ -586,19 +589,9 @@ InstallTarget detectInstallTarget(const std::wstring &viewerExePath, std::string
       [&] {
         InstallTarget target;
         target.arch = std::string(arch);
-        const std::wstring viewerDir = parentDirectory(fullPath(viewerExePath));
-        const std::wstring dirName = fileName(viewerDir);
-        const std::wstring binDir = parentDirectory(viewerDir);
-        const std::wstring root = binDir.empty() ? std::wstring() : parentDirectory(binDir);
-        const bool archFolder = equalsNoCase(dirName, L"x64") || equalsNoCase(dirName, L"x86");
-        const bool inBin = !binDir.empty() && equalsNoCase(fileName(binDir), kBinDirName);
-        if (archFolder && inBin && !root.empty() && fileExists(joinPath(root, L"LICENSE.txt"))) {
-          target.layout = InstallLayout::Full;
-          target.root = root;
-        } else {
-          target.layout = InstallLayout::Standalone;
-          target.root = viewerDir;
-        }
+        target.root = parentDirectory(fullPath(viewerExePath));
+        target.layout = fileExists(joinPath(target.root, L"LICENSE.txt")) ? InstallLayout::Full
+                                                                          : InstallLayout::Standalone;
         return target;
       },
       InstallTarget{});
@@ -609,22 +602,14 @@ std::vector<PlannedFile> planInstall(const Manifest &manifest, const std::wstrin
   return guarded(
       [&] {
         std::vector<PlannedFile> plan;
-        const std::string prefix = "bin/" + target.arch + "/";
         for (const ManifestFile &file : manifest.files) {
-          std::string installPath = file.path;
-          if (target.layout == InstallLayout::Standalone) {
-            if (target.arch.empty() || !startsWithNoCase(file.path, prefix) ||
-                file.path.size() == prefix.size()) {
-              continue;
-            }
-            installPath = file.path.substr(prefix.size());
+          if (target.layout == InstallLayout::Standalone && !isTopLevelExecutable(file.path)) {
+            continue;
           }
           PlannedFile planned;
-          planned.relPath = utf8ToWide(installPath);
+          planned.relPath = utf8ToWide(file.path);
           std::replace(planned.relPath.begin(), planned.relPath.end(), L'/', L'\\');
-          std::wstring sourceRel = utf8ToWide(file.path);
-          std::replace(sourceRel.begin(), sourceRel.end(), L'/', L'\\');
-          planned.source = joinPath(stagedFilesRoot, sourceRel);
+          planned.source = joinPath(stagedFilesRoot, planned.relPath);
           planned.target = joinPath(target.root, planned.relPath);
           planned.size = file.size;
           planned.sha256 = file.sha256;

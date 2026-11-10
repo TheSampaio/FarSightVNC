@@ -657,9 +657,8 @@ void launchPendingUpdaterAtExit()
     std::wstring binExe = joinPath(binDir, kUpdaterExeName);
     std::wstring source = joinPath(parentDirectory(viewerPath), kUpdaterExeName);
     if (!fileExists(source) && install) {
-      // Staged files keep the manifest layout: files/bin/<arch>/fsvnc-updater.exe.
-      std::wstring stagedDir = joinPath(joinPath(pending, L"files"), kBinDirName);
-      source = joinPath(joinPath(stagedDir, utf8ToWide(arch)), kUpdaterExeName);
+      // Staged files keep the manifest layout (flat): filessvncupdater.exe.
+      source = joinPath(joinPath(pending, L"files"), kUpdaterExeName);
     }
     if (!ensureDirectory(binDir)) {
       return;

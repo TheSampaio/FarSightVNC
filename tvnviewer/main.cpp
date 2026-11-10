@@ -96,7 +96,7 @@ int APIENTRY _tWinMain(HINSTANCE hInstance, HINSTANCE,
     logWriter.debug(ex.getMessage());
   }
 
-  // TvnViewer is destroyed here: hand over to fsvnc-updater if an update is
+  // TvnViewer is destroyed here: hand over to fsvncupdater if an update is
   // staged (or an interrupted one must be repaired). Never blocks.
   launchPendingUpdaterAtExit();
 

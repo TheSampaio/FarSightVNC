@@ -17,7 +17,7 @@
   Grammar: see updater-lib/Manifest.h.
 
 .PARAMETER ShippingDirectory
-  The folder that was zipped (bin\x64\, bin\x86\, LICENSE.txt, README.txt, ...).
+  The folder that was zipped (flat: fsvncviewer.exe, fsvncupdater.exe, LEIAME.txt, LICENSE.txt, README.txt).
 
 .PARAMETER ZipPath
   The release zip, for example FarSightVNC-v1.0.0a.zip.

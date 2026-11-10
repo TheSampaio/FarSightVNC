@@ -31,8 +31,8 @@ What we do differently, because PCSX2 lacks it:
 | Component | Kind | Responsibility |
 |---|---|---|
 | `updater-lib` | static lib, no viewer deps, links vendor zlib | Version, JSON, Releases selection, Crypto (CNG), signed Manifest, ZipReader, FsUtil, WinHTTP client, UpdateService (settings/policy/check/stage), Installer (journal + rollback), process scan |
-| `farsight-updater` → `fsvnc-updater.exe` | Windows exe, ~same arch as viewer | wait for viewer processes, re-verify staged update, permission check + conditional UAC, install, rollback, recovery, cleanup. No network code is called. |
-| `tvnviewer` (integration) → `fsvnc-viewer.exe` | existing exe | `UpdateController` (worker threads, posts results to the hidden main window), `UpdateDialog` (modeless), "Check for Updates..." entries, launching the updater at process exit |
+| `farsight-updater` → `fsvncupdater.exe` | Windows exe (x64) | wait for viewer processes, re-verify staged update, permission check + conditional UAC, install, rollback, recovery, cleanup. No network code is called. |
+| `tvnviewer` (integration) → `fsvncviewer.exe` | existing exe (x64) | `UpdateController` (worker threads, posts results to the hidden main window), `UpdateDialog` (modeless), "Check for Updates..." entries, launching the updater at process exit |
 | `updater-test` | console test exe | deterministic tests for all of the above (exit code 0 = pass) |
 | `tools/release/*.ps1` | PowerShell 5.1 | key generation, manifest creation + signing + self-verification |
 
@@ -53,17 +53,15 @@ Why a separate updater exe: the files must be replaced after the viewer exits, t
 
 ## Release assets (per GitHub release)
 
-- `FarSightVNC-v<ver>.zip`, layout (entries at the zip root, `/` separators):
+- `FarSightVNC-v<ver>.zip`, flat layout (only these five entries, at the zip root; the same five files make up the shipping folder):
   ```
-  bin/x64/fsvnc-viewer.exe
-  bin/x64/fsvnc-updater.exe
-  bin/x86/fsvnc-viewer.exe
-  bin/x86/fsvnc-updater.exe
+  fsvncviewer.exe
+  fsvncupdater.exe
+  LEIAME.txt
   LICENSE.txt
   README.txt
-  LEIAME.txt
   ```
-  `bin/x86` is the 32-bit build (the MSBuild platform `Win32`). The project and directory names in the repository (`tvnviewer/`, `farsight-updater/`) and the MSBuild output folders `build\bin\<x64|Win32>\<Config>\` are unchanged; only the output file names and the distribution layout use the names above.
+  FarSightVNC is 64-bit only (Windows 10/11 x64): there is no 32-bit distribution. The project and directory names in the repository (`tvnviewer/`, `farsight-updater/`) and the MSBuild output folders `build\bin\x64\<Config>\` are unchanged; only the output file names and the distribution layout use the names above.
 - `farsightvnc-update.manifest`: the grammar is in `updater-lib/Manifest.h`.
 - `farsightvnc-update.manifest.sig`: a raw 64-byte P1363 signature over the exact manifest bytes.
 
@@ -95,12 +93,13 @@ Why a separate updater exe: the files must be replaced after the viewer exits, t
 
 ## Install target (`Installer.h`)
 
-- **Full** layout: the viewer lives in a folder named `x64` or `x86` whose parent is named `bin` and whose grandparent contains `LICENSE.txt` (all names case-insensitive). The grandparent is the install root and the whole package (both architectures and the docs) is updated there, mapping manifest paths 1:1. All `fsvnc-viewer.exe` targets are waited for.
-- **Standalone** layout: any other place, for example a lone `fsvnc-viewer.exe` moved out of the package. Only the files under `bin/<arch>/` of the manifest are installed into that folder, with that prefix stripped.
-- `--arch` takes `x64` or `x86` (`buildArchitecture()`).
+- The install root is always the directory of the running viewer.
+- **Full** layout: that directory contains `LICENSE.txt` (the marker of an extracted release folder). The whole package is updated there, mapping manifest paths 1:1 (executables and docs). The `fsvncviewer.exe` target is waited for.
+- **Standalone** layout: no `LICENSE.txt`, for example a lone `fsvncviewer.exe` moved to a folder shared with other things. Only the `.exe` files of the manifest (`fsvncviewer.exe`, `fsvncupdater.exe`) are installed; the documents (`README.txt`, ...) are never written, so a file of the user's with the same name stays untouched.
+- `--arch` takes only `x64` (`buildArchitecture()`). A non-x64 build reports `""` and updates are unavailable (32-bit is unsupported).
 - There is no migration from the pre-1.0 layout (`x64\tvnviewer.exe`, `Win32\tvnviewer.exe`): v0.3.0a and older are replaced by a manual extraction once.
 - Files not listed in the manifest are never touched. This covers user `.vnc` files, other tools and logs.
-- v1.0.0a renamed the executables (`tvnviewer.exe` → `fsvnc-viewer.exe`); from then on the names are stable, so shortcuts and scripts keep working across updates.
+- v1.0.0a renamed the executables (`tvnviewer.exe` → `fsvncviewer.exe`); from then on the names are stable, so shortcuts and scripts keep working across updates.
 
 ## Flow
 
@@ -111,10 +110,10 @@ Why a separate updater exe: the files must be replaced after the viewer exits, t
    - Before downloading, the viewer probes `canWriteDirectory(root)`. If the folder is not writable, the dialog says administrator approval will be requested at install time.
 3. **Ready**: the dialog says the update will be installed after all FarSightVNC windows are closed. The user can cancel, which discards the staged update.
 4. **Viewer exit** (`main.cpp`, after `TvnViewer::run()` returns), if `pending\ready` exists:
-   - copy `fsvnc-updater.exe` from the viewer folder to `<state>\bin\` (if it is missing there, use the verified staged copy `pending\files\bin\<arch>\fsvnc-updater.exe`);
+   - copy `fsvncupdater.exe` from the viewer folder to `<state>\bin\` (if it is missing there, use the verified staged copy `pending\files\fsvncupdater.exe`);
    - launch it detached:
-     `fsvnc-updater.exe --protocol 1 --install --state "<stateDir>" --viewer "<full path of fsvnc-viewer.exe>" --arch x64 --parent-pid <pid>`
-5. **fsvnc-updater** (unelevated):
+     `fsvncupdater.exe --protocol 1 --install --state "<stateDir>" --viewer "<full path of fsvncviewer.exe>" --arch x64 --parent-pid <pid>`
+5. **fsvncupdater** (unelevated):
    1. take the per-root mutex `Local\FarSightVNC-Updater-<hash>` (a second instance exits);
    2. run `loadStagedUpdate`, which re-verifies the signature and file hashes;
    3. refuse if the manifest version is not greater than the target's `readExecutableVersion` (downgrade check at install time);
@@ -125,7 +124,7 @@ Why a separate updater exe: the files must be replaced after the viewer exits, t
    7. `applyInstall`;
    8. on success, delete `pending` (guarded `removeTree`) and write `<state>\last-result.txt`. No dialog is shown on success.
    9. on failure, show a message box with the error, "previous version restored", and an offer to open the release page.
-6. **Recovery**: if the viewer starts and `<root>\.fsv-update\journal` exists, an install was interrupted. The viewer schedules `fsvnc-updater --recover` at exit, the same way as step 4.
+6. **Recovery**: if the viewer starts and `<root>\.fsv-update\journal` exists, an install was interrupted. The viewer schedules `fsvncupdater --recover` at exit, the same way as step 4.
 
 ## Install transaction (`applyInstall`)
 
@@ -168,6 +167,6 @@ Journal: `<root>\.fsv-update\journal`, a text file flushed after each line.
 ## Known limitations (accepted)
 
 - Same-user attackers are out of scope. Anyone running as the user can already replace a portable exe in a user-writable folder. The elevated case launches the updater from `%LOCALAPPDATA%`, which is the standard "UAC is not a security boundary for same-user" caveat.
-- v0.2.1a and older have no updater. v1.0.0a (the first release with it; v0.3.0a was never published) must be installed manually once, into a new folder because the layout changed.
-- The `fsvnc-updater` waiting process stays alive while other viewer processes of the same installation are still open. It does so by design and uses negligible resources.
+- v0.2.1a and older have no updater. v1.0.0a (the first release with it; v0.3.0a was never published) must be installed manually once, into a new folder because the layout changed (flat, 64-bit only).
+- The `fsvncupdater` waiting process stays alive while other viewer processes of the same installation are still open. It does so by design and uses negligible resources.
 - No GUI progress during install; replacing the few files takes well under a second.

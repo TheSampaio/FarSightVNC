@@ -4,16 +4,22 @@
 
 .DESCRIPTION
   Uses the three release assets (zip, farsightvnc-update.manifest, .sig) found in
-  -ReleaseDir and a copy of an older shipping folder (-OldShipping) as the
-  installed version. Everything happens in a fresh temp directory:
+  -ReleaseDir and the executable of an older version (-OldShipping) as the
+  installed version. FarSightVNC is 64-bit only and the release layout is flat
+  (fsvncviewer.exe, fsvncupdater.exe, LEIAME.txt, LICENSE.txt, README.txt at the
+  root). Everything happens in a fresh temp directory:
 
-    1. positive: stage the release with the production keys (updater-test.exe
-       --stage-local), start the OLD viewer, start fsvnc-updater.exe, check that it
-       waits while the viewer runs, stop ONLY that viewer, then check that every
-       manifest file was installed, user files are untouched, leftovers are gone;
-    2. negative: flip one byte of a staged file; the updater must exit 3 and leave
+    1. Full layout (LICENSE.txt next to the viewer): stage the release with the
+       production keys (updater-test.exe --stage-local), start the OLD viewer,
+       start fsvncupdater.exe, check that it waits while the viewer runs, stop
+       ONLY that viewer, then check that every manifest file was installed, user
+       files are untouched, leftovers are gone;
+    2. Standalone layout (no LICENSE.txt, a user README.txt in the folder): only
+       the two .exe files are installed; the user's README.txt, my.vnc and
+       notes.txt stay byte-identical and no document is added;
+    3. negative: flip one byte of a staged file; the updater must exit 3 and leave
        the installation byte-identical;
-    3. downgrade: install root already at the new version; the updater must refuse
+    4. downgrade: install root already at the new version; the updater must refuse
        ("not newer", exit 0), change nothing and remove the pending update.
 
   It runs no network code and never elevates (the temp folder is user-writable).
@@ -25,14 +31,11 @@
   farsightvnc-update.manifest.sig (for example the Desktop after New-UpdateManifest).
 
 .PARAMETER OldShipping
-  The older version to install over. Either a shipping folder in the current layout
-  (bin\x64\fsvnc-viewer.exe, bin\x86\fsvnc-viewer.exe, LICENSE.txt, ...) or a legacy
-  folder (x64\tvnviewer.exe, Win32\tvnviewer.exe, LICENSE.txt, ...), for example the v0.2.1a
-  release: its executables are copied into a new-layout "old installation" (their
-  VERSIONINFO says they are the older version, so they act as an older install).
-
-.PARAMETER Arch
-  x64 (default) or x86: the architecture of the viewer that is started.
+  The older version to install over. Either a flat shipping folder
+  (fsvncviewer.exe, LICENSE.txt, ...) or a legacy folder (x64\tvnviewer.exe,
+  LICENSE.txt, ...), for example the v0.2.1a release: its x64 executable is copied
+  as fsvncviewer.exe into a new "old installation" (its VERSIONINFO says it is the
+  older version, so it acts as an older install).
 
 .PARAMETER Tag
   Release tag (default: v + the manifest version).
@@ -47,13 +50,13 @@
 param(
   [Parameter(Mandatory = $true)][string]$ReleaseDir,
   [Parameter(Mandatory = $true)][string]$OldShipping,
-  [ValidateSet('x64', 'x86')][string]$Arch = 'x64',
   [string]$Tag,
   [string]$OldVersion,
   [string]$TestExe
 )
 
 $ErrorActionPreference = 'Stop'
+$Arch = 'x64'   # FarSightVNC is 64-bit only
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 if (-not $TestExe) { $TestExe = Join-Path $repoRoot 'build\bin\x64\Release\updater-test.exe' }
 $ReleaseDir = (Resolve-Path -LiteralPath $ReleaseDir).Path
@@ -116,18 +119,14 @@ function Get-NativeStateDirectory([string]$Root) {
   return ($output | Select-Object -First 1).Trim()
 }
 
-# Legacy shipping layout (x64\tvnviewer.exe, Win32\tvnviewer.exe) -> current layout in a
-# temp folder. Returns the folder to use as the "old installation" template.
-function ConvertTo-CurrentLayout([string]$Source, [string]$Destination) {
-  if (Test-Path -LiteralPath (Join-Path $Source 'bin\x64\fsvnc-viewer.exe')) { return $Source }
-  $map = @{ 'x64\tvnviewer.exe' = 'bin\x64\fsvnc-viewer.exe'; 'Win32\tvnviewer.exe' = 'bin\x86\fsvnc-viewer.exe' }
-  foreach ($from in $map.Keys) {
-    $sourceFile = Join-Path $Source $from
-    if (-not (Test-Path -LiteralPath $sourceFile)) { throw "OldShipping is neither the current nor the legacy layout: missing $from" }
-    $target = Join-Path $Destination $map[$from]
-    New-Item -ItemType Directory -Force (Split-Path $target -Parent) | Out-Null
-    Copy-Item -LiteralPath $sourceFile -Destination $target
-  }
+# Old shipping (flat, or the legacy x64\tvnviewer.exe layout) -> a flat template folder with
+# fsvncviewer.exe (+ the documents). Returns the folder to use as the "old installation".
+function ConvertTo-FlatLayout([string]$Source, [string]$Destination) {
+  if (Test-Path -LiteralPath (Join-Path $Source 'fsvncviewer.exe')) { return $Source }
+  $legacy = Join-Path $Source 'x64\tvnviewer.exe'
+  if (-not (Test-Path -LiteralPath $legacy)) { throw 'OldShipping is neither the flat nor the legacy layout: missing x64\tvnviewer.exe' }
+  New-Item -ItemType Directory -Force $Destination | Out-Null
+  Copy-Item -LiteralPath $legacy -Destination (Join-Path $Destination 'fsvncviewer.exe')
   foreach ($doc in 'LICENSE.txt', 'README.txt', 'LEIAME.txt') {
     if (Test-Path -LiteralPath (Join-Path $Source $doc)) { Copy-Item -LiteralPath (Join-Path $Source $doc) -Destination $Destination }
   }
@@ -145,14 +144,25 @@ foreach ($line in [System.IO.File]::ReadAllLines($ManifestPath)) {
 if (-not $ManifestVersion -or $ManifestFiles.Count -eq 0) { throw 'Could not read the manifest.' }
 if (-not $Tag) { $Tag = "v$ManifestVersion" }
 
+# Full: the old viewer + its documents (LICENSE.txt marks a release folder) + user files.
 function New-InstallRoot([string]$Parent, [string]$Source) {
   $root = Join-Path $Parent 'FarSightVNC'
   New-Item -ItemType Directory -Force $Parent | Out-Null
   Copy-Item -LiteralPath $Source -Destination $root -Recurse
   Set-Content -LiteralPath (Join-Path $root 'my.vnc') -Value 'host=user-file' -Encoding ASCII
-  foreach ($archDir in 'x64', 'x86') {
-    Set-Content -LiteralPath (Join-Path $root "bin\$archDir\notes.txt") -Value 'user notes' -Encoding ASCII
-  }
+  Set-Content -LiteralPath (Join-Path $root 'notes.txt') -Value 'user notes' -Encoding ASCII
+  return $root
+}
+
+# Standalone: only the old viewer exe in a folder shared with the user's own files
+# (including a README.txt that is not ours); there is no LICENSE.txt.
+function New-StandaloneRoot([string]$Parent, [string]$Source) {
+  $root = Join-Path $Parent 'shared-tools'
+  New-Item -ItemType Directory -Force $root | Out-Null
+  Copy-Item -LiteralPath (Join-Path $Source 'fsvncviewer.exe') -Destination $root
+  Set-Content -LiteralPath (Join-Path $root 'README.txt') -Value "the user's own readme" -Encoding ASCII
+  Set-Content -LiteralPath (Join-Path $root 'my.vnc') -Value 'host=user-file' -Encoding ASCII
+  Set-Content -LiteralPath (Join-Path $root 'notes.txt') -Value 'user notes' -Encoding ASCII
   return $root
 }
 
@@ -170,9 +180,9 @@ function Invoke-Stage([string]$Root, [string]$CurrentVersion) {
 function Start-Updater([string]$State, [string]$Root) {
   $bin = Join-Path $State 'bin'
   New-Item -ItemType Directory -Force $bin | Out-Null
-  $updaterExe = Join-Path $bin 'fsvnc-updater.exe'
-  Copy-Item -LiteralPath (Join-Path $State "pending\files\bin\$Arch\fsvnc-updater.exe") -Destination $updaterExe -Force
-  $arguments = @('--protocol', '1', '--install', '--state', "`"$State`"", '--viewer', "`"$Root\bin\$Arch\fsvnc-viewer.exe`"", '--arch', $Arch) -join ' '
+  $updaterExe = Join-Path $bin 'fsvncupdater.exe'
+  Copy-Item -LiteralPath (Join-Path $State 'pending\files\fsvncupdater.exe') -Destination $updaterExe -Force
+  $arguments = @('--protocol', '1', '--install', '--state', "`"$State`"", '--viewer', "`"$Root\fsvncviewer.exe`"", '--arch', $Arch) -join ' '
   $process = Start-Process -FilePath $updaterExe -ArgumentList $arguments -PassThru -WindowStyle Hidden
   $null = $process.Handle
   return $process
@@ -186,6 +196,11 @@ function Wait-Updater($Process, [int]$TimeoutSeconds = 60) {
   return $Process.ExitCode
 }
 
+function Test-ManifestFileInstalled($Root, $File) {
+  $target = Join-Path $Root ($File.Path -replace '/', '\')
+  return (Test-Path -LiteralPath $target) -and ((Get-Sha256Hex $target) -eq $File.Sha)
+}
+
 # ---------------------------------------------------------------- run
 $work = Join-Path ([System.IO.Path]::GetTempPath()) ("fsv-e2e-" + [Guid]::NewGuid().ToString('N').Substring(0, 8))
 $script:stateDirs = @()
@@ -194,19 +209,20 @@ $updaterProcess = $null
 
 try {
   New-Item -ItemType Directory -Force $work | Out-Null
-  $OldShipping = ConvertTo-CurrentLayout $OldShipping (Join-Path $work 'oldship')
+  $OldShipping = ConvertTo-FlatLayout $OldShipping (Join-Path $work 'oldship')
   if (-not $OldVersion) {
-    $OldVersion = (Get-Item (Join-Path $OldShipping "bin\$Arch\fsvnc-viewer.exe")).VersionInfo.ProductVersion
+    $OldVersion = (Get-Item (Join-Path $OldShipping 'fsvncviewer.exe')).VersionInfo.ProductVersion
   }
   Write-Host "Release $Tag (manifest version $ManifestVersion), old shipping $OldVersion, arch $Arch"
   Write-Host "Temp: $work"
 
-  # ===== a/b: positive run =====
-  Write-Host "`n[1] Install over $OldVersion while the old viewer is running"
+  # ===== 1: Full layout, positive run =====
+  Write-Host "`n[1] Full layout: install over $OldVersion while the old viewer is running"
   $rootA = New-InstallRoot (Join-Path $work 'a') $OldShipping
+  Assert-That (Test-Path -LiteralPath (Join-Path $rootA 'LICENSE.txt')) 'old installation has LICENSE.txt (Full layout)'
   $userSnapshotA = @{
-    'my.vnc'                = Get-Sha256Hex (Join-Path $rootA 'my.vnc')
-    "bin\$Arch\notes.txt"   = Get-Sha256Hex (Join-Path $rootA "bin\$Arch\notes.txt")
+    'my.vnc'    = Get-Sha256Hex (Join-Path $rootA 'my.vnc')
+    'notes.txt' = Get-Sha256Hex (Join-Path $rootA 'notes.txt')
   }
   $nativeState = Get-NativeStateDirectory $rootA
   Assert-That ($nativeState -ieq (Get-StateDirectory $rootA)) "state directory matches FsUtil::updateStateDirectory ($nativeState)"
@@ -217,7 +233,7 @@ try {
   Assert-That (Test-Path -LiteralPath $stage.State) 'helper created the state directory computed by the script'
 
   $beforeA = Get-TreeSnapshot $rootA
-  $viewerProcess = Start-Process -FilePath (Join-Path $rootA "bin\$Arch\fsvnc-viewer.exe") -PassThru
+  $viewerProcess = Start-Process -FilePath (Join-Path $rootA 'fsvncviewer.exe') -PassThru
   Start-Sleep -Seconds 2
   Assert-That (-not $viewerProcess.HasExited) 'old viewer is running'
   $updaterProcess = Start-Updater $stage.State $rootA
@@ -233,20 +249,17 @@ try {
 
   $allPresent = $true
   foreach ($file in $ManifestFiles) {
-    $target = Join-Path $rootA ($file.Path -replace '/', '\')
-    if (-not (Test-Path -LiteralPath $target) -or (Get-Sha256Hex $target) -ne $file.Sha) {
+    if (-not (Test-ManifestFileInstalled $rootA $file)) {
       $allPresent = $false
       Write-Host "    missing or different: $($file.Path)" -ForegroundColor Yellow
     }
   }
   Assert-That $allPresent "all $($ManifestFiles.Count) manifest files exist with matching SHA-256"
-  foreach ($arch2 in 'x64', 'x86') {
-    $version = (Get-Item (Join-Path $rootA "bin\$arch2\fsvnc-viewer.exe")).VersionInfo.ProductVersion
-    Assert-That ($version -eq $ManifestVersion) "bin\$arch2\fsvnc-viewer.exe is now $version"
-    Assert-That (Test-Path -LiteralPath (Join-Path $rootA "bin\$arch2\fsvnc-updater.exe")) "bin\$arch2\fsvnc-updater.exe was added"
-  }
+  $version = (Get-Item (Join-Path $rootA 'fsvncviewer.exe')).VersionInfo.ProductVersion
+  Assert-That ($version -eq $ManifestVersion) "fsvncviewer.exe is now $version"
+  Assert-That (Test-Path -LiteralPath (Join-Path $rootA 'fsvncupdater.exe')) 'fsvncupdater.exe was added'
   Assert-That ((Get-Sha256Hex (Join-Path $rootA 'my.vnc')) -eq $userSnapshotA['my.vnc']) 'my.vnc unchanged'
-  Assert-That ((Get-Sha256Hex (Join-Path $rootA "bin\$Arch\notes.txt")) -eq $userSnapshotA["bin\$Arch\notes.txt"]) "bin\$Arch\notes.txt unchanged"
+  Assert-That ((Get-Sha256Hex (Join-Path $rootA 'notes.txt')) -eq $userSnapshotA['notes.txt']) 'notes.txt unchanged'
   Assert-That (-not (Test-Path -LiteralPath (Join-Path $rootA '.fsv-update'))) 'no .fsv-update work folder left'
   Assert-That (-not (Test-Path -LiteralPath (Join-Path $stage.State 'pending'))) 'pending directory removed'
   $lastResult = Join-Path $stage.State 'last-result.txt'
@@ -254,12 +267,45 @@ try {
   Assert-That ($lastText.StartsWith("ok $ManifestVersion")) "last-result.txt starts with 'ok $ManifestVersion' ($($lastText.Trim()))"
   Assert-That (Test-Path -LiteralPath (Join-Path $stage.State 'updater.log')) 'updater.log present'
 
-  # ===== e: negative run (tampered staging) =====
-  Write-Host "`n[2] Tampered staged file must be rejected and leave the installation untouched"
+  # ===== 2: Standalone layout =====
+  Write-Host "`n[2] Standalone layout (no LICENSE.txt): only the executables are installed"
+  $rootS = New-StandaloneRoot (Join-Path $work 's') $OldShipping
+  Assert-That (-not (Test-Path -LiteralPath (Join-Path $rootS 'LICENSE.txt'))) 'folder has no LICENSE.txt (Standalone layout)'
+  $userSnapshotS = @{
+    'README.txt' = Get-Sha256Hex (Join-Path $rootS 'README.txt')
+    'my.vnc'     = Get-Sha256Hex (Join-Path $rootS 'my.vnc')
+    'notes.txt'  = Get-Sha256Hex (Join-Path $rootS 'notes.txt')
+  }
+  $stageS = Invoke-Stage $rootS $OldVersion
+  Assert-That ($stageS.Code -eq 0) 'stageUpdate succeeded: exit 0'
+  $updaterProcess = Start-Updater $stageS.State $rootS
+  $codeS = Wait-Updater $updaterProcess
+  $updaterProcess = $null
+  Assert-That ($codeS -eq 0) "updater exit code 0 (got $codeS)"
+  $exeOk = $true
+  foreach ($file in ($ManifestFiles | Where-Object { $_.Path -like '*.exe' })) {
+    if (-not (Test-ManifestFileInstalled $rootS $file)) { $exeOk = $false; Write-Host "    missing or different: $($file.Path)" -ForegroundColor Yellow }
+  }
+  Assert-That $exeOk 'fsvncviewer.exe replaced and fsvncupdater.exe added, both matching the manifest SHA-256'
+  Assert-That ((Get-Item (Join-Path $rootS 'fsvncviewer.exe')).VersionInfo.ProductVersion -eq $ManifestVersion) 'fsvncviewer.exe is now the new version'
+  Assert-That ((Get-Sha256Hex (Join-Path $rootS 'README.txt')) -eq $userSnapshotS['README.txt']) "the user's README.txt is untouched"
+  Assert-That ((Get-Sha256Hex (Join-Path $rootS 'my.vnc')) -eq $userSnapshotS['my.vnc']) 'my.vnc unchanged'
+  Assert-That ((Get-Sha256Hex (Join-Path $rootS 'notes.txt')) -eq $userSnapshotS['notes.txt']) 'notes.txt unchanged'
+  Assert-That (-not (Test-Path -LiteralPath (Join-Path $rootS 'LICENSE.txt'))) 'no LICENSE.txt was added'
+  Assert-That (-not (Test-Path -LiteralPath (Join-Path $rootS 'LEIAME.txt'))) 'no LEIAME.txt was added'
+  $names = @(Get-ChildItem -LiteralPath $rootS -Force | ForEach-Object { $_.Name } | Sort-Object)
+  Assert-That (($names -join ',') -ceq 'fsvncupdater.exe,fsvncviewer.exe,my.vnc,notes.txt,README.txt') "folder holds exactly the expected files ($($names -join ', '))"
+  Assert-That (-not (Test-Path -LiteralPath (Join-Path $stageS.State 'pending'))) 'pending directory removed'
+  $lastS = Join-Path $stageS.State 'last-result.txt'
+  $lastTextS = if (Test-Path -LiteralPath $lastS) { (Get-Content -LiteralPath $lastS -Raw) } else { '' }
+  Assert-That ($lastTextS.StartsWith("ok $ManifestVersion")) "last-result.txt starts with 'ok $ManifestVersion' ($($lastTextS.Trim()))"
+
+  # ===== 3: negative run (tampered staging) =====
+  Write-Host "`n[3] Tampered staged file must be rejected and leave the installation untouched"
   $rootB = New-InstallRoot (Join-Path $work 'b') $OldShipping
   $stageB = Invoke-Stage $rootB $OldVersion
   Assert-That ($stageB.Code -eq 0) 'stageUpdate succeeded: exit 0'
-  $victim = Join-Path $stageB.State "pending\files\bin\$Arch\fsvnc-viewer.exe"
+  $victim = Join-Path $stageB.State 'pending\files\fsvncviewer.exe'
   $bytes = [System.IO.File]::ReadAllBytes($victim)
   $mid = [int][Math]::Floor($bytes.Length / 2)
   $bytes[$mid] = $bytes[$mid] -bxor 0xFF
@@ -272,8 +318,8 @@ try {
   Assert-That (Test-SnapshotEqual $beforeB (Get-TreeSnapshot $rootB)) 'installation byte-identical'
   Assert-That (-not (Test-Path -LiteralPath (Join-Path $rootB '.fsv-update'))) 'no .fsv-update work folder'
 
-  # ===== f: downgrade run =====
-  Write-Host "`n[3] Staged version not newer than the installed one must be refused"
+  # ===== 4: downgrade run =====
+  Write-Host "`n[4] Staged version not newer than the installed one must be refused"
   $newShipping = Join-Path $work 'newship'
   New-Item -ItemType Directory -Force $newShipping | Out-Null
   foreach ($file in $ManifestFiles) {
@@ -302,7 +348,7 @@ catch {
   Write-Host "ERROR: $($_.Exception.Message)" -ForegroundColor Red
 }
 finally {
-  # ===== g: cleanup (only what this script started or created) =====
+  # ===== cleanup (only what this script started or created) =====
   if ($viewerProcess -and -not $viewerProcess.HasExited) { Stop-Process -Id $viewerProcess.Id -Force }
   if ($updaterProcess -and -not $updaterProcess.HasExited) { $updaterProcess.Kill() }
   Start-Sleep -Milliseconds 300

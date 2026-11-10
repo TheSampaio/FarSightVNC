@@ -3,31 +3,30 @@ FarSightVNC Viewer v1.0.0a (alpha)
 
 VNC client for Windows based on TightVNC Viewer 2.8.90.
 License: GNU GPL version 2 or later (see LICENSE.txt).
-Date: 2026-11-09 - branch feature/updater.
+Date: 2026-11-10 - branch feature/updater.
 
 
 *** BREAKING CHANGE in v1.0.0a ***
-The program is now bin\x64\fsvnc-viewer.exe (64-bit) or
-bin\x86\fsvnc-viewer.exe (32-bit). Update shortcuts and scripts that pointed
-to tvnviewer.exe. Settings, .vnc files and command-line options are unchanged.
+The program is now fsvncviewer.exe, at the root of the folder. It is
+64-bit only (Windows 10/11 64-bit): the 32-bit version is no longer provided.
+Update shortcuts and scripts that pointed to FarSightVNC.exe or
+tvnviewer.exe. Settings, .vnc files and command-line options are unchanged.
 
 
 HOW TO USE
 ----------
-- bin\x64\fsvnc-viewer.exe -> 64-bit Windows (recommended)
-- bin\x86\fsvnc-viewer.exe -> 32-bit Windows
+Requires 64-bit Windows 10 or 11.
 
-No installation needed: open fsvnc-viewer.exe, enter the server address
+No installation needed: open fsvncviewer.exe, enter the server address
 (e.g. 192.168.1.20::5900) and connect.
 
-Folder layout (keep it as is; the updater relies on it):
-  bin\x64\fsvnc-viewer.exe, fsvnc-updater.exe
-  bin\x86\fsvnc-viewer.exe, fsvnc-updater.exe
-  LICENSE.txt, README.txt, LEIAME.txt
+Folder layout (flat; keep the files together, the updater relies on it):
+  fsvncviewer.exe, fsvncupdater.exe
+  LEIAME.txt, LICENSE.txt, README.txt
 
 Command line (examples):
-  fsvnc-viewer.exe 192.168.1.20::5900
-  fsvnc-viewer.exe -renderer=gpu 192.168.1.20::5900
+  fsvncviewer.exe 192.168.1.20::5900
+  fsvncviewer.exe -renderer=gpu 192.168.1.20::5900
 
 
 COMPATIBILITY
@@ -68,20 +67,26 @@ can ignore it and keep the files where they are.
   v1.0.0a changes the file names and the folder layout, extract it into a NEW
   folder (do not extract it over the old x64\ and Win32\ folders, which can then
   be deleted).
-- The updater only works with the layout above (bin\x64 or bin\x86 next to
-  LICENSE.txt). If fsvnc-viewer.exe is moved elsewhere on its own, the update
-  replaces only that executable and the updater next to it.
+- Where the update is installed: always the folder of the running
+  fsvncviewer.exe. If that folder contains LICENSE.txt (the extracted
+  package), all five files are updated. If it does not (for example a lone
+  fsvncviewer.exe moved to a folder shared with other programs), only
+  fsvncviewer.exe and fsvncupdater.exe are replaced or added; no document
+  (README.txt, ...) is ever written there, so a README.txt of your own stays
+  as it is.
 
 
 CHANGES IN v1.0.0a (first public release with the updater)
 -----------------------------------------------------------
-- BREAKING: the executable is now fsvnc-viewer.exe (it was tvnviewer.exe) and
-  the folders are bin\x64\ (64-bit) and bin\x86\ (32-bit) (they were x64\ and
-  Win32\). Update shortcuts and scripts. The command-line options, .vnc files
-  and settings stored in the registry are unchanged.
+- BREAKING: the executable is now fsvncviewer.exe (it was tvnviewer.exe), at
+  the root of the folder. Only 64-bit Windows 10/11 is supported: the 32-bit
+  version (Win32\) is no longer provided. Update shortcuts and scripts. The
+  command-line options, .vnc files and settings stored in the registry are
+  unchanged.
 - New: optional, portable auto-updater (see UPDATES above). New file
-  fsvnc-updater.exe next to fsvnc-viewer.exe, in bin\x64\ and bin\x86\ (keep it
-  in the same folder as fsvnc-viewer.exe).
+  fsvncupdater.exe next to fsvncviewer.exe (keep it in the same folder).
+- The package is flat: fsvncviewer.exe, fsvncupdater.exe, LEIAME.txt,
+  LICENSE.txt and README.txt, with no sub-folders.
 - The VNC protocol, the server side and the saved settings are unchanged.
 - (v0.3.0a was an internal build that was never published.)
 
@@ -113,12 +118,14 @@ Technical base (no visible change for users):
 
 VERIFIED IN THIS VERSION
 ------------------------
-- Automated tests: updater 2097/0 (x64 and Win32, Release and Debug),
-  keyboard 227/0, input queue 39/0, favorites 88/0.
-- Installation of the signed release (64-bit and 32-bit) over a copy of the
-  v0.2.1a executables placed in the new bin\x64 / bin\x86 layout, with the old
-  viewer open (the updater waits), user files kept, a tampered update
-  rejected and a downgrade refused (automatic end-to-end test, no network).
+- Automated tests: updater 2103/0 (x64, Release and Debug), keyboard 227/0,
+  input queue 39/0, favorites 88/0.
+- Installation of the signed release over a copy of the v0.2.1a x64
+  executable placed in the new flat layout: with the old viewer open (the
+  updater waits), user files kept, a tampered update rejected and a downgrade
+  refused. Also the case of a lone executable in a shared folder (only the two
+  .exe files are written; a README.txt of your own stays untouched). Automatic
+  end-to-end test, no network.
 
 
 NOT YET VERIFIED

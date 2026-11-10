@@ -1,12 +1,12 @@
 // Copyright (C) 2026 FarSightVNC contributors.
 // Licensed under the GNU GPL, version 2 or (at your option) any later version.
 //
-// fsvnc-updater.exe: waits for the viewer processes of one installation to
+// fsvncupdater.exe: waits for the viewer processes of one installation to
 // exit, then installs a staged, signed update or repairs an interrupted
 // install (see docs/updater/DESIGN.md, "Flow" steps 5 and 6). Protocol 1:
 //
-//   --protocol 1 --install|--recover --state "<stateDir>" --viewer "<fsvnc-viewer.exe>"
-//   --arch x64|x86 [--parent-pid N] [--elevated]
+//   --protocol 1 --install|--recover --state "<stateDir>" --viewer "<fsvncviewer.exe>"
+//   --arch x64 [--parent-pid N] [--elevated]
 //
 // No network calls; the only windows are message boxes.
 
@@ -33,7 +33,7 @@ using namespace fsv::update;
 
 namespace {
 
-// Exit codes of fsvnc-updater.exe.
+// Exit codes of fsvncupdater.exe.
 constexpr int kExitOk = 0;
 constexpr int kExitNoUpdate = 3;   // nothing staged / nothing installable
 constexpr int kExitNeedsAdmin = 4; // administrator permission was declined
@@ -261,13 +261,13 @@ void waitForViewers(const std::vector<std::wstring> &viewers) {
   waitForProcessesToExit(viewers, [] { return false; });
 }
 
-// Every fsvnc-viewer.exe a recovery could be touching.
+// Every fsvncviewer.exe a recovery could be touching: the one that launched
+// us and rootsvncviewer.exe (the same file in a normal installation).
 std::vector<std::wstring> recoveryViewers(const Context &context) {
   std::vector<std::wstring> viewers{context.options.viewer};
-  if (context.target.layout == InstallLayout::Full) {
-    const std::wstring binDir = joinPath(context.target.root, kBinDirName);
-    viewers.push_back(joinPath(joinPath(binDir, L"x64"), kViewerExeName));
-    viewers.push_back(joinPath(joinPath(binDir, L"x86"), kViewerExeName));
+  const std::wstring rootViewer = joinPath(context.target.root, kViewerExeName);
+  if (!pathsEqual(rootViewer, context.options.viewer)) {
+    viewers.push_back(rootViewer);
   }
   return viewers;
 }

@@ -6,6 +6,8 @@
   Locates MSBuild through vswhere, builds the requested configurations of the
   tvnviewer project from tightvnc2017.sln and writes one log per configuration.
   Requires Visual Studio with the MSVC v145 toolset and a Windows 10/11 SDK.
+  FarSightVNC is 64-bit only: x64 is the default and the only supported
+  platform (the Win32 configurations remain in the solution but are unsupported).
 
 .EXAMPLE
   .\tools\build.ps1
@@ -13,7 +15,7 @@
 #>
 param(
   [string[]]$Configurations = @('Release', 'Debug'),
-  [string[]]$Platforms = @('x64', 'Win32'),
+  [string[]]$Platforms = @('x64'),
   [ValidateSet('Build', 'Rebuild', 'Clean')]
   [string]$Target = 'Build',
   [string]$Project = 'tvnviewer',

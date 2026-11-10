@@ -500,8 +500,8 @@ std::wstring widen(const std::string &text) { return utf8ToWide(text); }
 class StageFixture {
 public:
   StageFixture() {
-    files = {{"bin/x64/fsvnc-viewer.exe", contentOf("x64-exe", 5000)},
-             {"bin/x86/fsvnc-viewer.exe", contentOf("x86-exe", 3000)},
+    files = {{"fsvncviewer.exe", contentOf("viewer-exe", 5000)},
+             {"fsvncupdater.exe", contentOf("updater-exe", 3000)},
              {"LICENSE.txt", "license text\n"}};
     keys.push_back(TrustedKey{1, key.publicBlob()});
   }
@@ -779,7 +779,7 @@ void testStageVerification(const TempDir &temp) {
     StageFixture fx;
     fx.state = newState(temp);
     fx.publish();
-    fx.http.routes[fx.manifestUrl].body += "file bin/x64/evil.exe 1 " + std::string(64, '0') + "\n";
+    fx.http.routes[fx.manifestUrl].body += "file evil.exe 1 " + std::string(64, '0') + "\n";
     expectFailure(fx, StageError::BadSignature, "tampered manifest");
   }
   { // signature of the wrong length

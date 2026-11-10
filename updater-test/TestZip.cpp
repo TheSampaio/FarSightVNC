@@ -246,9 +246,9 @@ void expectFailure(const TempDir &temp, const std::string &zipBytes, const FileL
 
 FileList standardFiles() {
   return {{"LICENSE.txt", "License text\nline 2\n"},
-          {"bin/x64/fsvnc-viewer.exe", pseudoRandom(300000, 1)},
-          {"bin/x86/fsvnc-viewer.exe", std::string(100000, 'q') + pseudoRandom(5000, 2)},
-          {"bin/x86/sub/readme.txt", "nested file\n"},
+          {"fsvncviewer.exe", pseudoRandom(300000, 1)},
+          {"fsvncupdater.exe", std::string(100000, 'q') + pseudoRandom(5000, 2)},
+          {"sub/readme.txt", "nested file\n"},
           {"README.txt", ""},
           {"LEIAME.txt", ""}};
 }
@@ -258,14 +258,14 @@ void testSuccessfulExtraction(const TempDir &temp) {
   std::vector<ZipEntry> entries;
   entries.push_back({"docs/", ""});                                  // directory entry
   entries.push_back({"license.TXT", files[0].second});               // stored, other case
-  ZipEntry viewer64{"bin\\x64\\fsvnc-viewer.exe", files[1].second};          // deflated, backslashes
-  viewer64.deflate = true;
-  entries.push_back(viewer64);
-  ZipEntry viewer32{"bin/x86/fsvnc-viewer.exe", files[2].second};         // deflated + descriptor
-  viewer32.deflate = true;
-  viewer32.dataDescriptor = true;
-  entries.push_back(viewer32);
-  ZipEntry nested{"bin\\x86\\sub\\readme.txt", files[3].second};        // stored, backslashes
+  ZipEntry viewer{"fsvncviewer.exe", files[1].second};                       // deflated
+  viewer.deflate = true;
+  entries.push_back(viewer);
+  ZipEntry updater{"fsvncupdater.exe", files[2].second};                    // deflated + descriptor
+  updater.deflate = true;
+  updater.dataDescriptor = true;
+  entries.push_back(updater);
+  ZipEntry nested{"sub\\readme.txt", files[3].second};                     // stored, backslashes
   entries.push_back(nested);
   entries.push_back({"../evil.txt", "evil"});                        // unlisted: ignored
   entries.push_back({"other.bin", "not in the manifest"});           // unlisted: ignored

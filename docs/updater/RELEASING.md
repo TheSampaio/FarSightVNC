@@ -20,43 +20,46 @@ The public key that the viewer trusts is compiled into
 
 ## 2. Build
 
-Release builds of all three projects, both platforms:
+Release builds of all three projects. FarSightVNC is 64-bit only: x64 is the
+default platform of `tools\build.ps1` and the only one that is built, tested and
+shipped (the Win32 configurations remain in the solution but are unsupported).
 
 ```powershell
-powershell -NoProfile -Command "& .\tools\build.ps1 -Project updater-test, farsight-updater, tvnviewer -Configurations Release -Platforms x64,Win32"
+powershell -NoProfile -Command "& .\tools\build.ps1 -Project updater-test, farsight-updater, tvnviewer -Configurations Release -Platforms x64"
 ```
 
 (Pass the project list with `-Command`; `-File` breaks array arguments.) Run
-`build\bin\<platform>\Release\updater-test.exe` for both platforms and
+`build\bin\x64\Release\updater-test.exe` and
 `tools\release\Test-ReleaseScripts.ps1`. All must pass before signing.
 
 ## 3. Shipping folder
 
 ```
 FarSightVNC-v<version>\
-  bin\x64\fsvnc-viewer.exe
-  bin\x64\fsvnc-updater.exe
-  bin\x86\fsvnc-viewer.exe
-  bin\x86\fsvnc-updater.exe
+  fsvncviewer.exe
+  fsvncupdater.exe
+  LEIAME.txt      (Portuguese)
   LICENSE.txt
   README.txt      (English)
-  LEIAME.txt      (Portuguese)
 ```
 
-`bin\x86` holds the 32-bit build (the MSBuild platform `Win32`); `bin\x64` the 64-bit one.
+The layout is flat (no sub-folders) and 64-bit only; there is no `bin\x86`.
 
 `README.txt` and `LEIAME.txt` carry the version and the changes of this release;
-their sources are in `docs/shipping/`. Copy `fsvnc-viewer.exe` and
-`fsvnc-updater.exe` from `build\bin\x64\Release` to `bin\x64` and from
-`build\bin\Win32\Release` to `bin\x86`. Do not add any other
-file: every file in the folder is installed on the user's machine and is listed
-in the signed manifest (at most 64 files, each at most 64 MiB, paths of at most
-four segments of `A-Z a-z 0-9 . _ -`).
+their sources are in `docs/shipping/`. Copy `fsvncviewer.exe` and
+`fsvncupdater.exe` from `build\bin\x64\Release` and `LICENSE.txt` from
+`wix-installer\LICENSE.txt`. Do not add any other
+file: every file in the folder is listed in the signed manifest and, in a folder
+that holds a `LICENSE.txt`, installed on the user's machine (at most 64 files,
+each at most 64 MiB, paths of at most four segments of `A-Z a-z 0-9 . _ -`).
+The same five files are the entire zip.
 
 ## 4. Zip
 
-The zip must be named `FarSightVNC-v<version>.zip`, with the entries at the
-root (`bin/x64/fsvnc-viewer.exe`, ...) and `/` separators. Do not use
+The zip must be named `FarSightVNC-v<version>.zip`, with the five files as
+entries at the root (no sub-folders; the signed manifest and its signature are
+separate release assets next to the zip, because the manifest pins the zip's
+hash) and `/` separators. Do not use
 `Compress-Archive` (it writes `\` separators on Windows PowerShell 5.1).
 
 ```powershell
@@ -104,9 +107,11 @@ exits 0 only if the signature, the version binding and every hash are accepted.
 release over a copy of the previous shipping folder (waiting for a running
 viewer, keeping user files, rejecting a tampered staging, refusing a downgrade).
 Run it with `-ReleaseDir` (the folder holding the three assets) and
-`-OldShipping` (an older shipping folder, in the current `bin\x64`/`bin\x86` layout or in
-the legacy `x64`/`Win32` layout, which the script converts). Use `-Arch x86` to test the
-32-bit build.
+`-OldShipping` (an older shipping folder, in the flat layout or in the legacy
+`x64\tvnviewer.exe` layout, whose x64 executable the script copies as
+`fsvncviewer.exe`). It runs a Full layout install (`LICENSE.txt` next to the
+viewer), a Standalone install (only the two executables are written; a user's
+`README.txt` in the folder stays untouched), the tamper test and the downgrade test.
 
 ## 7. Publish on GitHub
 
@@ -166,9 +171,9 @@ as an exploit recipe.
 ## Release checklist
 
 - [ ] Version bumped everywhere, committed, tag `v<version>` matches
-- [ ] Release builds of `tvnviewer`, `farsight-updater`, `updater-test` (x64 and Win32), tests pass
-- [ ] Shipping folder has exactly the files of section 3
-- [ ] Zip made with `/` separators, entries at the root
+- [ ] Release builds of `tvnviewer`, `farsight-updater`, `updater-test` (x64 only), tests pass
+- [ ] Shipping folder has exactly the five files of section 3
+- [ ] Zip made with `/` separators, the five entries at the root
 - [ ] Manifest and signature created with the offline key, script reports verified
 - [ ] `--stage-local` (and, if possible, the end-to-end script) accepted the real assets
 - [ ] GitHub release (pre-release for a/b) with the three assets and the notes

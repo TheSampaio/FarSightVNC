@@ -1,7 +1,7 @@
 // Copyright (C) 2026 FarSightVNC contributors.
 // Licensed under the GNU GPL, version 2 or (at your option) any later version.
 //
-// Transactional file replacement used by fsvnc-updater.exe. Never touches
+// Transactional file replacement used by fsvncupdater.exe. Never touches
 // files that are not listed in the signed manifest. Crash-safe through a
 // journal in <root>\.fsv-update\ (see docs/updater/DESIGN.md, "Install").
 
@@ -14,19 +14,18 @@
 namespace fsv::update {
 
 enum class InstallLayout {
-  Full,       // root\bin\x64\fsvnc-viewer.exe, root\bin\x86\..., root\LICENSE.txt ...
-  Standalone, // a lone directory with fsvnc-viewer.exe of one architecture
+  Full,       // flat release folder: fsvncviewer.exe, fsvncupdater.exe, LICENSE.txt, docs
+  Standalone, // the executables alone in a folder shared with other things
 };
 
 struct InstallTarget {
   std::wstring root;   // full path, no trailing '\'
   InstallLayout layout = InstallLayout::Standalone;
-  std::string arch;    // "x64" / "x86": the running build's architecture
+  std::string arch;    // "x64": the running build's architecture
 };
 
-// Full if the viewer's directory is named x64 or x86, its parent is named "bin"
-// (all case-insensitive) and the grandparent contains LICENSE.txt; then
-// root = grandparent. Otherwise Standalone with root = viewer directory.
+// root = the directory of the running viewer, always. Full if it contains
+// LICENSE.txt (the marker of an extracted release folder), Standalone otherwise.
 InstallTarget detectInstallTarget(const std::wstring &viewerExePath, std::string_view arch);
 
 struct PlannedFile {
@@ -38,14 +37,15 @@ struct PlannedFile {
 };
 
 // Full: every manifest file maps to the same relative path.
-// Standalone: only files under "bin/<arch>/" are installed, that prefix
-// stripped; other files are skipped. Empty result = nothing installable (error).
+// Standalone: only the ".exe" files of the manifest are installed; the
+// documents (README.txt, ...) are never written into a shared folder.
+// Empty result = nothing installable (error).
 std::vector<PlannedFile> planInstall(const Manifest &manifest,
                                      const std::wstring &stagedFilesRoot,
                                      const InstallTarget &target);
 
-// Full paths of every fsvnc-viewer.exe the plan targets (to wait for), including
-// ones that do not exist yet are harmless.
+// Full paths of every fsvncviewer.exe the plan targets (to wait for); one that
+// does not exist yet is harmless.
 std::vector<std::wstring> viewerExecutables(const std::vector<PlannedFile> &plan);
 
 inline constexpr wchar_t kWorkDirName[] = L".fsv-update";

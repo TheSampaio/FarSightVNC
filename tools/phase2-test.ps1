@@ -55,8 +55,8 @@
   the current one.
 
 .EXAMPLE
-  .\tools\phase2-test.ps1 -Viewer .\build\bin\x64\Release\fsvnc-viewer.exe
-  .\tools\phase2-test.ps1 -Viewer C:\path\fsvnc-viewer.exe -Sizes 1920x1080 -Scales 100,auto
+  .\tools\phase2-test.ps1 -Viewer .\build\bin\x64\Release\fsvncviewer.exe
+  .\tools\phase2-test.ps1 -Viewer C:\path\fsvncviewer.exe -Sizes 1920x1080 -Scales 100,auto
 #>
 param(
   [Parameter(Mandatory = $true)][string]$Viewer,

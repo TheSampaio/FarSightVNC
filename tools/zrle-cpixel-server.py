@@ -31,7 +31,7 @@ empty byte is dropped). The cases:
 One connection is served. It prints "LISTENING 127.0.0.1:<port> ..." when ready
 and one "DONE ..." line.
 
-Viewer driver (Windows): --run-viewer <fsvnc-viewer.exe> starts, for every case
+Viewer driver (Windows): --run-viewer <fsvncviewer.exe> starts, for every case
 and phase, a server on its own port and the viewer against it, then classifies
 the run as CRASH (exception exit code, CRT dialog), ERROR (handled error
 dialog) or OK, and compares the rendered colours: the viewer window is moved to
@@ -40,8 +40,8 @@ not use the machine while it runs. Nothing is injected into the desktop.
 
 Examples:
   python -I tools/zrle-cpixel-server.py --port 5985 --case shifted --phase after
-  python -I tools/zrle-cpixel-server.py --run-viewer build\\bin\\x64\\Debug\\fsvnc-viewer.exe
-  python -I tools/zrle-cpixel-server.py --run-viewer build\\bin\\x64\\Debug\\fsvnc-viewer.exe --use-8bit
+  python -I tools/zrle-cpixel-server.py --run-viewer build\\bin\\x64\\Debug\\fsvncviewer.exe
+  python -I tools/zrle-cpixel-server.py --run-viewer build\\bin\\x64\\Debug\\fsvncviewer.exe --use-8bit
 """
 import argparse
 import ctypes
@@ -632,7 +632,7 @@ def main():
     parser.add_argument('--case', choices=sorted(CASES), default='shifted')
     parser.add_argument('--phase', choices=('before', 'after'), default='after')
     parser.add_argument('--duration', type=float, default=25.0, help='hard limit in seconds (default 25)')
-    parser.add_argument('--run-viewer', metavar='EXE', help='drive this fsvnc-viewer.exe against every case and phase')
+    parser.add_argument('--run-viewer', metavar='EXE', help='drive this fsvncviewer.exe against every case and phase')
     parser.add_argument('--cases', nargs='*', choices=sorted(CASES), help='driver: cases to run (default all)')
     parser.add_argument('--phases', default='before,after', help='driver: comma separated (default before,after)')
     parser.add_argument('--use-8bit', action='store_true', help='driver: start the viewer with 8bit=1 (colour tolerance 30)')

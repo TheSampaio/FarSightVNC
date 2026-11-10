@@ -9,8 +9,8 @@
 //   FarSightVNC-Update-Manifest 1
 //   version 1.0.0a
 //   package FarSightVNC-v1.0.0a.zip <size> <sha256-hex>
-//   file bin/x64/fsvnc-viewer.exe <size> <sha256-hex>
-//   file bin/x64/fsvnc-updater.exe <size> <sha256-hex>
+//   file fsvncviewer.exe <size> <sha256-hex>
+//   file fsvncupdater.exe <size> <sha256-hex>
 //   ...
 
 #pragma once

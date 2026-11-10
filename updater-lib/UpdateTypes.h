@@ -46,16 +46,15 @@ struct Version {
 
 using Sha256Digest = std::array<std::uint8_t, 32>;
 
-// The architecture this binary was compiled for: "x64", "x86" or "" (other).
-// Matches the distribution folder names bin/x64 and bin/x86 (the MSBuild
-// platform "Win32" is only a build-output name).
+// The architecture this binary was compiled for: "x64", or "" for anything
+// else. FarSightVNC is 64-bit only: a non-x64 build has updates unavailable.
 const char *buildArchitecture();
 
-// Output names and distribution layout (see docs/updater/DESIGN.md):
-//   <root>/bin/x64/fsvnc-viewer.exe, <root>/bin/x86/..., <root>/LICENSE.txt
-inline constexpr wchar_t kViewerExeName[] = L"fsvnc-viewer.exe";
-inline constexpr wchar_t kUpdaterExeName[] = L"fsvnc-updater.exe";
-inline constexpr wchar_t kBinDirName[] = L"bin";
+// Output names and distribution layout (see docs/updater/DESIGN.md): a flat
+// folder with fsvncviewer.exe, fsvncupdater.exe, LEIAME.txt, LICENSE.txt and
+// README.txt at its root.
+inline constexpr wchar_t kViewerExeName[] = L"fsvncviewer.exe";
+inline constexpr wchar_t kUpdaterExeName[] = L"fsvncupdater.exe";
 
 // Official update source (see docs/updater/DESIGN.md). Never configurable at
 // run time.

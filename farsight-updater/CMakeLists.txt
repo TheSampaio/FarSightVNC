@@ -1,11 +1,11 @@
-# farsight-updater: fsvnc-updater.exe (Windows subsystem), mirrors farsight-updater.vcxproj.
+# farsight-updater: fsvncupdater.exe (Windows subsystem), mirrors farsight-updater.vcxproj.
 # The manifest (asInvoker, Common Controls 6, per-monitor DPI) is merged by mt.exe.
 add_executable(farsight-updater WIN32
   main.cpp
   farsight-updater.rc
   farsight-updater.manifest)
 
-set_target_properties(farsight-updater PROPERTIES OUTPUT_NAME fsvnc-updater)
+set_target_properties(farsight-updater PROPERTIES OUTPUT_NAME fsvncupdater)
 fsv_configure_updater_executable(farsight-updater)
 target_compile_definitions(farsight-updater PRIVATE _WINDOWS)
 target_include_directories(farsight-updater PRIVATE ${FSV_ROOT})

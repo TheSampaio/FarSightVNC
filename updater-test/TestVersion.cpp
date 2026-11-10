@@ -100,8 +100,6 @@ void runVersionTests() {
   // Architecture of this binary.
 #if defined(_M_X64)
   CHECK(std::string_view(fsv::update::buildArchitecture()) == "x64");
-#elif defined(_M_IX86)
-  CHECK(std::string_view(fsv::update::buildArchitecture()) == "x86");
 #else
   CHECK(std::string_view(fsv::update::buildArchitecture()).empty());
 #endif

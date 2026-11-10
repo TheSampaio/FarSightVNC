@@ -3,7 +3,7 @@ FarSightVNC v1.0.0a (alpha) Pre-release
 This is the third numbered release of FarSightVNC, a Windows VNC viewer based on TightVNC Viewer 2.8.90 (GPLv2-or-later).
 
 > ⚠️ **Alpha build with a breaking change.**
-> - The program is now `bin\x64\fsvnc-viewer.exe` (64-bit) or `bin\x86\fsvnc-viewer.exe` (32-bit). Update any shortcuts or scripts that pointed to `FarSightVNC.exe` or `tvnviewer.exe`.
+> - The program is now `fsvncviewer.exe`, at the root of the folder. It is **64-bit only** (Windows 10/11 64-bit): the 32-bit version is no longer provided. Update any shortcuts or scripts that pointed to `FarSightVNC.exe` or `tvnviewer.exe`.
 > - This is the first release with a built-in **automatic updater**.
 > - Install it manually once: extract the zip into a **new** folder. Your settings and `.vnc` files are not affected.
 
@@ -15,7 +15,7 @@ This is the third numbered release of FarSightVNC, a Windows VNC viewer based on
   - An automatic daily check is optional (a checkbox in the update dialog). Pre-release versions are opt-in for stable users and enabled by default on alpha/beta builds.
   - The download runs in the background. The update is installed only after every FarSightVNC window of that folder is closed, so active sessions are never interrupted.
   - It is fully portable: no installer, service or scheduled task. Administrator permission is requested only when the folder is protected (for example under `Program Files`).
-- **New folder layout:** `bin\x64\` and `bin\x86\`, each with `fsvnc-viewer.exe` and `fsvnc-updater.exe`, plus `LICENSE.txt`, `README.txt` and `LEIAME.txt`.
+- **New flat folder layout:** `fsvncviewer.exe`, `fsvncupdater.exe`, `LEIAME.txt`, `LICENSE.txt` and `README.txt`, all at the root with no sub-folders. The update is installed in the folder of the running `fsvncviewer.exe`; if that folder has no `LICENSE.txt` (for example a lone executable in a folder shared with other programs), only the two `.exe` files are replaced and no document is ever written there.
 - **Application name:** Windows (for example Task Manager) now shows just "FarSightVNC". The About dialog still says "Based on TightVNC Viewer 2.8.90".
 - **Modernized code base:**
   - The whole solution is built as C++20.
@@ -54,22 +54,23 @@ This is the third numbered release of FarSightVNC, a Windows VNC viewer based on
 - **Updater log:** `%LOCALAPPDATA%\FarSightVNC\Updates\<id>\updater.log`. The result of the last installation is in `last-result.txt` in the same folder.
 - **Updater settings:** `HKCU\Software\FarSightVNC\Viewer\Updater`.
 - **Tests:**
-  - `updater-test` runs 2097 deterministic checks of the updater.
-  - `tools/release/Test-EndToEndInstall.ps1` installs this signed release over an older version (x64 and x86), including tamper and downgrade cases.
+  - `updater-test` runs 2103 deterministic checks of the updater (x64, Release and Debug).
+  - `tools/release/Test-EndToEndInstall.ps1` installs this signed release over an older version (41 checks): a full folder, a lone executable in a shared folder (the user's `README.txt` stays untouched), and the tamper and downgrade cases.
 
 ## Downloads
 
 | File | Content | SHA-256 |
 |---|---|---|
-| `FarSightVNC-v1.0.0a.zip` | Windows 10/11 64-bit (`bin\x64`) and 32-bit (`bin\x86`) | `518ff897e1d0f03c2d8afcece566a84612be4893787391bdac7fcfa451999cef` |
-| `farsightvnc-update.manifest` | Signed update manifest (used by the updater) | `95ea8e7e1d7525882f5a05decf30fab7b0d461024a29e01347ce7e115632e44c` |
-| `farsightvnc-update.manifest.sig` | Manifest signature (used by the updater) | `d7ccf2bc4940f6c8b436882eee1e0ee19211e60d09cd5cddbd61c1aa1c400e89` |
+| `FarSightVNC-v1.0.0a.zip` | Windows 10/11 64-bit (flat: `fsvncviewer.exe`, `fsvncupdater.exe`, docs) | `16f9ef5b1aa47d33bdb2fef1da4f197a6c1a4e651f39ca11ef814b42807e2c53` |
+| `farsightvnc-update.manifest` | Signed update manifest (used by the updater) | `2461601e6ef86e0af55a92769c329d41933f4d3a18f087d91294ea3af07f1976` |
+| `farsightvnc-update.manifest.sig` | Manifest signature (used by the updater) | `6e4274ba34daa6aeeacb833db3bb1f10a7fb6e62b7d2a1f419c337761d803711` |
 
 The manifest and the signature must stay attached to the release. Without them the updater will not install this version automatically.
 
 ## Known limitations
 
 - **Manual install required once:** v0.1.1a and older have no updater.
+- **64-bit only:** there is no 32-bit version and the updater is unavailable in a 32-bit build.
 - **Not yet validated by hand:**
   - a real download of a published release by the updater;
   - the administrator (UAC) prompt in a protected folder;
