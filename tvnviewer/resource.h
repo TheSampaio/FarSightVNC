@@ -5,6 +5,7 @@
 // Modified for FarSightVNC on 2026-11-03: IDs of the login dialog favorite and recent controls.
 // Modified for FarSightVNC on 2026-11-09: IDs of the update dialog and IDS_CHECK_FOR_UPDATES.
 // Modified for FarSightVNC on 2026-11-11: IDB_TOOLBAR removed (no toolbar bitmap any more).
+// Modified for FarSightVNC on 2026-11-11: IDs of the removed login dialog, its logo bitmap and licensing URL removed.
 //
 #define IDI_CNOCURSOR                   102
 #define IDI_CSMALLDOT                   103
@@ -34,7 +35,6 @@
 #define IDS_ERROR_IN_PROTOCOL           131
 #define IDS_DISCONNECT                  132
 #define IDS_PRODUCT_VERSION_FORMAT      133
-#define IDD_LOGINDIALOG                 134
 #define IDS_SAVE_SESSION_FILTER_VNC_FILES 134
 #define IDS_SAVE_SESSION_FILTER_ALL_FILES 135
 #define IDD_OPTIONS                     136
@@ -45,9 +45,7 @@
 #define IDB_LOGO_BIG                    139
 #define IDS_CONNECTION_INFO_CAPTION     139
 #define IDS_ABOUT_VIEWER                140
-#define IDB_LOGO_48                     141
 #define IDS_CONNECTION_INFO_FORMAT      141
-#define IDS_URL_LICENSING_FVC           142
 #define IDS_UNKNOWN_ERROR_IN_VIEWER     143
 #define IDS_CONFIGURATION_LISTEN_PORT   144
 #define IDS_CONFIGURATION_LOG_LEVEL     145
@@ -128,10 +126,6 @@
 #define IDC_SNUMCON                     1042
 #define IDC_EPASSW                      1043
 #define IDC_EHOST                       1044
-#define IDC_SSERVER                     1045
-#define IDC_BOPTIONS                    1046
-#define IDC_BCONFIGURATION              1047
-#define IDC_CSERVER                     1048
 #define IDC_CUSEENC                     1049
 #define IDC_CEIGHTBIT                   1050
 #define IDC_CCOMPRLVL                   1051
@@ -166,15 +160,11 @@
 #define IDC_ORDER_SUPPORT_BUTTON        1080
 #define IDC_STATIC_VERSION              1081
 #define IDC_STATIC_LICENSING            1082
-#define IDC_LISTENING                   1083
-#define IDC_BABOUT                      1084
 #define IDC_OPEN_LOG_FOLDER_BUTTON      1087
 #define IDC_CWARN_FS                    1088
 #define IDC_ID_EDIT                     1089
 #define IDC_LABEL_ID                    1090
 #define IDC_OPTIONS_TAB                 1093
-#define IDC_FAVORITE                    1094
-#define IDC_REMOVE_RECENT               1095
 #define IDC_UPDATE_STATUS               1100
 #define IDC_UPDATE_CAP_CURRENT          1101
 #define IDC_UPDATE_CURRENT              1102

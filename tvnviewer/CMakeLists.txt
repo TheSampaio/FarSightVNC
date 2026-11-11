@@ -17,7 +17,6 @@ add_executable(tvnviewer WIN32
   FullScreenToolbar.cpp
   ReconnectDialog.cpp
   HelpDialog.cpp
-  LoginDialog.cpp
   main.cpp
   NamingDefs.cpp
   NewFolderDialog.cpp

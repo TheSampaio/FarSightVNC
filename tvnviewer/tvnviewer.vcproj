@@ -697,10 +697,6 @@
 				>
 			</File>
 			<File
-				RelativePath=".\LoginDialog.cpp"
-				>
-			</File>
-			<File
 				RelativePath=".\main.cpp"
 				>
 			</File>
@@ -812,10 +808,6 @@
 			</File>
 			<File
 				RelativePath=".\HelpDialog.h"
-				>
-			</File>
-			<File
-				RelativePath=".\LoginDialog.h"
 				>
 			</File>
 			<File
