@@ -677,10 +677,6 @@
 				>
 			</File>
 			<File
-				RelativePath=".\ToolBar.cpp"
-				>
-			</File>
-			<File
 				RelativePath=".\Tooltip.cpp"
 				>
 			</File>
@@ -836,10 +832,6 @@
 			</File>
 			<File
 				RelativePath=".\ThemeLib.h"
-				>
-			</File>
-			<File
-				RelativePath=".\ToolBar.h"
 				>
 			</File>
 			<File

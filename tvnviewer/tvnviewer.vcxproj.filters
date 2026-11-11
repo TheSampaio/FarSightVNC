@@ -284,9 +284,6 @@
     <None Include="res\smalldot.cur">
       <Filter>Resource Files</Filter>
     </None>
-    <None Include="res\toolbar.bmp">
-      <Filter>Resource Files</Filter>
-    </None>
     <None Include="res\tightvnc.bmp">
       <Filter>Resource Files</Filter>
     </None>

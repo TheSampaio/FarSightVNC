@@ -4,8 +4,8 @@
 // Modified for FarSightVNC on 2026-11-03: IDs of the Options dialog tab pages.
 // Modified for FarSightVNC on 2026-11-03: IDs of the login dialog favorite and recent controls.
 // Modified for FarSightVNC on 2026-11-09: IDs of the update dialog and IDS_CHECK_FOR_UPDATES.
+// Modified for FarSightVNC on 2026-11-11: IDB_TOOLBAR removed (no toolbar bitmap any more).
 //
-#define IDB_TOOLBAR                     101
 #define IDI_CNOCURSOR                   102
 #define IDI_CSMALLDOT                   103
 #define IDI_APPICON                     104

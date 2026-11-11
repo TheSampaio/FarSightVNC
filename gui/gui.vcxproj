@@ -287,7 +287,6 @@
     <ClCompile Include="TextBox.cpp" />
     <ClCompile Include="ThemeLib.cpp" />
     <ClCompile Include="DpiUtils.cpp" />
-    <ClCompile Include="ToolBar.cpp" />
     <ClCompile Include="Tooltip.cpp" />
     <ClCompile Include="Trackbar.cpp" />
     <ClCompile Include="WindowFinder.cpp" />
@@ -330,7 +329,6 @@
     <ClInclude Include="TextBox.h" />
     <ClInclude Include="ThemeLib.h" />
     <ClInclude Include="DpiUtils.h" />
-    <ClInclude Include="ToolBar.h" />
     <ClInclude Include="Tooltip.h" />
     <ClInclude Include="Trackbar.h" />
     <ClInclude Include="WindowFinder.h" />

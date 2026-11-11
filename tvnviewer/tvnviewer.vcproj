@@ -913,10 +913,6 @@
 				>
 			</File>
 			<File
-				RelativePath=".\res\toolbar.bmp"
-				>
-			</File>
-			<File
 				RelativePath=".\tvnviewer.rc"
 				>
 			</File>

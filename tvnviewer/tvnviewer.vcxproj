@@ -400,7 +400,6 @@
     <None Include="res\smalldot.cur" />
     <None Include="res\tightvnc.bmp" />
     <None Include="res\tightvnc48.bmp" />
-    <None Include="res\toolbar.bmp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="tvnviewer.rc" />

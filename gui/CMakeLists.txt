@@ -35,7 +35,6 @@ add_library(gui STATIC
   TextBox.cpp
   ThemeLib.cpp
   DpiUtils.cpp
-  ToolBar.cpp
   Tooltip.cpp
   Trackbar.cpp
   WindowFinder.cpp
