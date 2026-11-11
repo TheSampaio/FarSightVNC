@@ -1,12 +1,16 @@
-FarSightVNC Viewer v1.0.0a (alpha)
+FarSightVNC Viewer v1.0.1a (alpha)
 ==================================
 
 VNC client for Windows based on TightVNC Viewer 2.8.90.
 License: GNU GPL version 2 or later (see LICENSE.txt).
-Date: 2026-11-10 - branch feature/updater.
+Date: 2026-11-11 - branch fix/keyboard-ctrl-shortcuts.
 
 
-*** BREAKING CHANGE in v1.0.0a ***
+Keyboard fix release (v1.0.1a): Ctrl and Alt no longer get stuck and Ctrl+C /
+Ctrl+V work again. See CHANGES IN v1.0.1a below.
+
+
+*** BREAKING CHANGE in v1.0.0a (still applies) ***
 The program is now fsvncviewer.exe, at the root of the folder. It is
 64-bit only (Windows 10/11 64-bit): the 32-bit version is no longer provided.
 Update shortcuts and scripts that pointed to FarSightVNC.exe or
@@ -76,6 +80,19 @@ can ignore it and keep the files where they are.
   as it is.
 
 
+CHANGES IN v1.0.1a (keyboard fixes)
+-----------------------------------
+- Fixed: Ctrl, Alt and Win pressed in another window and released in the
+  viewer stayed "stuck" (on the local Windows and on the server), and Ctrl+C /
+  Ctrl+V (for example on an ABNT2 keyboard) were sent as Ctrl+Alt+C. A key is
+  now released on the same path that pressed it.
+- Fixed: the Print Screen key (also Alt+Print Screen) now stays on the local
+  machine, so screenshots and the Windows Snipping Tool work while the viewer
+  has focus. It is no longer sent to the server.
+- Nothing else changed: protocol, server side, updater and saved settings are
+  the same as v1.0.0a.
+
+
 CHANGES IN v1.0.0a (first public release with the updater)
 -----------------------------------------------------------
 - BREAKING: the executable is now fsvncviewer.exe (it was tvnviewer.exe), at
@@ -118,9 +135,12 @@ Technical base (no visible change for users):
 
 VERIFIED IN THIS VERSION
 ------------------------
-- Automated tests: updater 2103/0 (x64, Release and Debug), keyboard 227/0,
-  input queue 39/0, favorites 88/0.
-- Installation of the signed release over a copy of the v0.2.1a x64
+- Automated tests (x64, Release): keyboard 480/0, input queue 39/0,
+  favorites 88/0, updater 2103/0. The keyboard tests cover Ctrl+C/V/X/Z/A with
+  both Ctrl keys, releasing keys on the path that pressed them, and Print
+  Screen.
+- (Verified in v1.0.0a; the updater code did not change in v1.0.1a)
+  Installation of the signed release over a copy of the v0.2.1a x64
   executable placed in the new flat layout: with the old viewer open (the
   updater waits), user files kept, a tampered update rejected and a downgrade
   refused. Also the case of a lone executable in a shared folder (only the two
