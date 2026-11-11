@@ -572,12 +572,16 @@ void ShellWindow::enterFullscreen(const RECT &monitorRect)
 
   setStyle((getStyle() | WS_MAXIMIZE) &
            ~(WS_CAPTION | WS_BORDER | WS_THICKFRAME | WS_MAXIMIZEBOX));
-  setExStyle(getExStyle() | WS_EX_TOPMOST);
 
   // Set first: the frame change below lays the window out without title bar.
   m_isFullscreen = true;
   updateDwmFrame();
-  SetWindowPos(m_hWnd, 0,
+  // Truly topmost, like AnyDesk: the frame stays above other windows when
+  // it loses the activation (Alt+Tab). Setting WS_EX_TOPMOST in the style
+  // bits alone does not move the window to the topmost band. Windows owned
+  // by the shell (full screen toolbar, dialogs, message boxes) stay above
+  // it.
+  SetWindowPos(m_hWnd, HWND_TOPMOST,
                fullScreenRect.left, fullScreenRect.top,
                fullScreenRect.getWidth(), fullScreenRect.getHeight(),
                SWP_SHOWWINDOW | SWP_FRAMECHANGED);
@@ -592,10 +596,9 @@ void ShellWindow::exitFullscreen()
 
   setStyle((getStyle() | WS_CAPTION | WS_BORDER | WS_THICKFRAME | WS_MAXIMIZEBOX) &
            ~WS_MAXIMIZE);
-  setExStyle(getExStyle() & ~WS_EX_TOPMOST);
   updateDwmFrame();
-  SetWindowPos(m_hWnd, 0, 0, 0, 0, 0,
-               SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+  SetWindowPos(m_hWnd, HWND_NOTOPMOST, 0, 0, 0, 0,
+               SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED);
   // Back to the frame saved by enterFullscreen(), maximized or not. A frame
   // that keeps the default size follows a new remote screen size afterwards
   // (requestClientSize()).
