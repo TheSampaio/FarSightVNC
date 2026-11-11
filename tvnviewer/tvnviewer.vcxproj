@@ -339,6 +339,7 @@
     <ClCompile Include="UpdateController.cpp" />
     <ClCompile Include="UpdateDialog.cpp" />
     <ClCompile Include="ViewerWindow.cpp" />
+    <ClCompile Include="shell\SessionToolbar.cpp" />
     <ClCompile Include="shell\ShellWindow.cpp" />
     <ClCompile Include="shell\TitleBar.cpp" />
   </ItemGroup>
@@ -382,6 +383,7 @@
     <ClInclude Include="ViewerWindow.h" />
     <ClInclude Include="shell\SessionHost.h" />
     <ClInclude Include="shell\SessionTab.h" />
+    <ClInclude Include="shell\SessionToolbar.h" />
     <ClInclude Include="shell\ShellTab.h" />
     <ClInclude Include="shell\ShellWindow.h" />
     <ClInclude Include="shell\TitleBar.h" />

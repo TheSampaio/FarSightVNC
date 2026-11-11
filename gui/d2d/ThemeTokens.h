@@ -41,6 +41,11 @@ struct ThemeTokens
   ThemeColor closeHoverText;
   ThemeColor pressed;      // Background of a pressed button.
   ThemeColor closePressed; // Background of the pressed close button.
+  ThemeColor selected;     // Subtle background of a toggle that is on.
+  ThemeColor selectedHover;
+  ThemeColor selectedPressed;
+  ThemeColor selectedText; // Glyph of a toggle that is on.
+  ThemeColor disabledText; // Glyph of a disabled button.
 
   // Shapes and sizes, in DIPs.
   float cornerRadius;
@@ -72,6 +77,11 @@ inline constexpr ThemeTokens kLightTheme = {
   .closeHoverText = 0xFFFFFF,
   .pressed        = 0xD4D4D8,
   .closePressed   = 0xF1707A,
+  .selected       = 0xDBEAFE,
+  .selectedHover  = 0xBFDBFE,
+  .selectedPressed = 0x93C5FD,
+  .selectedText   = 0x1D4ED8,
+  .disabledText   = 0xA1A1AA,
 
   .cornerRadius   = 6.0f,
   .titleBarHeight = 40.0f,

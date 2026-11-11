@@ -31,6 +31,7 @@
 // Modified for FarSightVNC on 2026-11-11: child window (FsvSessionView) of the shell window; frame events come from the shell, dialogs are owned by it.
 // Modified for FarSightVNC on 2026-11-11: the shell handles DPI changes and full screen state; a reconnection reuses the shell.
 // Modified for FarSightVNC on 2026-11-11: the tab of the shell shows only the session name.
+// Modified for FarSightVNC on 2026-11-11: SessionToolbar (Direct2D) replaces the comctl toolbar; the session state drives it.
 //
 
 #include "config-lib/IniFileSettingsManager.h"
@@ -68,6 +69,8 @@ ViewerWindow::ViewerWindow(WindowsApplication *application,
   m_connectionState(STATE_CONNECTING),
   m_sizeIsChanged(false),
   m_isFirstConnection(true),
+  m_bToolBar(true),
+  m_isPaused(false),
   m_hooksEnabledFirstTime(true),
   m_requiresReconnect(false),
   m_stopped(false),
@@ -102,6 +105,8 @@ ViewerWindow::ViewerWindow(WindowsApplication *application,
                          WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_CHILD,
                          getHWnd());
   m_dsktWnd.setPointerListener(this);
+  // Clicks on the toolbar give the focus back to the remote desktop.
+  m_toolbar.setFocusTarget(m_dsktWnd.getHWnd());
 
   SetTimer(m_hWnd, TIMER_DESKTOP_STATE, TIMER_DESKTOP_STATE_DELAY, (TIMERPROC)NULL);
 }
@@ -138,18 +143,8 @@ bool ViewerWindow::onCreate(LPCREATESTRUCT lps)
   m_control.setWindow(m_host->rootHwnd());
 
   setClassCursor(LoadCursor(NULL, IDC_ARROW));
-  m_toolbar.loadToolBarfromRes(IDB_TOOLBAR);
-  m_toolbar.setButtonsRange(IDS_TB_NEWCONNECTION);
-  m_toolbar.setViewAutoButtons(4, ToolBar::TB_Style_sep);
-  m_toolbar.setViewAutoButtons(6, ToolBar::TB_Style_sep);
-  m_toolbar.setViewAutoButtons(10, ToolBar::TB_Style_sep);
-  m_toolbar.setViewAutoButtons(11, ToolBar::TB_Style_sep);
-  m_toolbar.setViewAutoButtons(15, ToolBar::TB_Style_sep);
-  m_toolbar.attachToolBar(getHWnd());
-  UINT dpi = DpiUtils::getDpiForWindow(getHWnd());
-  if (dpi != DpiUtils::DEFAULT_DPI) {
-    m_toolbar.setDpi(dpi);
-  }
+  // Hidden until the setting below says otherwise.
+  m_toolbar.create(getHWnd(), this);
   // The session menu lives in the system menu of the frame, which forwards
   // its commands (onFrameCommand()).
   m_menu.getSystemMenu(m_host->rootHwnd());
@@ -158,12 +153,11 @@ bool ViewerWindow::onCreate(LPCREATESTRUCT lps)
   applySettings();
 
   ViewerConfig *config = ViewerConfig::getInstance();
-  bool bShowToolbar = config->isToolbarShown();
-  if (!bShowToolbar) {
-    m_toolbar.hide();
-    m_bToolBar = false;
+  m_bToolBar = config->isToolbarShown();
+  if (m_bToolBar) {
+    m_toolbar.show();
   }
-  m_menu.checkedMenuItem(IDS_TB_TOOLBAR, bShowToolbar);
+  m_menu.checkedMenuItem(IDS_TB_TOOLBAR, m_bToolBar);
   return true;
 }
 
@@ -171,10 +165,6 @@ void ViewerWindow::enableUserElements()
 {
   bool isEnable = !m_conConf->isViewOnly();
 
-  m_toolbar.enableButton(IDS_TB_ALT, isEnable);
-  m_toolbar.enableButton(IDS_TB_CTRL, isEnable);
-  m_toolbar.enableButton(IDS_TB_CTRLESC, isEnable);
-  m_toolbar.enableButton(IDS_TB_CTRLALTDEL, isEnable);
   m_fsToolbar.enableButton(IDS_TB_CTRLALTDEL, isEnable);
 
   UINT enableMenu = static_cast<UINT>(!isEnable);
@@ -187,16 +177,7 @@ void ViewerWindow::enableUserElements()
     m_menu.checkedMenuItem(IDS_TB_ALT, false);
     m_menu.checkedMenuItem(IDS_TB_CTRL, false);
   }
-
-  int scale = m_conConf->getScaleNumerator() * 100 / m_conConf->getScaleDenominator();
-  m_toolbar.enableButton(IDS_TB_SCALEOUT, scale > m_standardScale[0]);
-  m_toolbar.enableButton(IDS_TB_SCALEIN, scale < m_standardScale[m_standardScale.size() - 1]);
-  if (m_conConf->isFitWindowEnabled()) {
-    m_toolbar.checkButton(IDS_TB_SCALEAUTO, true);
-    m_toolbar.enableButton(IDS_TB_SCALE100, true);
-  } else {
-    m_toolbar.enableButton(IDS_TB_SCALE100, scale != 100);
-  }
+  updateToolbar();
 }
 
 bool ViewerWindow::viewerCoreSettings()
@@ -207,7 +188,6 @@ bool ViewerWindow::viewerCoreSettings()
 
   bool bFileTransfer = m_fileTransfer && m_fileTransfer->isEnabled();
 
-  m_toolbar.enableButton(IDS_TB_TRANSFER, bFileTransfer && !m_conConf->isViewOnly());
   UINT enableMenu = static_cast<UINT>(!(bFileTransfer && !m_conConf->isViewOnly()));
   m_menu.enableMenuItem(IDS_TB_TRANSFER, enableMenu);
 
@@ -260,6 +240,7 @@ void ViewerWindow::applySettings()
   changeCursor(m_conConf->getLocalCursorShape());
   enableUserElements();
   viewerCoreSettings();
+  updateToolbar();
 }
 
 void ViewerWindow::changeCursor(int type)
@@ -402,10 +383,8 @@ bool ViewerWindow::onEraseBackground(HDC hdc)
 
 bool ViewerWindow::onKillFocus(WPARAM wParam)
 {
-  if (!m_conConf->isViewOnly()) {
-    m_toolbar.checkButton(IDS_TB_ALT, false);
-    m_toolbar.checkButton(IDS_TB_CTRL, false);
-  }
+  // The Ctrl and Alt toggles of the toolbar follow the remote desktop
+  // state (updateToolbar()).
   return true;
 }
 
@@ -492,18 +471,18 @@ void ViewerWindow::desktopStateUpdate()
   updateKeyState();
 }
 
+// The key commands are refused in view-only mode, like the disabled
+// buttons and menu items that send them.
 void ViewerWindow::commandCtrlAltDel()
 {
-  LRESULT iState = m_toolbar.getState(IDS_TB_CTRLALTDEL);
-  if (iState) {
+  if (!m_conConf->isViewOnly()) {
     m_dsktWnd.sendCtrlAltDel();
   }
 }
 
 void ViewerWindow::commandCtrlEsc()
 {
-  LRESULT iState = m_toolbar.getState(IDS_TB_CTRLESC);
-  if (iState) {
+  if (!m_conConf->isViewOnly()) {
     m_dsktWnd.sendKey(VK_LCONTROL, true);
     m_dsktWnd.sendKey(VK_ESCAPE,   true);
     m_dsktWnd.sendKey(VK_ESCAPE,   false);
@@ -511,71 +490,63 @@ void ViewerWindow::commandCtrlEsc()
   }
 }
 
+void ViewerWindow::commandWinKey()
+{
+  // Ignored like the physical Win key while the frame is not active
+  // (RfbKeySym::setWinKeyIgnore()).
+  if (!m_conConf->isViewOnly()) {
+    m_dsktWnd.sendKey(VK_LWIN, true);
+    m_dsktWnd.sendKey(VK_LWIN, false);
+  }
+}
+
 void ViewerWindow::commandCtrl()
 {
-  LRESULT iState = m_toolbar.getState(IDS_TB_CTRL);
-  if (iState) {
-    if (iState == TBSTATE_ENABLED) {
-      m_menu.checkedMenuItem(IDS_TB_CTRL, true);
-      m_toolbar.checkButton(IDS_TB_CTRL,  true);
-      m_dsktWnd.setCtrlState(true);
-      m_dsktWnd.sendKey(VK_LCONTROL,      true);
-    } else {
-      m_menu.checkedMenuItem(IDS_TB_CTRL, false);
-      m_toolbar.checkButton(IDS_TB_CTRL,  false);
-      m_dsktWnd.setCtrlState(false);
-      m_dsktWnd.sendKey(VK_LCONTROL,      false);
-    }
+  if (m_conConf->isViewOnly()) {
+    return;
   }
+  // Toggles the latch of the remote desktop, which the toolbar shows.
+  bool down = !m_dsktWnd.getCtrlState();
+  m_menu.checkedMenuItem(IDS_TB_CTRL, down);
+  m_dsktWnd.setCtrlState(down);
+  m_dsktWnd.sendKey(VK_LCONTROL, down);
+  updateToolbar();
 }
 
 void ViewerWindow::commandAlt()
 {
-  LRESULT iState = m_toolbar.getState(IDS_TB_ALT);
-  if (iState) {
-    if (iState == TBSTATE_ENABLED) {
-      m_menu.checkedMenuItem(IDS_TB_ALT, true);
-      m_toolbar.checkButton(IDS_TB_ALT,  true);
-      m_dsktWnd.setAltState(true);
-      m_dsktWnd.sendKey(VK_LMENU,        true);
-    } else {
-      m_menu.checkedMenuItem(IDS_TB_ALT, false);
-      m_toolbar.checkButton(IDS_TB_ALT,  false);
-      m_dsktWnd.setAltState(false);
-      m_dsktWnd.sendKey(VK_LMENU,        false);
-    }
+  if (m_conConf->isViewOnly()) {
+    return;
   }
+  bool down = !m_dsktWnd.getAltState();
+  m_menu.checkedMenuItem(IDS_TB_ALT, down);
+  m_dsktWnd.setAltState(down);
+  m_dsktWnd.sendKey(VK_LMENU, down);
+  updateToolbar();
 }
 
 void ViewerWindow::commandPause()
 {
-  LRESULT iState = m_toolbar.getState(IDS_TB_PAUSE);
-  if (iState) {
-    if (iState == TBSTATE_ENABLED) {
-      m_toolbar.checkButton(IDS_TB_PAUSE, true);
-      m_viewerCore->stopUpdating(true);
-    } else {
-      m_toolbar.checkButton(IDS_TB_PAUSE, false);
-      m_viewerCore->stopUpdating(false);
-    }
-  }
+  m_isPaused = !m_isPaused;
+  m_viewerCore->stopUpdating(m_isPaused);
+  updateToolbar();
 }
 
 void ViewerWindow::commandToolBar()
 {
-  if (m_toolbar.isVisible()) {
-    m_logWriter.debug(_T("Hide toolbar"));
-    m_menu.checkedMenuItem(IDS_TB_TOOLBAR, false);
-    m_toolbar.hide();
-    doSize();
-  } else {
-    if (!m_isFullScr) {
-      m_logWriter.debug(_T("Show toolbar"));
-      m_menu.checkedMenuItem(IDS_TB_TOOLBAR, true);
-      m_toolbar.show();
-      doSize();
-    }
+  // The full screen session has no toolbar (the menu item is disabled).
+  if (m_isFullScr) {
+    return;
   }
+  m_bToolBar = !m_bToolBar;
+  m_logWriter.debug(m_bToolBar ? _T("Show toolbar") : _T("Hide toolbar"));
+  m_menu.checkedMenuItem(IDS_TB_TOOLBAR, m_bToolBar);
+  if (m_bToolBar) {
+    m_toolbar.show();
+  } else {
+    m_toolbar.hide();
+  }
+  doSize();
 }
 
 void ViewerWindow::commandNewConnection()
@@ -700,7 +671,6 @@ void ViewerWindow::commandScaleOut()
 
 void ViewerWindow::commandScale100()
 {
-  m_toolbar.checkButton(IDS_TB_SCALEAUTO, false);
   m_conConf->setScale(1, 1);
   m_conConf->fitWindow(false);
   m_conConf->saveToStorage(&m_ccsm);
@@ -709,31 +679,26 @@ void ViewerWindow::commandScale100()
 
 void ViewerWindow::commandScaleAuto()
 {
-  LRESULT iState = m_toolbar.getState(IDS_TB_SCALEAUTO);
-  if (iState) {
-    if (iState == TBSTATE_ENABLED) {
-      m_toolbar.checkButton(IDS_TB_SCALEAUTO, true);
-      m_conConf->fitWindow(true);
+  // Toggles fit to window; leaving it keeps the scale it was showing.
+  if (!m_conConf->isFitWindowEnabled()) {
+    m_conConf->fitWindow(true);
+  } else {
+    RECT rcWindow;
+    m_dsktWnd.getClientRect(&rcWindow);
+    int wndWidth = rcWindow.right - rcWindow.left - 1;
+    int wndHeight = rcWindow.bottom - rcWindow.top;
+
+    Rect screen = m_dsktWnd.getFrameBufferGeometry();
+
+    if (wndWidth * screen.getHeight() <= wndHeight * screen.getWidth()) {
+      m_conConf->setScale(wndWidth, screen.getWidth());
     } else {
-      m_toolbar.checkButton(IDS_TB_SCALEAUTO, false);
-
-      RECT rcWindow;
-      m_dsktWnd.getClientRect(&rcWindow);
-      int wndWidth = rcWindow.right - rcWindow.left - 1;
-      int wndHeight = rcWindow.bottom - rcWindow.top;
-
-      Rect screen = m_dsktWnd.getFrameBufferGeometry();
-
-      if (wndWidth * screen.getHeight() <= wndHeight * screen.getWidth()) {
-        m_conConf->setScale(wndWidth, screen.getWidth());
-      } else {
-        m_conConf->setScale(wndHeight, screen.getHeight());
-      }
-      m_conConf->fitWindow(false);
+      m_conConf->setScale(wndHeight, screen.getHeight());
     }
-    m_conConf->saveToStorage(&m_ccsm);
-    applySettings();
+    m_conConf->fitWindow(false);
   }
+  m_conConf->saveToStorage(&m_ccsm);
+  applySettings();
 }
 
 int ViewerWindow::translateAccelToTB(int val)
@@ -825,6 +790,9 @@ bool ViewerWindow::onCommand(WPARAM wParam, LPARAM lParam)
     case IDS_TB_CTRLESC:
       commandCtrlEsc();
       return true;
+    case ID_SEND_WIN_KEY:
+      commandWinKey();
+      return true;
     case IDS_TB_CTRL:
       commandCtrl();
       return true;
@@ -867,8 +835,9 @@ bool ViewerWindow::onCommand(WPARAM wParam, LPARAM lParam)
 
 void ViewerWindow::showFileTransferDialog()
 {
-  LRESULT iState = m_toolbar.getState(IDS_TB_TRANSFER);
-  if (iState) {
+  bool canTransfer = m_fileTransfer != 0 && m_fileTransfer->isEnabled() &&
+                     !m_conConf->isViewOnly();
+  if (canTransfer) {
     // FIXME: FT check it
     if (m_ftDialog != 0) {
       if (!m_ftDialog->isCreated()) {
@@ -928,7 +897,7 @@ void ViewerWindow::doFullScr()
   m_conConf->saveToStorage(&m_ccsm);
 
   ViewerConfig *config = ViewerConfig::getInstance();
-  m_bToolBar = m_toolbar.isVisible();
+  // The full screen session has no toolbar; m_bToolBar brings it back.
   m_toolbar.hide();
 
   m_menu.checkedMenuItem(IDS_TB_FULLSCREEN, true);
@@ -993,19 +962,6 @@ void ViewerWindow::doUnFullScr()
   }
 }
 
-bool ViewerWindow::onNotify(int idCtrl, LPNMHDR pnmh)
-{
-  ResourceLoader *rLoader = ResourceLoader::getInstance();
-  LPTOOLTIPTEXT toolTipText = reinterpret_cast<LPTOOLTIPTEXT>(pnmh);
-  if (toolTipText->hdr.code != TTN_NEEDTEXT) {
-    return false;
-  }
-  int resId = static_cast<int>(toolTipText->hdr.idFrom);
-  rLoader->loadString(resId, &m_strToolTip);
-  toolTipText->lpszText = const_cast<TCHAR *>(m_strToolTip.getString());
-  return true;
-}
-
 bool ViewerWindow::onClose()
 {
   if (m_ftDialog != 0 && m_ftDialog->isCreated()) {
@@ -1058,8 +1014,10 @@ bool ViewerWindow::onSize(WPARAM wParam, LPARAM lParam)
                     rc.left, rc.top, rc.right, rc.bottom);
   x = y = 0;
   if (m_toolbar.isVisible()) {
-    m_toolbar.autoSize();
-    y = m_toolbar.getHeight() - 1;
+    // The toolbar on top, the remote desktop below it.
+    y = m_toolbar.getHeight();
+    SetWindowPos(m_toolbar.getHWnd(), 0, 0, 0, rc.right - rc.left, y,
+                 SWP_NOZORDER | SWP_NOACTIVATE);
     rc.bottom -= y;
   }
   if (m_dsktWnd.getHWnd()) {
@@ -1382,14 +1340,154 @@ void ViewerWindow::adjustWindowSize()
 
 void ViewerWindow::updateKeyState()
 {
-  LRESULT ctrlState = m_toolbar.getState(IDS_TB_CTRL);
-  if (ctrlState != 0) {
-    m_toolbar.checkButton(IDS_TB_CTRL, m_dsktWnd.getCtrlState());
-  }
+  // The Ctrl and Alt toggles follow the keys held on the remote desktop.
+  updateToolbar();
+}
 
-  LRESULT altState = m_toolbar.getState(IDS_TB_ALT);
-  if (altState != 0) {
-    m_toolbar.checkButton(IDS_TB_ALT, m_dsktWnd.getAltState());
+SessionToolbarState ViewerWindow::toolbarState() const
+{
+  SessionToolbarState state;
+  bool canType = m_isConnected && !m_conConf->isViewOnly();
+  bool fit = m_conConf->isFitWindowEnabled();
+  int scale = m_conConf->getScaleNumerator() * 100 / m_conConf->getScaleDenominator();
+
+  state.enabled.set();
+  state.enabled[SESSION_ACTION_ZOOM_IN] = scale < m_standardScale.back();
+  state.enabled[SESSION_ACTION_ZOOM_OUT] = scale > m_standardScale.front();
+  state.checked[SESSION_ACTION_FIT_WINDOW] = fit;
+  state.checked[SESSION_ACTION_SCALE_100] = !fit && scale == 100;
+  state.checked[SESSION_ACTION_FULL_SCREEN] = m_isFullScr;
+
+  state.enabled[SESSION_ACTION_CTRL_ALT_DEL] = canType;
+  state.enabled[SESSION_ACTION_WIN_KEY] = canType;
+  state.enabled[SESSION_ACTION_CTRL_LATCH] = canType;
+  state.enabled[SESSION_ACTION_ALT_LATCH] = canType;
+  state.enabled[SESSION_ACTION_SPECIAL_KEYS] = canType;
+  state.checked[SESSION_ACTION_CTRL_LATCH] = canType && m_dsktWnd.getCtrlState();
+  state.checked[SESSION_ACTION_ALT_LATCH] = canType && m_dsktWnd.getAltState();
+
+  state.enabled[SESSION_ACTION_FILE_TRANSFER] = canType && m_fileTransfer != 0 &&
+                                                m_fileTransfer->isEnabled();
+  state.enabled[SESSION_ACTION_PAUSE] = m_isConnected;
+  state.enabled[SESSION_ACTION_REFRESH] = m_isConnected;
+  state.checked[SESSION_ACTION_PAUSE] = m_isPaused;
+  return state;
+}
+
+void ViewerWindow::updateToolbar()
+{
+  m_toolbar.setState(toolbarState());
+}
+
+namespace {
+
+void appendCommand(HMENU menu, UINT id, bool enabled = true, bool checked = false)
+{
+  StringStorage text;
+  ResourceLoader::getInstance()->loadString(id, &text);
+  AppendMenu(menu, MF_STRING | (enabled ? 0 : MF_GRAYED) | (checked ? MF_CHECKED : 0),
+             id, text.getString());
+}
+
+}
+
+HMENU ViewerWindow::createMonitorMenu()
+{
+  // The monitors may have changed since the last WM_DISPLAYCHANGE.
+  refreshMonitorMenu();
+  HMENU menu = CreatePopupMenu();
+  AppendMenu(menu, MF_STRING, 0xA810, _T("Full screen on the current monitor"));
+  AppendMenu(menu, MF_STRING | (m_isFullScr && m_spanMonitors ? MF_CHECKED : 0),
+             0xA800, _T("Full screen across all monitors"));
+  AppendMenu(menu, MF_SEPARATOR, 0, 0);
+  for (size_t i = 0; i < m_fullscreenMonitors.size(); i++) {
+    MONITORINFOEX info;
+    info.cbSize = sizeof(info);
+    if (!GetMonitorInfo(m_fullscreenMonitors[i], &info)) {
+      continue;
+    }
+    StringStorage label;
+    label.format(_T("Monitor %u (%d x %d)%s"), (unsigned)i + 1,
+                 (int)(info.rcMonitor.right - info.rcMonitor.left),
+                 (int)(info.rcMonitor.bottom - info.rcMonitor.top),
+                 (info.dwFlags & MONITORINFOF_PRIMARY) != 0 ? _T(", primary") : _T(""));
+    bool selected = m_isFullScr && !m_spanMonitors &&
+                    m_fullscreenMonitors[i] == m_fullscreenMonitor;
+    AppendMenu(menu, MF_STRING | (selected ? MF_CHECKED : 0), 0xA000 + i * 16,
+               label.getString());
+  }
+  return menu;
+}
+
+HMENU ViewerWindow::createSpecialKeysMenu()
+{
+  bool canType = !m_conConf->isViewOnly();
+  HMENU menu = CreatePopupMenu();
+  appendCommand(menu, IDS_TB_CTRLESC, canType);
+  AppendMenu(menu, MF_STRING | (canType ? 0 : MF_GRAYED), ID_SEND_WIN_KEY, _T("Send Win key"));
+  appendCommand(menu, IDS_TB_CTRLALTDEL, canType);
+  AppendMenu(menu, MF_SEPARATOR, 0, 0);
+  appendCommand(menu, IDS_TB_CTRL, canType, canType && m_dsktWnd.getCtrlState());
+  appendCommand(menu, IDS_TB_ALT, canType, canType && m_dsktWnd.getAltState());
+  return menu;
+}
+
+HMENU ViewerWindow::createMoreMenu()
+{
+  // The session commands that have no button of their own (the system menu
+  // has them all too).
+  HMENU menu = CreatePopupMenu();
+  appendCommand(menu, IDS_TB_NEWCONNECTION);
+  appendCommand(menu, IDS_TB_SAVESESSION);
+  AppendMenu(menu, MF_SEPARATOR, 0, 0);
+  appendCommand(menu, IDS_TB_CONNOPTIONS);
+  appendCommand(menu, IDS_TB_CONNINFO, m_isConnected);
+  AppendMenu(menu, MF_SEPARATOR, 0, 0);
+  appendCommand(menu, IDS_TB_TOOLBAR, !m_isFullScr, m_bToolBar && !m_isFullScr);
+  AppendMenu(menu, MF_SEPARATOR, 0, 0);
+  appendCommand(menu, IDS_TB_CONFIGURATION);
+  appendCommand(menu, IDS_CHECK_FOR_UPDATES);
+  appendCommand(menu, IDS_ABOUT_VIEWER);
+  return menu;
+}
+
+void ViewerWindow::onToolbarMenu(SessionAction action, const RECT &anchor)
+{
+  HMENU menu = 0;
+  switch (action) {
+  case SESSION_ACTION_MONITOR:
+    menu = createMonitorMenu();
+    break;
+  case SESSION_ACTION_SPECIAL_KEYS:
+    menu = createSpecialKeysMenu();
+    break;
+  case SESSION_ACTION_MORE:
+    menu = createMoreMenu();
+    break;
+  default:
+    return;
+  }
+  if (menu == 0) {
+    return;
+  }
+  // The menu runs a modal loop in which this session may end: only locals
+  // are used after it.
+  HWND self = m_hWnd;
+  HWND owner = m_host->rootHwnd();
+  if (GetForegroundWindow() != owner) {
+    // A popup menu needs a foreground owner to close when the user clicks
+    // elsewhere.
+    SetForegroundWindow(owner);
+  }
+  TPMPARAMS params;
+  params.cbSize = sizeof(params);
+  params.rcExclude = anchor;
+  UINT command = TrackPopupMenuEx(menu, TPM_LEFTALIGN | TPM_TOPALIGN | TPM_VERTICAL |
+                                  TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON,
+                                  anchor.left, anchor.bottom, owner, &params);
+  DestroyMenu(menu);
+  if (command != 0 && IsWindow(self)) {
+    PostMessage(self, WM_COMMAND, command, 0);
   }
 }
 

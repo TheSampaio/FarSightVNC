@@ -30,6 +30,7 @@
 // Modified for FarSightVNC on 2026-11-11: child window (FsvSessionView) of the shell window, which forwards the frame events.
 // Modified for FarSightVNC on 2026-11-11: the shell handles DPI changes and full screen state; a reconnection reuses the shell.
 // Modified for FarSightVNC on 2026-11-11: the tab of the shell shows only the session name.
+// Modified for FarSightVNC on 2026-11-11: SessionToolbar (Direct2D) replaces the comctl toolbar; the session state drives it.
 //
 
 #ifndef _VIEWER_WINDOW_H_
@@ -44,7 +45,7 @@
 #include "ScaleManager.h"
 #include "ViewerMenu.h"
 #include "shell/SessionHost.h"
-#include "gui/ToolBar.h"
+#include "shell/SessionToolbar.h"
 #include "log-writer/LogWriter.h"
 #include "viewer-core/FileTransferCapability.h"
 #include "viewer-core/RemoteViewerCore.h"
@@ -56,7 +57,8 @@
 class ViewerWindow : public BaseWindow,
                      public CoreEventsAdapter,
                      private HookEventListener,
-                     private DesktopPointerListener
+                     private DesktopPointerListener,
+                     private SessionToolbarListener
 {
 public:
   // Creates the session view as a child of host->hostHwnd().
@@ -132,7 +134,6 @@ protected:
   void onDisplayChange();
   bool onCreate(LPCREATESTRUCT lps);
   bool onCommand(WPARAM wParam, LPARAM lParam);
-  bool onNotify(int idCtrl, LPNMHDR pnmh);
   bool onSysCommand(WPARAM wParam, LPARAM lParam);
   bool onClose();
   bool onDestroy();
@@ -151,6 +152,7 @@ protected:
   void commandCtrl();
   void commandAlt();
   void commandToolBar();
+  void commandWinKey();
   void commandPause();
   void onAbout();
   void onCheckForUpdates();
@@ -188,8 +190,7 @@ protected:
   FileTransferCapability *m_fileTransfer;
   FileTransferMainDialog *m_ftDialog;
   DesktopWindow m_dsktWnd;
-  StringStorage m_strToolTip;
-  ToolBar m_toolbar;
+  SessionToolbar m_toolbar;
   ViewerMenu m_menu;
   ConnectionData *m_conData;
 
@@ -209,8 +210,10 @@ protected:
   bool m_sizeIsChanged;
   // The first connection of the window opens it maximized and fitted.
   bool m_isFirstConnection;
-  // Flag is set, if toolbar is visible.
+  // The user wants the toolbar (hidden anyway in full screen).
   bool m_bToolBar;
+  // Screen updates are paused (Pause command).
+  bool m_isPaused;
   // It is scale of viewer window in percent.
   int m_scale;
 
@@ -267,6 +270,16 @@ private:
   // formatWindowName() with the connection state when it is not "connected".
   StringStorage formatWindowTitle() const;
   void updateKeyState();
+
+  // The toolbar shows the session state: what can be used, which toggles
+  // are on.
+  SessionToolbarState toolbarState() const;
+  void updateToolbar();
+  // Implementation of SessionToolbarListener: the drop-down menus.
+  virtual void onToolbarMenu(SessionAction action, const RECT &anchor);
+  HMENU createMonitorMenu();
+  HMENU createSpecialKeysMenu();
+  HMENU createMoreMenu();
 
   // onHookProc function implementation of HookEventListener base abstract class.
   virtual LRESULT onHookProc(int code, WPARAM wParam, LPARAM lParam);
