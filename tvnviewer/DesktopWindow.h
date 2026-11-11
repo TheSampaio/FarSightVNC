@@ -23,6 +23,7 @@
 //
 // Modified for FarSightVNC on 2026-11-02: optional Direct3D 11 / Direct2D presenter member.
 // Modified for FarSightVNC on 2026-11-03: listener for local pointer movement (full screen toolbar).
+// Modified for FarSightVNC on 2026-11-11: the remote screen always fits the window (no scale modes, no scroll bars).
 //
 
 #ifndef _DESKTOP_WINDOW_H_
@@ -68,8 +69,10 @@ public:
   // or the number of bits per pixel
   void setNewFramebuffer(const FrameBuffer *framebuffer);
 
-  // set scale of image, can -1 = Auto, in percent
-  void setScale(int scale);
+  // The image always fits the window (aspect ratio kept, letterboxed with
+  // the background color, never scroll bars). Lays it out again, after a
+  // change of the window that WM_SIZE does not report (DPI, full screen).
+  void refreshLayout();
   // it returns the image width and height considering scale
   Rect getViewerGeometry();
   // it returns the image width and height.

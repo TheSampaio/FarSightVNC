@@ -25,6 +25,7 @@
 // Modified for FarSightVNC on 2026-11-02: pointer mapping and drawing use the real server size, not the 4-aligned DIB.
 // Modified for FarSightVNC on 2026-11-02: optional Direct3D 11 / Direct2D presentation (GpuPresenter) with GDI as the automatic fallback.
 // Modified for FarSightVNC on 2026-11-03: local pointer movement is reported to a listener (full screen toolbar).
+// Modified for FarSightVNC on 2026-11-11: the remote screen always fits the window (no scale modes, no scroll bars).
 //
 
 #include "DesktopWindow.h"
@@ -51,6 +52,8 @@ DesktopWindow::DesktopWindow(LogWriter *logWriter, ConnectionConfig *conConf)
   m_isConnected(false)
 {
   m_rfbKeySym = std::unique_ptr<RfbKeySym>(new RfbKeySym(this, m_logWriter));
+  // Fit to the window, from the first paint (connecting) on.
+  m_scManager.setScale(-1);
   if (RenderSettings::isGpuAllowed()) {
     m_gpu.reset(new GpuPresenter(m_logWriter));
     m_gpu->warmUp();
@@ -463,30 +466,11 @@ void DesktopWindow::calculateWndSize(bool isChanged)
     hScroll = m_sbar.getHorizontalSize();
   }
 
+  // The image always fits the window: no scroll bar is ever shown (one left
+  // from an earlier state is hidden and its room given back to the image).
   int wndWidth  = vScroll + m_clientArea.getWidth();
   int wndHeight = hScroll + m_clientArea.getHeight();
-  bool isVert   = m_scManager.getVertPages(wndHeight);
-  bool isHorz   = m_scManager.getHorzPages(wndWidth);
-
-  if (isHorz) {
-    wndHeight -= m_sbar.getHorizontalSize();
-  }
-  if (isVert) {
-    wndWidth -= m_sbar.getVerticalSize();
-  }
-
-  if (isVert != isHorz) {
-     // need to recalculate bHorz and bVert
-    isVert = m_scManager.getVertPages(wndHeight);
-    isHorz = m_scManager.getHorzPages(wndWidth);
-    if (isHorz) {
-      wndHeight -= m_sbar.getHorizontalSize();
-    }
-    if (isVert) {
-      wndWidth -= m_sbar.getVerticalSize();
-    }
-  }
-  applyScrollbarChanges(isChanged, isVert, isHorz, wndWidth, wndHeight);
+  applyScrollbarChanges(isChanged, false, false, wndWidth, wndHeight);
 }
 
 void DesktopWindow::scrollProcessing(int fbWidth, int fbHeight)
@@ -666,10 +650,9 @@ void DesktopWindow::repaint(const Rect *repaintRect)
   redraw(&wndRect);
 }
 
-void DesktopWindow::setScale(int scale)
+void DesktopWindow::refreshLayout()
 {
   AutoLock al(&m_bufferLock);
-  m_scManager.setScale(scale);
   m_winResize = true;
   // Invalidate all area of desktop window.
   if (m_hWnd != 0) {

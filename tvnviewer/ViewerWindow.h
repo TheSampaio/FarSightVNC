@@ -32,6 +32,7 @@
 // Modified for FarSightVNC on 2026-11-11: the tab of the shell shows only the session name.
 // Modified for FarSightVNC on 2026-11-11: SessionToolbar (Direct2D) replaces the comctl toolbar; the session state drives it.
 // Modified for FarSightVNC on 2026-11-11: the full screen toolbar is a floating pill with the session actions and state.
+// Modified for FarSightVNC on 2026-11-11: the remote screen always fits the window (no scale modes, no scroll bars).
 //
 
 #ifndef _VIEWER_WINDOW_H_
@@ -159,10 +160,6 @@ protected:
   void onCheckForUpdates();
   void commandNewConnection();
   void commandSaveSession();
-  void commandScaleIn();
-  void commandScaleOut();
-  void commandScale100();
-  void commandScaleAuto();
 
   //
   // It is implementation of CoreEventsAdapter functions.
@@ -215,8 +212,6 @@ protected:
   bool m_bToolBar;
   // Screen updates are paused (Pause command).
   bool m_isPaused;
-  // It is scale of viewer window in percent.
-  int m_scale;
 
   // Flag is set after onConnected().
   bool m_isConnected;
@@ -241,7 +236,6 @@ protected:
   // Destructor of ViewerWindow may be called, if this flag is true.
   bool m_stopped;
 private:
-  vector<int> m_standardScale;
   vector<HMONITOR> m_fullscreenMonitors;
   HMONITOR m_fullscreenMonitor;
   bool m_spanMonitors;

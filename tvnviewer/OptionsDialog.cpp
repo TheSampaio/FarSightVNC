@@ -23,6 +23,7 @@
 //
 // Modified for FarSightVNC on 2026-11-03: Options dialog split into Display,
 // Input and Network tab pages, with Ctrl+Tab switching between them.
+// Modified for FarSightVNC on 2026-11-11: the scale control shows "Fit to window", disabled (the remote screen always fits).
 //
 
 #include "OptionsDialog.h"
@@ -120,12 +121,6 @@ BOOL OptionsDialog::onControlCommand(UINT controlID, UINT notificationID)
   if (controlID == IDC_CUSEENC) {
     if (notificationID == CBN_SELCHANGE) {
       onPreferredEncodingSelectionChange();
-      return TRUE;
-    }
-  }
-  if (controlID == IDC_CSCALE) {
-    if (notificationID == CBN_KILLFOCUS) {
-      onScaleKillFocus();
       return TRUE;
     }
   }
@@ -304,12 +299,9 @@ BOOL OptionsDialog::onInitDialog()
   m_useEnc.addItem(_T("ZRLE"), reinterpret_cast<void *>(EncodingDefs::ZRLE));
 
 
-  // FIXME: replaced literals to named constants
-  TCHAR scaleComboText[8][20] = {_T("25"), _T("50"), _T("75"), _T("90"),
-                                 _T("100"), _T("125"), _T("150"), _T("Auto")};
-  for (int i = 0; i < sizeof(scaleComboText)/sizeof(scaleComboText[0]); i++) {
-      m_scale.addItem(static_cast<TCHAR FAR *>(scaleComboText[i]));
-  }
+  // The remote screen always fits the window: the scale is not a choice.
+  m_scale.addItem(_T("Fit to window"));
+  m_scale.setEnabled(false);
 
   m_tjpeg.setRange(0, 9);
   m_tcompLvl.setRange(0, 9);
@@ -348,20 +340,7 @@ void OptionsDialog::updateControlValues()
   m_sharedses.check(m_conConfig->getSharedFlag());
   m_sharedses.setEnabled(!m_connected);
 
-  if (m_conConfig->isFitWindowEnabled()) {
-    // FIXME: replace literal to named constant
-    m_scale.setSelectedItem(7);
-  } else {
-    int n = m_conConfig->getScaleNumerator();
-    int d = m_conConfig->getScaleDenominator();
-
-    int percent = (n * 100) / d;
-
-    StringStorage text;
-    text.format(_T("%d"), percent);
-
-    m_scale.setText(text.getString());
-  }
+  m_scale.setSelectedItem(0);
 
   {
     bool enableCursorUpdate = m_conConfig->isRequestingShapeUpdates();
@@ -515,78 +494,8 @@ void OptionsDialog::onMessageReceived(UINT uMsg, WPARAM wParam, LPARAM lParam)
   }
 }
 
-void OptionsDialog::onScaleKillFocus()
-{
-  StringStorage scaleText;
-  m_scale.getText(&scaleText);
-
-  int scale;
-
-  if (!StringParser::parseInt(scaleText.getString(), &scale)) {
-    if (scaleText.isEqualTo(_T("Auto"))) {
-      return ;
-    }
-    scale = 100;
-  }
-
-  if (scale < 1) {
-    scale = 1;
-  } else if (scale > 400) {
-    scale = 400;
-  }
-
-  scaleText.format(_T("%d"), scale);
-  m_scale.setText(scaleText.getString());
-}
-
-void OptionsDialog::showScaleField()
-{
-  m_tabControl.showTab(&m_displayPage);
-  m_scale.setFocus();
-}
-
-bool OptionsDialog::isInputValid()
-{
-  int scaleInt;
-  StringStorage scaleText;
-
-  m_scale.getText(&scaleText);
-
-  if (scaleText.isEqualTo(_T("Auto"))) {
-    return true;
-  }
-
-  if (!StringParser::parseInt(scaleText.getString(), &scaleInt)) {
-    showScaleField();
-    StringStorage error;
-    error.format(StringTable::getString(IDS_ERROR_VALUE_FIELD_ONLY_NUMERIC),
-                 StringTable::getString(IDS_OPTIONS_SCALE));
-    MessageBox(m_ctrlThis.getWindow(),
-               error.getString(),
-               StringTable::getString(IDS_OPTIONS_CAPTION),
-               MB_OK | MB_ICONWARNING);
-    return false;
-  }
-
-  if (scaleInt < 0) {
-    showScaleField();
-    StringStorage error;
-    error.format(StringTable::getString(IDS_ERROR_VALUE_FIELD_ONLY_POSITIVE_NUMERIC),
-                 StringTable::getString(IDS_OPTIONS_SCALE));
-    MessageBox(m_ctrlThis.getWindow(),
-               error.getString(),
-               StringTable::getString(IDS_OPTIONS_CAPTION),
-               MB_OK | MB_ICONWARNING);
-    return false;
-  }
-
-  return true;
-}
-
 bool OptionsDialog::onOkPressed()
 {
-  if (!isInputValid())
-    return false;
   apply();
   return true;
 }
@@ -626,18 +535,7 @@ void OptionsDialog::apply()
   m_conConfig->swapMouse(m_swapmouse.isChecked());
   m_conConfig->setSharedFlag(m_sharedses.isChecked());
 
-  StringStorage scaleText;
-
-  m_scale.getText(&scaleText);
-
-  int scaleInt = 0;
-
-  if (StringParser::parseInt(scaleText.getString(), &scaleInt)) {
-    m_conConfig->setScale(scaleInt, 100);
-    m_conConfig->fitWindow(false);
-  } else {
-    m_conConfig->fitWindow(true);
-  }
+  m_conConfig->fitWindow(true);
 
   if (m_track.isChecked()) {
     m_conConfig->requestShapeUpdates(true);

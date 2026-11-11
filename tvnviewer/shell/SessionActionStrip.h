@@ -39,11 +39,7 @@ const int ID_PILL_DISCONNECT = 0xA870;
 // (kActions); the icon phase swaps its glyphs for Lucide icons.
 enum SessionAction
 {
-  // Display.
-  SESSION_ACTION_FIT_WINDOW,
-  SESSION_ACTION_SCALE_100,
-  SESSION_ACTION_ZOOM_IN,
-  SESSION_ACTION_ZOOM_OUT,
+  // Display (the remote screen always fits the window: no scale actions).
   SESSION_ACTION_FULL_SCREEN,   // Windowed bar only.
   SESSION_ACTION_MONITOR,       // Drop-down: full screen on a monitor.
   // Input.

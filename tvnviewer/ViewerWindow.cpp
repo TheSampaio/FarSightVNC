@@ -33,6 +33,7 @@
 // Modified for FarSightVNC on 2026-11-11: the tab of the shell shows only the session name.
 // Modified for FarSightVNC on 2026-11-11: SessionToolbar (Direct2D) replaces the comctl toolbar; the session state drives it.
 // Modified for FarSightVNC on 2026-11-11: the full screen toolbar is a floating pill with the session actions and state.
+// Modified for FarSightVNC on 2026-11-11: the remote screen always fits the window (no scale modes, no scroll bars).
 //
 
 #include "config-lib/IniFileSettingsManager.h"
@@ -58,7 +59,6 @@ ViewerWindow::ViewerWindow(WindowsApplication *application,
   m_application(application),
   m_logWriter(logger),
   m_conConf(conConf),
-  m_scale(100),
   m_isFullScr(false),
   m_ftDialog(0),
   m_viewerCore(0),
@@ -80,17 +80,6 @@ ViewerWindow::ViewerWindow(WindowsApplication *application,
   m_displayMenu(0),
   m_fixedDisplayMenuItems(0)
 {
-  m_standardScale.push_back(10);
-  m_standardScale.push_back(15);
-  m_standardScale.push_back(25);
-  m_standardScale.push_back(50);
-  m_standardScale.push_back(75);
-  m_standardScale.push_back(90);
-  m_standardScale.push_back(100);
-  m_standardScale.push_back(150);
-  m_standardScale.push_back(200);
-  m_standardScale.push_back(400);
-
   StringStorage windowClass = WindowNames::TVN_WINDOW_CLASS_NAME;
   StringStorage viewClass = WindowNames::FSV_SESSION_VIEW_CLASS_NAME;
   StringStorage titleName = WindowNames::TVN_WINDOW_TITLE_NAME;
@@ -214,20 +203,11 @@ bool ViewerWindow::viewerCoreSettings()
 
 void ViewerWindow::applySettings()
 {
-  int scale;
-
-  if (m_conConf->isFitWindowEnabled()) {
-    scale = -1;
-  } else {
-    int iNum = m_conConf->getScaleNumerator();
-    int iDenom = m_conConf->getScaleDenominator();
-    scale = (iNum * 100) / iDenom;
-  }
-
-  if (scale != m_scale) {
-    m_scale = scale;
-    m_dsktWnd.setScale(m_scale);
-    doSize();
+  // The remote screen always fits the window with its aspect ratio and no
+  // scroll bars, like AnyDesk and RustDesk: a scale saved for the host, given
+  // by -scale= or read from a .vnc file is ignored (see DesktopWindow).
+  if (!m_conConf->isFitWindowEnabled()) {
+    m_conConf->fitWindow(true);
   }
   if (m_isConnected) {
     if (m_conConf->isFullscreenEnabled()) {
@@ -360,8 +340,7 @@ void ViewerWindow::onFrameDpiChanged(UINT dpi, bool frameMoved)
     // the system and don't let adjustWindowSize() move it back to the center.
     m_sizeIsChanged = true;
   }
-  // Size of the scroll bars has been changed.
-  m_dsktWnd.setScale(m_scale);
+  m_dsktWnd.refreshLayout();
   doSize();
 }
 
@@ -617,89 +596,6 @@ void ViewerWindow::commandSaveSession()
   }
 }
 
-void ViewerWindow::commandScaleIn()
-{
-  if (m_conConf->isFitWindowEnabled()) {
-    commandScaleAuto();
-  }
-
-  if (m_standardScale.empty()) {
-    _ASSERT(false);
-    return;
-  }
-
-  int scale = m_conConf->getScaleNumerator() * 100 / m_conConf->getScaleDenominator();
-  size_t indexNewScale = 0;
-  while (indexNewScale < m_standardScale.size() && m_standardScale[indexNewScale] <= scale + 5)
-    indexNewScale++;
-
-  if (indexNewScale >= m_standardScale.size())
-    indexNewScale = m_standardScale.size() - 1;
-
-  m_conConf->setScale(m_standardScale[indexNewScale], 100);
-  m_conConf->fitWindow(false);
-  m_conConf->saveToStorage(&m_ccsm);
-  applySettings();
-}
-
-void ViewerWindow::commandScaleOut()
-{
-  if (m_conConf->isFitWindowEnabled()) {
-    commandScaleAuto();
-  }
-
-  if (m_standardScale.empty()) {
-    _ASSERT(false);
-    return;
-  }
-
-  int scale = m_conConf->getScaleNumerator() * 100 / m_conConf->getScaleDenominator();
-  size_t indexNewScale = m_standardScale.size();
-  do {
-    indexNewScale--;
-  } while (indexNewScale < m_standardScale.size() && m_standardScale[indexNewScale] >= scale - 5);
-
-  if (indexNewScale > m_standardScale.size())
-    indexNewScale = 0;
-
-  m_conConf->setScale(m_standardScale[indexNewScale], 100);
-  m_conConf->fitWindow(false);
-  m_conConf->saveToStorage(&m_ccsm);
-  applySettings();
-}
-
-void ViewerWindow::commandScale100()
-{
-  m_conConf->setScale(1, 1);
-  m_conConf->fitWindow(false);
-  m_conConf->saveToStorage(&m_ccsm);
-  applySettings();
-}
-
-void ViewerWindow::commandScaleAuto()
-{
-  // Toggles fit to window; leaving it keeps the scale it was showing.
-  if (!m_conConf->isFitWindowEnabled()) {
-    m_conConf->fitWindow(true);
-  } else {
-    RECT rcWindow;
-    m_dsktWnd.getClientRect(&rcWindow);
-    int wndWidth = rcWindow.right - rcWindow.left - 1;
-    int wndHeight = rcWindow.bottom - rcWindow.top;
-
-    Rect screen = m_dsktWnd.getFrameBufferGeometry();
-
-    if (wndWidth * screen.getHeight() <= wndHeight * screen.getWidth()) {
-      m_conConf->setScale(wndWidth, screen.getWidth());
-    } else {
-      m_conConf->setScale(wndHeight, screen.getHeight());
-    }
-    m_conConf->fitWindow(false);
-  }
-  m_conConf->saveToStorage(&m_ccsm);
-  applySettings();
-}
-
 int ViewerWindow::translateAccelToTB(int val)
 {
   static const std::pair<int, int> accelerators[] = {
@@ -756,14 +652,6 @@ bool ViewerWindow::onCommand(WPARAM wParam, LPARAM lParam)
     applyFullscreenTarget();
     return true;
   }
-  if (command == 0xA820) { commandScale100(); return true; }
-  if (command == 0xA830) {
-    m_conConf->fitWindow(true);
-    m_conConf->saveToStorage(&m_ccsm);
-    applySettings();
-    return true;
-  }
-  if (command == 0xA840) { dialogConnectionOptions(); return true; }
   switch(wParam) {
     case IDS_ABOUT_VIEWER:
       onAbout();
@@ -809,18 +697,6 @@ bool ViewerWindow::onCommand(WPARAM wParam, LPARAM lParam)
       return true;
     case IDS_TB_SAVESESSION:
       commandSaveSession();
-      return true;
-    case IDS_TB_SCALEIN:
-      commandScaleIn();
-      return true;
-    case IDS_TB_SCALEOUT:
-      commandScaleOut();
-      return true;
-    case IDS_TB_SCALE100:
-      commandScale100();
-      return true;
-    case IDS_TB_SCALEAUTO:
-      commandScaleAuto();
       return true;
     case IDS_TB_FULLSCREEN:
       switchFullScreenMode();
@@ -952,7 +828,7 @@ void ViewerWindow::doUnFullScr()
 
   m_host->exitFullscreen();
 
-  m_dsktWnd.setScale(m_scale);
+  m_dsktWnd.refreshLayout();
   applyScreenChanges(false);
 
   // The windowed viewer keeps the keyboard hook while it is active.
@@ -1363,14 +1239,8 @@ SessionToolbarState ViewerWindow::toolbarState() const
 {
   SessionToolbarState state;
   bool canType = m_isConnected && !m_conConf->isViewOnly();
-  bool fit = m_conConf->isFitWindowEnabled();
-  int scale = m_conConf->getScaleNumerator() * 100 / m_conConf->getScaleDenominator();
 
   state.enabled.set();
-  state.enabled[SESSION_ACTION_ZOOM_IN] = scale < m_standardScale.back();
-  state.enabled[SESSION_ACTION_ZOOM_OUT] = scale > m_standardScale.front();
-  state.checked[SESSION_ACTION_FIT_WINDOW] = fit;
-  state.checked[SESSION_ACTION_SCALE_100] = !fit && scale == 100;
   state.checked[SESSION_ACTION_FULL_SCREEN] = m_isFullScr;
 
   state.enabled[SESSION_ACTION_CTRL_ALT_DEL] = canType;
@@ -1574,10 +1444,6 @@ BOOL CALLBACK ViewerWindow::collectMonitor(HMONITOR monitor, HDC, LPRECT, LPARAM
 void ViewerWindow::addDisplayMenus()
 {
   m_displayMenu = CreatePopupMenu();
-  AppendMenu(m_displayMenu, MF_STRING, 0xA820, _T("Original (100%)"));
-  AppendMenu(m_displayMenu, MF_STRING, 0xA830, _T("Fit to window"));
-  AppendMenu(m_displayMenu, MF_STRING, 0xA840, _T("Custom scale..."));
-  AppendMenu(m_displayMenu, MF_SEPARATOR, 0, 0);
   AppendMenu(m_displayMenu, MF_STRING, 0xA810, _T("Fullscreen on current monitor"));
   AppendMenu(m_displayMenu, MF_STRING, 0xA800, _T("Fullscreen across all monitors"));
   m_fixedDisplayMenuItems = GetMenuItemCount(m_displayMenu);

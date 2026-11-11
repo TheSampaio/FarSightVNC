@@ -23,6 +23,7 @@
 //
 // Modified for FarSightVNC on 2026-11-03: Options dialog split into Display,
 // Input and Network tab pages, with Ctrl+Tab switching between them.
+// Modified for FarSightVNC on 2026-11-11: no scale validation (the remote screen always fits).
 //
 
 #ifndef _OPTIONS_DIALOG_H_
@@ -121,9 +122,6 @@ private:
   void onPreferredEncodingSelectionChange();
   void onCustomCompressionLevelScroll();
   void onJpegCompressionLevelScroll();
-  void onScaleKillFocus();
-  void showScaleField();
-  bool isInputValid();
   bool onOkPressed();
   void apply();
 
