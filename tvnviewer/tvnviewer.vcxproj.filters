@@ -127,6 +127,9 @@
     <ClCompile Include="ViewerVncAuthHandler.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="ConnectionOptionsForm.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="AuthenticationDialog.h">
@@ -265,6 +268,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="ViewerVncAuthHandler.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ConnectionOptionsForm.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

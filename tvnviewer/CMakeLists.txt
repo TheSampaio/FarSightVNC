@@ -37,6 +37,7 @@ add_executable(tvnviewer WIN32
   shell/SessionToolbar.cpp
   shell/ShellWindow.cpp
   shell/TitleBar.cpp
+  ConnectionOptionsForm.cpp
   tvnviewer.rc
   dpi-aware.manifest)
 

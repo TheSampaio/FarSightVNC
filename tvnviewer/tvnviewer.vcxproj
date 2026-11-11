@@ -343,6 +343,7 @@
     <ClCompile Include="shell\SessionToolbar.cpp" />
     <ClCompile Include="shell\ShellWindow.cpp" />
     <ClCompile Include="shell\TitleBar.cpp" />
+    <ClCompile Include="ConnectionOptionsForm.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="AboutDialog.h" />
@@ -391,6 +392,7 @@
     <ClInclude Include="shell\ShellTab.h" />
     <ClInclude Include="shell\ShellWindow.h" />
     <ClInclude Include="shell\TitleBar.h" />
+    <ClInclude Include="ConnectionOptionsForm.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="res\appicon.ico" />

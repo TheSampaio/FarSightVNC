@@ -24,6 +24,7 @@
 // Modified for FarSightVNC on 2026-11-03: Options dialog split into Display,
 // Input and Network tab pages, with Ctrl+Tab switching between them.
 // Modified for FarSightVNC on 2026-11-11: no scale validation (the remote screen always fits).
+// Modified for FarSightVNC on 2026-11-11: the option logic moved to ConnectionOptionsForm, shared with the Settings page.
 //
 
 #ifndef _OPTIONS_DIALOG_H_
@@ -32,6 +33,7 @@
 #include "client-config-lib/ViewerConfig.h"
 #include "client-config-lib/ConnectionConfig.h"
 #include "client-config-lib/ConnectionConfigSM.h"
+#include "ConnectionOptionsForm.h"
 #include "client-config-lib/ViewerSettingsManager.h"
 #include "util/StringParser.h"
 #include "gui/BaseDialog.h"
@@ -72,30 +74,6 @@ public:
   void setConnected();
 
 protected:
-  ComboBox m_useEnc;
-  CheckBox m_eightBit;
-  CheckBox m_compLvl;
-  Trackbar m_tcompLvl;
-  Control m_quality;
-  CheckBox m_jpeg;
-  Trackbar m_tjpeg;
-  Control m_quality2;
-  CheckBox m_copyrect;
-  CheckBox m_viewonly;
-  CheckBox m_disclip;
-  CheckBox m_sharedses;
-  ComboBox m_scale;
-  CheckBox m_fullscr;
-  CheckBox m_deiconfy;
-  CheckBox m_swapmouse;
-  CheckBox m_track;       // Track remote control locally
-  CheckBox m_cursor;      // Let remote server deal with mouse cursor
-  CheckBox m_ncursor;     // Don't show remote cursor
-  CheckBox m_dot;
-  CheckBox m_smalldot;
-  CheckBox m_arrow;
-  CheckBox m_nlocal;
-
   void onMessageReceived(UINT uMsg, WPARAM wParam, LPARAM lParam);
   BOOL onCommand(UINT controlID, UINT notificationID);
   BOOL onNotify(UINT controlID, LPARAM data);
@@ -109,21 +87,12 @@ private:
   BOOL onControlCommand(UINT controlID, UINT notificationID);
   void createPage(OptionsPage *page, const TCHAR *caption);
   HWND findControl(UINT controlID);
-  void setPageControl(Control &control, DWORD controlID);
   bool onTabSwitchKey(const MSG *msg);
   static LRESULT CALLBACK msgFilterProc(int code, WPARAM wParam, LPARAM lParam);
-  void updateControlValues();
-  void onViewOnlyClick();
-  void on8BitColorClick();
-  void enableJpegCompression(bool enable);
-  void onAllowCustomCompressionClick();
-  void enableCustomCompression(bool enable);
-  void onAllowJpegCompressionClick();
-  void onPreferredEncodingSelectionChange();
-  void onCustomCompressionLevelScroll();
-  void onJpegCompressionLevelScroll();
   bool onOkPressed();
-  void apply();
+
+  // The controls of the pages and the option logic.
+  ConnectionOptionsForm m_form;
 
   TabControl m_tabControl;
   OptionsPage m_displayPage;
