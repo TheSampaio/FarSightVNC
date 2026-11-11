@@ -28,6 +28,7 @@
 // Modified for FarSightVNC on 2026-11-07: the connected session is shown by the window thread (WM_USER_CONNECTED).
 // Modified for FarSightVNC on 2026-11-11: frame operations (title, full screen, size, DPI, end of session) go through SessionHost.
 // Modified for FarSightVNC on 2026-11-11: child window (FsvSessionView) of the shell window, which forwards the frame events.
+// Modified for FarSightVNC on 2026-11-11: the shell handles DPI changes and full screen state; a reconnection reuses the shell.
 //
 
 #ifndef _VIEWER_WINDOW_H_
@@ -93,9 +94,13 @@ public:
   // WM_SIZING: the user sizes the frame, which keeps that size from now on.
   void onFrameSizing();
   void onFrameDisplayChange();
-  void onFrameDpiChanged(WPARAM wParam, LPARAM lParam);
+  // WM_DPICHANGED; frameMoved when the windowed frame takes the rectangle
+  // suggested by the system.
+  void onFrameDpiChanged(UINT dpi, bool frameMoved);
   // Window that takes the keyboard focus (the remote desktop).
   HWND getFocusHwnd() const;
+  // True when the frame is visible (a reconnection reuses a shown frame).
+  bool isFrameShown() const;
 
   static const int WM_USER_ERROR = WM_USER + 1;
   static const int WM_USER_STOP = WM_USER + 2;
@@ -123,7 +128,6 @@ protected:
   // false, without any window, when reconnecting is not offered.
   bool offerReconnect(bool sessionWasEstablished, const StringStorage *reason);
   bool onSize(WPARAM wParam, LPARAM lParam);
-  bool onDpiChanged(WPARAM wParam, LPARAM lParam);
   void onDisplayChange();
   bool onCreate(LPCREATESTRUCT lps);
   bool onCommand(WPARAM wParam, LPARAM lParam);
@@ -131,6 +135,11 @@ protected:
   bool onSysCommand(WPARAM wParam, LPARAM lParam);
   bool onClose();
   bool onDestroy();
+  // Tears the session view down and tells the frame (reconnecting or not).
+  void endSession();
+  // Asks the application for a new session with conData and the current
+  // options, shown in the same frame.
+  void postReconnect(const ConnectionData &conData);
   bool onFocus(WPARAM wParam);
   bool onKillFocus(WPARAM wParam);
   bool onTimer(WPARAM idTimer);

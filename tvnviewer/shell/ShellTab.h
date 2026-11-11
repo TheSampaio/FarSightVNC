@@ -44,8 +44,9 @@ public:
   virtual void onFrameSizing() = 0;
   // WM_DISPLAYCHANGE of the shell.
   virtual void onDisplayChange() = 0;
-  // WM_DPICHANGED of the shell.
-  virtual void onDpiChanged(WPARAM wParam, LPARAM lParam) = 0;
+  // WM_DPICHANGED of the shell, before the shell takes the rectangle
+  // suggested by the system (frameMoved) or keeps its full screen size.
+  virtual void onDpiChanged(UINT dpi, bool frameMoved) = 0;
 };
 
 #endif

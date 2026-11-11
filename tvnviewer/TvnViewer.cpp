@@ -23,6 +23,7 @@
 //
 // Modified for FarSightVNC on 2026-11-01: message loop translates remote keyboard input after dispatch.
 // Modified for FarSightVNC on 2026-11-11: every session is shown in its own shell window, owned by the application.
+// Modified for FarSightVNC on 2026-11-11: a reconnection reuses the shell window of the session.
 //
 
 #include "TvnViewer.h"
@@ -150,10 +151,22 @@ void TvnViewer::runInstance(const StringStorage *hostName, const ConnectionConfi
   runInstance(conData, config);
 }
 
-void TvnViewer::runInstance(ConnectionData *conData, const ConnectionConfig *config)
+void TvnViewer::runInstance(ConnectionData *conData, const ConnectionConfig *config,
+                            ShellWindow *target)
 {
-  ShellWindow *shell = createShell();
+  ShellWindow *shell = target != nullptr ? target : createShell();
   startInstance(new ViewerInstance(this, conData, config, shell), shell);
+}
+
+ShellWindow *TvnViewer::findShell(HWND hwnd) const
+{
+  std::list<std::unique_ptr<ShellWindow> >::const_iterator iter;
+  for (iter = m_shells.begin(); iter != m_shells.end(); ++iter) {
+    if (!(*iter)->isDestroyed() && (*iter)->getHWnd() == hwnd) {
+      return iter->get();
+    }
+  }
+  return nullptr;
 }
 
 ShellWindow *TvnViewer::createShell()
@@ -451,9 +464,11 @@ LRESULT CALLBACK TvnViewer::wndProc(HWND hWnd, UINT msg, WPARAM wparam, LPARAM l
         break;
 
       case WM_USER_RECONNECT: {
-        ConnectionData *conData = reinterpret_cast<ConnectionData *>(wparam);
-        ConnectionConfig *conConfig = reinterpret_cast<ConnectionConfig *>(lparam);
-        _this->newConnection(conData, conConfig);
+        std::unique_ptr<ReconnectRequest> request(reinterpret_cast<ReconnectRequest *>(lparam));
+        // The session copies the data; a shell closed meanwhile is replaced
+        // by a new one.
+        _this->runInstance(&request->conData, &request->conConfig,
+                           _this->findShell(request->shell));
         _this->m_instances.decreaseToReconnect();
         break;
       }

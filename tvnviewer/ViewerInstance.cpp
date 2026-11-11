@@ -23,6 +23,7 @@
 //
 // Modified for FarSightVNC on 2026-11-03: a reconnection attempt shows its window while connecting.
 // Modified for FarSightVNC on 2026-11-11: the session window is a child of the given frame (SessionHost).
+// Modified for FarSightVNC on 2026-11-11: a session started in a frame that is already shown (reconnection) shows the "connecting" state.
 //
 
 #include "ViewerInstance.h"
@@ -123,9 +124,10 @@ void ViewerInstance::start()
     StringStorage strHost;
     m_condata.getReducedHost(&strHost);
     UINT16 portVal = m_condata.getPort();
-    // The window of a reconnection attempt shows the "connecting" state;
-    // an ordinary connection keeps it hidden until the session is established.
-    if (m_condata.getReconnectAttempt() > 0) {
+    // The window of a reconnection attempt (or any session started in a
+    // frame that is already shown) shows the "connecting" state; an ordinary
+    // connection keeps it hidden until the session is established.
+    if (m_condata.getReconnectAttempt() > 0 || m_viewerWnd.isFrameShown()) {
       m_viewerWnd.showConnecting();
     }
     m_viewerCore.start(strHost.getString(), portVal,

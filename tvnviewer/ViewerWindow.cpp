@@ -29,6 +29,7 @@
 // Modified for FarSightVNC on 2026-11-07: a session opened in full screen no longer freezes the viewer (window work moved to the window thread).
 // Modified for FarSightVNC on 2026-11-11: frame operations (title, full screen, size, DPI, end of session) go through SessionHost.
 // Modified for FarSightVNC on 2026-11-11: child window (FsvSessionView) of the shell window; frame events come from the shell, dialogs are owned by it.
+// Modified for FarSightVNC on 2026-11-11: the shell handles DPI changes and full screen state; a reconnection reuses the shell.
 //
 
 #include "config-lib/IniFileSettingsManager.h"
@@ -370,9 +371,22 @@ void ViewerWindow::onFrameDisplayChange()
   adjustWindowSize();
 }
 
-void ViewerWindow::onFrameDpiChanged(WPARAM wParam, LPARAM lParam)
+void ViewerWindow::onFrameDpiChanged(UINT dpi, bool frameMoved)
 {
-  onDpiChanged(wParam, lParam);
+  m_toolbar.setDpi(dpi);
+  if (frameMoved) {
+    // The frame is being moved between monitors: keep the size suggested by
+    // the system and don't let adjustWindowSize() move it back to the center.
+    m_sizeIsChanged = true;
+  }
+  // Size of the scroll bars has been changed.
+  m_dsktWnd.setScale(m_scale);
+  doSize();
+}
+
+bool ViewerWindow::isFrameShown() const
+{
+  return !!IsWindowVisible(m_host->rootHwnd());
 }
 
 HWND ViewerWindow::getFocusHwnd() const
@@ -998,15 +1012,34 @@ bool ViewerWindow::onClose()
       return true;
     }
   }
-  m_dsktWnd.destroyWindow();
-  m_host->onSessionEnded();
+  endSession();
   return true;
 }
 
 bool ViewerWindow::onDestroy()
 {
   KillTimer(m_hWnd, TIMER_DESKTOP_STATE);
+  // The frame may outlive the session (reconnection): its full screen
+  // toolbar goes with the session.
+  m_fsToolbar.destroy();
   return true;
+}
+
+void ViewerWindow::endSession()
+{
+  m_dsktWnd.destroyWindow();
+  m_host->onSessionEnded(m_requiresReconnect);
+}
+
+void ViewerWindow::postReconnect(const ConnectionData &conData)
+{
+  // The application keeps running until the new instance is created (see
+  // m_requiresReconnect); the new session is shown in the same frame.
+  m_requiresReconnect = true;
+  TvnViewer::ReconnectRequest *request =
+    new TvnViewer::ReconnectRequest(conData, *m_conConf, m_host->rootHwnd());
+  m_application->postMessage(TvnViewer::WM_USER_RECONNECT, 0,
+                             reinterpret_cast<LPARAM>(request));
 }
 
 void ViewerWindow::doSize()
@@ -1040,22 +1073,6 @@ bool ViewerWindow::onSize(WPARAM wParam, LPARAM lParam)
       m_dsktWnd.setSize(w, h);
     }
   }
-  return true;
-}
-
-bool ViewerWindow::onDpiChanged(WPARAM wParam, LPARAM lParam)
-{
-  m_toolbar.setDpi(LOWORD(wParam));
-  const RECT *suggested = reinterpret_cast<const RECT *>(lParam);
-  if (!m_isFullScr && suggested != 0) {
-    // The window is being moved between monitors: keep the size suggested by
-    // the system and don't let adjustWindowSize() move it back to the center.
-    m_sizeIsChanged = true;
-    m_host->onDpiChanged(*suggested);
-  }
-  // Size of the scroll bars has been changed.
-  m_dsktWnd.setScale(m_scale);
-  doSize();
   return true;
 }
 
@@ -1131,18 +1148,12 @@ bool ViewerWindow::offerReconnect(bool sessionWasEstablished, const StringStorag
                                          attemptsMade + 1,
                                          policy.getMaxAttempts());
   if (reconnect) {
-    // Same host, options and in-memory password; the application keeps
-    // running until the new instance is created (see m_requiresReconnect).
-    m_requiresReconnect = true;
-    ConnectionData *connectionData = new ConnectionData(*m_conData);
-    connectionData->setReconnectAttempt(attemptsMade + 1);
-    ConnectionConfig *connectionConfig = new ConnectionConfig(*m_conConf);
-    m_application->postMessage(TvnViewer::WM_USER_RECONNECT,
-                               (WPARAM)connectionData,
-                               (LPARAM)connectionConfig);
+    // Same host, options and in-memory password.
+    ConnectionData connectionData(*m_conData);
+    connectionData.setReconnectAttempt(attemptsMade + 1);
+    postReconnect(connectionData);
   }
-  m_dsktWnd.destroyWindow();
-  m_host->onSessionEnded();
+  endSession();
   return true;
 }
 
@@ -1156,8 +1167,7 @@ bool ViewerWindow::onDisconnect()
              formatWindowName().getString(),
              MB_OK);
 
-  m_dsktWnd.destroyWindow();
-  m_host->onSessionEnded();
+  endSession();
   return true;
 }
 
@@ -1173,19 +1183,14 @@ bool ViewerWindow::onAuthError(WPARAM wParam)
     if (result == IDRETRY) {
       if (!m_conData->isIncoming()) {
         // Retry connect to remote host.
-        m_requiresReconnect = true;
-        ConnectionData *connectionData = new ConnectionData(*m_conData);
-        connectionData->resetPassword();
-        connectionData->setReconnectAttempt(0);
-        ConnectionConfig *connectionConfig = new ConnectionConfig(*m_conConf);
-        m_application->postMessage(TvnViewer::WM_USER_RECONNECT,
-                                   (WPARAM)connectionData,
-                                   (LPARAM)connectionConfig);
+        ConnectionData connectionData(*m_conData);
+        connectionData.resetPassword();
+        connectionData.setReconnectAttempt(0);
+        postReconnect(connectionData);
       }
     }
   }
-  m_dsktWnd.destroyWindow();
-  m_host->onSessionEnded();
+  endSession();
   return true;
 }
 
@@ -1205,8 +1210,7 @@ bool ViewerWindow::onError()
              formatWindowName().getString(),
              MB_OK | MB_ICONERROR);
 
-  m_dsktWnd.destroyWindow();
-  m_host->onSessionEnded();
+  endSession();
   return true;
 }
 
@@ -1270,13 +1274,14 @@ bool ViewerWindow::onSessionShown()
   // Start viewer window and applying settings.
   showWindow();
   // Like AnyDesk and RustDesk, a session opens maximized (the remote
-  // desktop is scaled to the window by default, see ConnectionConfig).
+  // desktop is scaled to the window by default, see ConnectionConfig); a
+  // reconnected session keeps the frame of the previous one.
   if (m_isFirstConnection) {
     m_isFirstConnection = false;
     if (!m_conConf->isFullscreenEnabled()) {
       // The user's size from now on: adjustWindowSize() must not shrink it.
       m_sizeIsChanged = true;
-      m_host->maximize();
+      m_host->openMaximized();
     }
   }
   SetForegroundWindow(m_host->rootHwnd());

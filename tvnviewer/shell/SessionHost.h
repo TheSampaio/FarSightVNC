@@ -25,16 +25,14 @@
 class StringStorage;
 
 // Everything a session (ViewerWindow) needs from the top-level frame that
-// shows it. Today the frame is the session window itself (LegacyFrameHost);
-// the shell window of the UI redesign implements it later and hosts the
-// session as a child window.
+// shows it: the shell window (ShellWindow), which hosts the session view as
+// a child window.
 class SessionHost
 {
 public:
   virtual ~SessionHost() {}
 
-  // Window that contains the session view (its parent in the shell). The
-  // legacy frame is the session window itself.
+  // Window that contains the session view (its parent in the shell).
   virtual HWND hostHwnd() const = 0;
   // Top-level window of the session: foreground and activation checks,
   // owner of the session popups.
@@ -58,16 +56,14 @@ public:
   // the frame covers the work area. Does nothing if that size was already
   // applied.
   virtual void requestClientSize(int width, int height) = 0;
-  // Maximizes the frame (a new session opens maximized).
-  virtual void maximize() = 0;
-
-  // WM_DPICHANGED of a windowed frame: moves it to the rectangle suggested
-  // by the system, which is also the size restored after full screen.
-  virtual void onDpiChanged(const RECT &suggested) = 0;
+  // A windowed session is shown: a new frame opens maximized, a frame that
+  // already showed a session (reconnection) keeps its size.
+  virtual void openMaximized() = 0;
 
   // The session view is being torn down (closed, disconnected or failed).
-  // The legacy frame destroys itself.
-  virtual void onSessionEnded() = 0;
+  // The view is destroyed; the frame is destroyed too unless the session is
+  // reconnecting, in which case the next session is shown in the same frame.
+  virtual void onSessionEnded(bool reconnecting) = 0;
 };
 
 #endif

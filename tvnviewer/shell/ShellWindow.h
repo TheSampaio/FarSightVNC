@@ -20,11 +20,12 @@
 #ifndef _SHELL_WINDOW_H_
 #define _SHELL_WINDOW_H_
 
-#include "LegacyFrameHost.h"
 #include "SessionHost.h"
 #include "ShellTab.h"
 #include "gui/BaseWindow.h"
 #include "log-writer/LogWriter.h"
+#include "region/Rect.h"
+#include "win-system/SystemInformation.h"
 
 #include <memory>
 #include <vector>
@@ -49,10 +50,13 @@ private:
 
 // Top-level frame of the viewer (window class TvnWindowClass): it hosts the
 // session view as a child that fills its client area, owns the frame state
-// and forwards the frame events to the active tab. Native caption for now.
+// (full screen, default size, DPI) and forwards the frame events to the
+// active tab. Native caption for now.
 //
 // The application owns the shells; a shell whose window is destroyed is
-// deleted by the application (see isDestroyed()).
+// deleted by the application (see isDestroyed()). A shell outlives its
+// session when the session is reconnected: the next session is shown in the
+// same frame.
 class ShellWindow : public BaseWindow,
                     public SessionHost
 {
@@ -75,9 +79,8 @@ public:
   virtual void exitFullscreen();
   virtual bool isFullscreen() const;
   virtual void requestClientSize(int width, int height);
-  virtual void maximize();
-  virtual void onDpiChanged(const RECT &suggested);
-  virtual void onSessionEnded();
+  virtual void openMaximized();
+  virtual void onSessionEnded(bool reconnecting);
 
 private:
   virtual bool onMessage(UINT message, WPARAM wParam, LPARAM lParam);
@@ -85,16 +88,29 @@ private:
   virtual bool onSysCommand(WPARAM wParam, LPARAM lParam);
 
   void onActivate(WPARAM wParam);
+  void onDpiChanged(WPARAM wParam, LPARAM lParam);
   void layoutActiveTab();
   void focusActiveTab();
+  // Frame rectangle for a client area of width x height on the work area of
+  // the shell's monitor.
+  Rect calculateDefaultSize(int width, int height);
 
   LogWriter m_logWriter;
+  SystemInformation m_sysinf;
   TabModel m_tabs;
-  // Window state of the frame (full screen, default size, DPI).
-  LegacyFrameHost m_frame;
   // Focused descendant saved when the shell is deactivated.
   HWND m_lastFocus;
   bool m_destroyed;
+  // A session was shown maximized or sized by the user in this frame: a
+  // reconnected session keeps the frame as it is.
+  bool m_sessionWasShown;
+
+  bool m_isFullscreen;
+  // Placement of the windowed frame (position, size, maximized state), saved
+  // when entering full screen and restored when leaving it.
+  WINDOWPLACEMENT m_windowedPlacement;
+  // Default frame size applied by requestClientSize().
+  Rect m_rcNormal;
 };
 
 #endif

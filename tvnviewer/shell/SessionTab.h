@@ -40,7 +40,7 @@ public:
   virtual void onActivate(WPARAM wParam) { m_window->onFrameActivate(wParam); }
   virtual void onFrameSizing() { m_window->onFrameSizing(); }
   virtual void onDisplayChange() { m_window->onFrameDisplayChange(); }
-  virtual void onDpiChanged(WPARAM wParam, LPARAM lParam) { m_window->onFrameDpiChanged(wParam, lParam); }
+  virtual void onDpiChanged(UINT dpi, bool frameMoved) { m_window->onFrameDpiChanged(dpi, frameMoved); }
 
 private:
   ViewerWindow *m_window;

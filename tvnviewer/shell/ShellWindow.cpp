@@ -42,10 +42,14 @@ ShellTab *TabModel::active() const
 
 ShellWindow::ShellWindow(const TCHAR *windowClassName, Logger *logger)
 : m_logWriter(logger),
-  m_frame(this, &m_logWriter),
   m_lastFocus(0),
-  m_destroyed(false)
+  m_destroyed(false),
+  m_sessionWasShown(false),
+  m_isFullscreen(false)
 {
+  ZeroMemory(&m_windowedPlacement, sizeof(m_windowedPlacement));
+  m_windowedPlacement.length = sizeof(m_windowedPlacement);
+
   StringStorage windowClass(windowClassName);
   StringStorage title(WindowNames::TVN_WINDOW_TITLE_NAME);
   setClass(&windowClass);
@@ -64,6 +68,10 @@ void ShellWindow::attachTab(std::unique_ptr<ShellTab> tab)
   m_tabs.add(std::move(tab));
   m_lastFocus = 0;
   layoutActiveTab();
+  // A reconnected session arrives in an active frame (no WM_ACTIVATE).
+  if (GetActiveWindow() == m_hWnd) {
+    focusActiveTab();
+  }
 }
 
 bool ShellWindow::isDestroyed() const
@@ -93,40 +101,131 @@ void ShellWindow::setTitle(const StringStorage *title)
 
 void ShellWindow::enterFullscreen(const RECT &monitorRect)
 {
-  m_frame.enterFullscreen(monitorRect);
+  // Preserve the windowed placement while changing fullscreen monitors.
+  if (!m_isFullscreen) {
+    GetWindowPlacement(m_hWnd, &m_windowedPlacement);
+  }
+
+  Rect fullScreenRect;
+  fullScreenRect.fromWindowsRect(&monitorRect);
+  m_logWriter.detail(_T("full screen window rect: %d, %d; %d, %d"),
+                     fullScreenRect.left, fullScreenRect.top,
+                     fullScreenRect.getWidth(), fullScreenRect.getHeight());
+
+  setStyle((getStyle() | WS_MAXIMIZE) &
+           ~(WS_CAPTION | WS_BORDER | WS_THICKFRAME | WS_MAXIMIZEBOX));
+  setExStyle(getExStyle() | WS_EX_TOPMOST);
+
+  SetWindowPos(m_hWnd, 0,
+               fullScreenRect.left, fullScreenRect.top,
+               fullScreenRect.getWidth(), fullScreenRect.getHeight(),
+               SWP_SHOWWINDOW | SWP_FRAMECHANGED);
+  m_isFullscreen = true;
 }
 
 void ShellWindow::exitFullscreen()
 {
-  m_frame.exitFullscreen();
+  if (!m_isFullscreen) {
+    return;
+  }
+  m_isFullscreen = false;
+
+  setStyle((getStyle() | WS_CAPTION | WS_BORDER | WS_THICKFRAME | WS_MAXIMIZEBOX) &
+           ~WS_MAXIMIZE);
+  setExStyle(getExStyle() & ~WS_EX_TOPMOST);
+  SetWindowPos(m_hWnd, 0, 0, 0, 0, 0,
+               SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+  // Back to the frame saved by enterFullscreen(), maximized or not. A frame
+  // that keeps the default size follows a new remote screen size afterwards
+  // (requestClientSize()).
+  SetWindowPlacement(m_hWnd, &m_windowedPlacement);
 }
 
 bool ShellWindow::isFullscreen() const
 {
-  return m_frame.isFullscreen();
+  return m_isFullscreen;
+}
+
+Rect ShellWindow::calculateDefaultSize(int width, int height)
+{
+  // Get work area.
+  Rect defaultRect;
+
+  HMONITOR hmon = MonitorFromWindow(m_hWnd, MONITOR_DEFAULTTONEAREST);
+  MONITORINFO mi;
+  mi.cbSize = sizeof(mi);
+
+  if (!!GetMonitorInfo(hmon, &mi)) {
+    defaultRect.fromWindowsRect(&mi.rcWork);
+  } else {
+    m_logWriter.debug(_T("Get monitor info is failed. Use second method (no multi-screen)."));
+    RECT desktopRc;
+    if (!m_sysinf.getDesktopArea(&desktopRc)) {
+       m_sysinf.getDesktopAllArea(&desktopRc);
+    }
+    defaultRect.fromWindowsRect(&desktopRc);
+  }
+
+  int widthDesktop  = defaultRect.getWidth();
+  int heightDesktop = defaultRect.getHeight();
+
+  int borderWidth, borderHeight;
+  getBorderSize(&borderWidth, &borderHeight);
+  int totalWidth  = width + borderWidth;
+  int totalHeight = height + borderHeight;
+  // The whole window (frame and toolbar included) must fit in the work area,
+  // otherwise tall desktops would be placed partly outside of the screen.
+  if (totalWidth <= widthDesktop && totalHeight <= heightDesktop) {
+    defaultRect.setHeight(totalHeight);
+    defaultRect.setWidth(totalWidth);
+    defaultRect.move((widthDesktop - totalWidth) / 2,
+                     (heightDesktop - totalHeight) / 2);
+  }
+  return defaultRect;
 }
 
 void ShellWindow::requestClientSize(int width, int height)
 {
-  m_frame.requestClientSize(width, height);
+  Rect defaultSize = calculateDefaultSize(width, height);
+  bool defaultSizeIsChanged = defaultSize.getWidth() != m_rcNormal.getWidth() ||
+                              defaultSize.getHeight() != m_rcNormal.getHeight();
+  if (defaultSizeIsChanged) {
+    m_rcNormal = defaultSize;
+    setPosition(m_rcNormal.left, m_rcNormal.top);
+    setSize(m_rcNormal.getWidth(), m_rcNormal.getHeight());
+  }
 }
 
-void ShellWindow::maximize()
+void ShellWindow::openMaximized()
 {
-  m_frame.maximize();
+  // Like AnyDesk and RustDesk, a new frame opens maximized. A reconnected
+  // session keeps the frame of the previous one.
+  if (!m_sessionWasShown) {
+    m_sessionWasShown = true;
+    ShowWindow(m_hWnd, SW_MAXIMIZE);
+  }
 }
 
-void ShellWindow::onDpiChanged(const RECT &suggested)
+void ShellWindow::onSessionEnded(bool reconnecting)
 {
-  m_frame.onDpiChanged(suggested);
-}
-
-void ShellWindow::onSessionEnded()
-{
-  // The session view is a child: destroying the shell destroys it too. The
-  // application deletes this object later (isDestroyed()).
+  HWND view = 0;
+  if (m_tabs.active() != 0) {
+    view = m_tabs.active()->viewHwnd();
+  }
   m_tabs.clear();
-  destroyWindow();
+  m_lastFocus = 0;
+  if (!reconnecting) {
+    // The session view is a child: destroying the shell destroys it too. The
+    // application deletes this object later (isDestroyed()).
+    destroyWindow();
+    return;
+  }
+  // The frame waits for the reconnected session (TvnViewer::runInstance()).
+  if (view != 0) {
+    DestroyWindow(view);
+  }
+  // The next session adds its own menu to a fresh system menu.
+  GetSystemMenu(m_hWnd, TRUE);
 }
 
 bool ShellWindow::onCommand(WPARAM wParam, LPARAM lParam)
@@ -174,11 +273,7 @@ bool ShellWindow::onMessage(UINT message, WPARAM wParam, LPARAM lParam)
     }
     return true;
   case WM_DPICHANGED:
-    if (tab != 0) {
-      tab->onDpiChanged(wParam, lParam);
-    } else if (lParam != 0) {
-      m_frame.onDpiChanged(*reinterpret_cast<const RECT *>(lParam));
-    }
+    onDpiChanged(wParam, lParam);
     return true;
   case WM_DISPLAYCHANGE:
     if (tab != 0) {
@@ -214,6 +309,26 @@ void ShellWindow::onActivate(WPARAM wParam)
   // HIWORD is the minimized state: a minimized window keeps no focus.
   if (active && HIWORD(wParam) == 0) {
     focusActiveTab();
+  }
+}
+
+void ShellWindow::onDpiChanged(WPARAM wParam, LPARAM lParam)
+{
+  const RECT *suggested = reinterpret_cast<const RECT *>(lParam);
+  // A windowed frame moved between monitors takes the rectangle suggested by
+  // the system; a full screen frame keeps covering its monitor(s).
+  bool frameMoved = !m_isFullscreen && suggested != 0;
+  ShellTab *tab = m_tabs.active();
+  if (tab != 0) {
+    tab->onDpiChanged(LOWORD(wParam), frameMoved);
+  }
+  if (frameMoved) {
+    SetWindowPos(m_hWnd, 0, suggested->left, suggested->top,
+                 suggested->right - suggested->left,
+                 suggested->bottom - suggested->top,
+                 SWP_NOZORDER | SWP_NOACTIVATE);
+    // The default size follows the new DPI as well.
+    m_rcNormal.fromWindowsRect(suggested);
   }
 }
 

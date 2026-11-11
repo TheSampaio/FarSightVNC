@@ -79,9 +79,6 @@
     <ClCompile Include="ViewerWindow.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="shell\LegacyFrameHost.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="shell\ShellWindow.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -202,9 +199,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="ViewerWindow.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="shell\LegacyFrameHost.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="shell\SessionHost.h">

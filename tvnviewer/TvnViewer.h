@@ -22,6 +22,7 @@
 //-------------------------------------------------------------------------
 //
 // Modified for FarSightVNC on 2026-11-11: every session is shown in its own shell window, owned by the application.
+// Modified for FarSightVNC on 2026-11-11: a reconnection reuses the shell window of the session.
 //
 
 #ifndef _TVN_VIEWER_H_
@@ -107,8 +108,23 @@ public:
   static const int WM_USER_ABOUT = WM_USER + 4;
 
   // This message need send if you need reconnect to host.
-  // LPARAM contained pointer to ConnectionData.
+  // LPARAM is a ReconnectRequest allocated with new; the application
+  // deletes it.
   static const int WM_USER_RECONNECT = WM_USER + 5;
+
+  // Payload of WM_USER_RECONNECT.
+  struct ReconnectRequest
+  {
+    ReconnectRequest(const ConnectionData &data, const ConnectionConfig &config, HWND frame)
+    : conData(data), conConfig(config), shell(frame)
+    {
+    }
+    ConnectionData conData;
+    ConnectionConfig conConfig;
+    // Shell window of the dropped session; the new session is shown in it
+    // while it exists.
+    HWND shell;
+  };
 
   // This message need send if config is changed.
   static const int WM_USER_CONFIGURATION_RELOAD = WM_USER + 6;
@@ -143,8 +159,9 @@ protected:
   void unregisterViewerWindowClass();
   static LRESULT CALLBACK wndProcViewer(HWND hWnd, UINT msg, WPARAM wparam, LPARAM lparam);
 
-  // Starts a session in a new shell window.
-  void runInstance(ConnectionData *conData, const ConnectionConfig *config);
+  // Starts a session in target, or in a new shell window when target is null.
+  void runInstance(ConnectionData *conData, const ConnectionConfig *config,
+                   ShellWindow *target = nullptr);
   void runInstance(const StringStorage *hostName, const ConnectionConfig *config);
 
   // Creates a hidden shell window, owned by the application.
@@ -153,6 +170,8 @@ protected:
   void startInstance(ViewerInstance *viewerInst, ShellWindow *shell);
   // Deletes the shells whose window was destroyed.
   void deleteDeadShells();
+  // Live shell with the window hwnd, or null.
+  ShellWindow *findShell(HWND hwnd) const;
 
   // This method return true, if login dialog is visible.
   bool isVisibleLoginDialog() const;
