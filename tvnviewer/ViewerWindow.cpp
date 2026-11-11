@@ -27,6 +27,7 @@
 // Modified for FarSightVNC on 2026-11-03: "FarSightVNC Viewer - <host>" title; sessions open maximized and fitted to the window.
 // Modified for FarSightVNC on 2026-11-04: "FarSightVNC | <host>" title; system shortcuts go to the server in windowed mode too.
 // Modified for FarSightVNC on 2026-11-07: a session opened in full screen no longer freezes the viewer (window work moved to the window thread).
+// Modified for FarSightVNC on 2026-11-11: frame operations (title, full screen, size, DPI, end of session) go through SessionHost.
 //
 
 #include "config-lib/IniFileSettingsManager.h"
@@ -57,6 +58,8 @@ ViewerWindow::ViewerWindow(WindowsApplication *application,
   m_viewerCore(0),
   m_fileTransfer(0),
   m_conData(conData),
+  m_legacyHost(this, &m_logWriter),
+  m_host(&m_legacyHost),
   m_dsktWnd(&m_logWriter, conConf),
   m_isConnected(false),
   m_connectionState(STATE_CONNECTING),
@@ -315,7 +318,7 @@ bool ViewerWindow::onMessage(UINT message, WPARAM wParam, LPARAM lParam)
     // to the server while the viewer is the active window, windowed or not.
     if (LOWORD(wParam) == WA_ACTIVE || LOWORD(wParam) == WA_CLICKACTIVE) {
       // full screen viewer can be minimized from other screen
-      if (IsIconic(this->getHWnd())) {
+      if (IsIconic(m_host->rootHwnd())) {
         return true;
       }
       try {
@@ -852,11 +855,8 @@ void ViewerWindow::applyScreenChanges(bool isFullScreen)
 
 void ViewerWindow::setSizeFullScreenWindow()
 {
-  // Preserve the windowed placement while changing fullscreen monitors.
-  if (!m_isFullScr) GetWindowPlacement(m_hWnd, &m_workArea);
-
   // Get size of desktop.
-  HMONITOR hmon = m_fullscreenMonitor ? m_fullscreenMonitor : MonitorFromWindow(m_hWnd, MONITOR_DEFAULTTONEAREST);
+  HMONITOR hmon = m_fullscreenMonitor ? m_fullscreenMonitor : MonitorFromWindow(m_host->rootHwnd(), MONITOR_DEFAULTTONEAREST);
   MONITORINFO mi;
   mi.cbSize = sizeof(mi);
 
@@ -872,19 +872,7 @@ void ViewerWindow::setSizeFullScreenWindow()
     m_logWriter.warning(_T("Get monitor info is failed. Use second method (no multi-screen)."));
     GetWindowRect(GetDesktopWindow(), &fullScreenWindowsRect);
   }
-  Rect fullScreenRect;
-  fullScreenRect.fromWindowsRect(&fullScreenWindowsRect);
-  m_logWriter.detail(_T("full screen window rect: %d, %d; %d, %d"),
-                     fullScreenRect.left, fullScreenRect.top,
-                     fullScreenRect.getWidth(), fullScreenRect.getHeight());
-
-  setStyle((getStyle() | WS_MAXIMIZE) & ~(WS_CAPTION | WS_BORDER | WS_THICKFRAME  | WS_MAXIMIZEBOX));
-  setExStyle(getExStyle() | WS_EX_TOPMOST);
-
-  SetWindowPos(m_hWnd, 0,
-               fullScreenRect.left, fullScreenRect.top,
-               fullScreenRect.getWidth(), fullScreenRect.getHeight(),
-               SWP_SHOWWINDOW);
+  m_host->enterFullscreen(fullScreenWindowsRect);
 }
 
 void ViewerWindow::doFullScr()
@@ -910,7 +898,7 @@ void ViewerWindow::doFullScr()
   applyScreenChanges(true);
 
   m_fsToolbar.setStateText(connectionStateLabel());
-  m_fsToolbar.create(m_hWnd, fullScreenToolbarMonitor());
+  m_fsToolbar.create(m_host->rootHwnd(), fullScreenToolbarMonitor());
   m_fsToolbar.enableButton(IDS_TB_CTRLALTDEL, !m_conConf->isViewOnly());
 
   if (config->isPromptOnFullscreenEnabled()) {
@@ -950,25 +938,13 @@ void ViewerWindow::doUnFullScr()
   UINT isEnable = static_cast<UINT>(m_conConf->isViewOnly());
   m_menu.enableMenuItem(IDS_TB_TOOLBAR, isEnable);
 
-  // Restore position, style and exstyle of windowed window.
-  setStyle(getStyle() | WS_CAPTION | WS_BORDER | WS_THICKFRAME | WS_MAXIMIZEBOX);
-  setExStyle(getExStyle() & ~WS_EX_TOPMOST);
-  Rect workArea;
-  workArea.fromWindowsRect(&m_workArea.rcNormalPosition);
-  if (m_rcNormal.getHeight() == workArea.getHeight() ||
-      m_rcNormal.getWidth() == workArea.getWidth()) {
-    SetWindowPlacement(m_hWnd, &m_workArea);
-  } else {
-    setStyle(getStyle() & ~WS_MAXIMIZE);
-    setPosition(m_rcNormal.left, m_rcNormal.top);
-    setSize(m_rcNormal.getWidth(), m_rcNormal.getHeight());
-  }
+  m_host->exitFullscreen();
 
   m_dsktWnd.setScale(m_scale);
   applyScreenChanges(false);
 
   // The windowed viewer keeps the keyboard hook while it is active.
-  if (GetForegroundWindow() != getHWnd()) {
+  if (GetForegroundWindow() != m_host->rootHwnd()) {
     m_winHooks.unregisterKeyboardHook(this);
     m_dsktWnd.setWinKeyIgnore(true);
   }
@@ -995,7 +971,7 @@ bool ViewerWindow::onClose()
     }
   }
   m_dsktWnd.destroyWindow();
-  destroyWindow();
+  m_host->onSessionEnded();
   return true;
 }
 
@@ -1047,12 +1023,7 @@ bool ViewerWindow::onDpiChanged(WPARAM wParam, LPARAM lParam)
     // The window is being moved between monitors: keep the size suggested by
     // the system and don't let adjustWindowSize() move it back to the center.
     m_sizeIsChanged = true;
-    SetWindowPos(m_hWnd, 0, suggested->left, suggested->top,
-                 suggested->right - suggested->left,
-                 suggested->bottom - suggested->top,
-                 SWP_NOZORDER | SWP_NOACTIVATE);
-    // The size restored after fullscreen must follow the new DPI as well.
-    m_rcNormal.fromWindowsRect(suggested);
+    m_host->onDpiChanged(*suggested);
   }
   // Size of the scroll bars has been changed.
   m_dsktWnd.setScale(m_scale);
@@ -1062,10 +1033,10 @@ bool ViewerWindow::onDpiChanged(WPARAM wParam, LPARAM lParam)
 
 void ViewerWindow::showWindow()
 {
-  show();
+  m_host->showFrame();
 
   StringStorage windowName = formatWindowTitle();
-  setWindowText(&windowName);
+  m_host->setTitle(&windowName);
   m_dsktWnd.setWindowText(&windowName);
 
 }
@@ -1080,7 +1051,7 @@ void ViewerWindow::setConnectionState(ConnectionState state)
 {
   m_connectionState = state;
   StringStorage windowName = formatWindowTitle();
-  setWindowText(&windowName);
+  m_host->setTitle(&windowName);
   m_fsToolbar.setStateText(connectionStateLabel());
 }
 
@@ -1143,7 +1114,7 @@ bool ViewerWindow::offerReconnect(bool sessionWasEstablished, const StringStorag
                                (LPARAM)connectionConfig);
   }
   m_dsktWnd.destroyWindow();
-  destroyWindow();
+  m_host->onSessionEnded();
   return true;
 }
 
@@ -1158,7 +1129,7 @@ bool ViewerWindow::onDisconnect()
              MB_OK);
 
   m_dsktWnd.destroyWindow();
-  destroyWindow();
+  m_host->onSessionEnded();
   return true;
 }
 
@@ -1186,7 +1157,7 @@ bool ViewerWindow::onAuthError(WPARAM wParam)
     }
   }
   m_dsktWnd.destroyWindow();
-  destroyWindow();
+  m_host->onSessionEnded();
   return true;
 }
 
@@ -1207,7 +1178,7 @@ bool ViewerWindow::onError()
              MB_OK | MB_ICONERROR);
 
   m_dsktWnd.destroyWindow();
-  destroyWindow();
+  m_host->onSessionEnded();
   return true;
 }
 
@@ -1228,55 +1199,10 @@ bool ViewerWindow::onFocus(WPARAM wParam)
 void ViewerWindow::onBell()
 {
   if (m_conConf->isDeiconifyOnRemoteBellEnabled()) {
-    ShowWindow(getHWnd(), SW_RESTORE);
-    setForegroundWindow();
+    ShowWindow(m_host->rootHwnd(), SW_RESTORE);
+    SetForegroundWindow(m_host->rootHwnd());
   }
   MessageBeep(MB_ICONASTERISK);
-}
-
-Rect ViewerWindow::calculateDefaultSize()
-{
-  // Get work area.
-  Rect defaultRect;
-
-  HMONITOR hmon = MonitorFromWindow(m_hWnd, MONITOR_DEFAULTTONEAREST);
-  MONITORINFO mi;
-  mi.cbSize = sizeof(mi);
-
-  if (!!GetMonitorInfo(hmon, &mi)) {
-    defaultRect.fromWindowsRect(&mi.rcWork);
-  } else {
-    m_logWriter.debug(_T("Get monitor info is failed. Use second method (no multi-screen)."));
-    RECT desktopRc;
-    if (!m_sysinf.getDesktopArea(&desktopRc)) {
-       m_sysinf.getDesktopAllArea(&desktopRc);
-    }
-    defaultRect.fromWindowsRect(&desktopRc);
-  }
-
-  int widthDesktop  = defaultRect.getWidth();
-  int heightDesktop = defaultRect.getHeight();
-
-  Rect viewerRect = m_dsktWnd.getViewerGeometry();
-  int serverWidth = viewerRect.getWidth();
-  int serverHeight = viewerRect.getHeight();
-
-  int borderWidth, borderHeight;
-  getBorderSize(&borderWidth, &borderHeight);
-  int totalWidth     = serverWidth  + borderWidth;
-  int totalHeight    = serverHeight + borderHeight + 1;
-  if (m_toolbar.isVisible()) {
-    totalHeight += m_toolbar.getHeight();
-  }
-  // The whole window (frame and toolbar included) must fit in the work area,
-  // otherwise tall desktops would be placed partly outside of the screen.
-  if (totalWidth <= widthDesktop && totalHeight <= heightDesktop) {
-    defaultRect.setHeight(totalHeight);
-    defaultRect.setWidth(totalWidth);
-    defaultRect.move((widthDesktop - totalWidth) / 2,
-                     (heightDesktop - totalHeight) / 2);
-  }
-  return defaultRect;
 }
 
 void ViewerWindow::onConnected(RfbOutputGate *output)
@@ -1322,10 +1248,10 @@ bool ViewerWindow::onSessionShown()
     if (!m_conConf->isFullscreenEnabled()) {
       // The user's size from now on: adjustWindowSize() must not shrink it.
       m_sizeIsChanged = true;
-      ShowWindow(getHWnd(), SW_MAXIMIZE);
+      m_host->maximize();
     }
   }
-  setForegroundWindow();
+  SetForegroundWindow(m_host->rootHwnd());
   applySettings();
   return true;
 }
@@ -1390,21 +1316,21 @@ void ViewerWindow::adjustWindowSize()
   // framebuffer (a reconnection attempt shows the window early) there is
   // nothing to fit.
   if (!m_sizeIsChanged && m_dsktWnd.getViewerGeometry().area() != 0) {
-    Rect defaultSize = calculateDefaultSize();
-    bool defaultSizeIsChanged = defaultSize.getWidth() != m_rcNormal.getWidth() ||
-                                defaultSize.getHeight() != m_rcNormal.getHeight();
-    // If size is changed, isn't full screen, if window isn't maximized,
-    // then set new position and size.
-    if (!m_isFullScr && defaultSizeIsChanged) {
-      m_rcNormal = defaultSize;
-      setPosition(m_rcNormal.left, m_rcNormal.top);
-      setSize(m_rcNormal.getWidth(), m_rcNormal.getHeight());
+    // The windowed frame fits the remote screen and the toolbar (the frame
+    // keeps that size until the remote screen size changes).
+    if (!m_isFullScr) {
+      Rect viewerRect = m_dsktWnd.getViewerGeometry();
+      int clientHeight = viewerRect.getHeight() + 1;
+      if (m_toolbar.isVisible()) {
+        clientHeight += m_toolbar.getHeight();
+      }
+      m_host->requestClientSize(viewerRect.getWidth(), clientHeight);
     }
 
     // This is done for keyboard hooks to work.
     // If m_conConf->isFullscreenEnabled() is true,
     // hooks don't work at the first start of the viewer.
-    if (m_hooksEnabledFirstTime && GetForegroundWindow() == getHWnd()) {
+    if (m_hooksEnabledFirstTime && GetForegroundWindow() == m_host->rootHwnd()) {
       try {
         // Registration of keyboard hook.
         m_winHooks.registerKeyboardHook(this);
@@ -1460,7 +1386,7 @@ StringStorage ViewerWindow::formatWindowTitle() const
 LRESULT ViewerWindow::onHookProc(int code, WPARAM wParam, LPARAM lParam)
 {
   HWND focus = GetFocus();
-  if (GetForegroundWindow() != getHWnd() ||
+  if (GetForegroundWindow() != m_host->rootHwnd() ||
       (focus != m_dsktWnd.getHWnd() && !IsChild(m_dsktWnd.getHWnd(), focus))) {
     return false;
   }
@@ -1561,7 +1487,7 @@ HMONITOR ViewerWindow::fullScreenToolbarMonitor()
       return MonitorFromPoint(pt, MONITOR_DEFAULTTOPRIMARY);
     }
   }
-  return MonitorFromWindow(m_hWnd, MONITOR_DEFAULTTONEAREST);
+  return MonitorFromWindow(m_host->rootHwnd(), MONITOR_DEFAULTTONEAREST);
 }
 
 void ViewerWindow::onDesktopPointerMove(POINT clientPoint)

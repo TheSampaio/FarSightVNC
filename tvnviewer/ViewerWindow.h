@@ -26,6 +26,7 @@
 // Modified for FarSightVNC on 2026-11-03: connection state in the title and assisted reconnect.
 // Modified for FarSightVNC on 2026-11-03: first connection opens maximized and fitted to the window.
 // Modified for FarSightVNC on 2026-11-07: the connected session is shown by the window thread (WM_USER_CONNECTED).
+// Modified for FarSightVNC on 2026-11-11: frame operations (title, full screen, size, DPI, end of session) go through SessionHost.
 //
 
 #ifndef _VIEWER_WINDOW_H_
@@ -39,13 +40,13 @@
 #include "OptionsDialog.h"
 #include "ScaleManager.h"
 #include "ViewerMenu.h"
+#include "shell/LegacyFrameHost.h"
 #include "gui/ToolBar.h"
 #include "log-writer/LogWriter.h"
 #include "viewer-core/FileTransferCapability.h"
 #include "viewer-core/RemoteViewerCore.h"
 #include "viewer-core/CoreEventsAdapter.h"
 #include "viewer-core/VncAuthentication.h"
-#include "win-system/SystemInformation.h"
 #include "win-system/WindowsApplication.h"
 #include "win-system/WinHooks.h"
 
@@ -148,10 +149,6 @@ protected:
   int translateAccelToTB(int val);
   void applyScreenChanges(bool isFullScreen);
   
-  // function return default rect of viewer window:
-  // if size of remote screen is more local desktop, then return rect of desktop
-  // else return rect of remote screen + border
-  Rect calculateDefaultSize();
 
   LogWriter m_logWriter;
 
@@ -168,7 +165,11 @@ protected:
   ToolBar m_toolbar;
   ViewerMenu m_menu;
   ConnectionData *m_conData;
-  SystemInformation m_sysinf;
+
+  // The top-level frame of the session. Today the session window is its own
+  // frame (m_legacyHost).
+  LegacyFrameHost m_legacyHost;
+  SessionHost *m_host;
 
   // This variable save Exception after call onError().
   Exception m_error;
@@ -177,10 +178,6 @@ protected:
 
   // Flag is set, if now viewer is in full screen mode
   bool m_isFullScr;
-  // It's size of work-area in windowed mode. It is necessary for restore size of window.
-  WINDOWPLACEMENT m_workArea;
-  // It's size of optimal size of work-area in windowed mode.
-  Rect m_rcNormal;
 
 
   // Flag is set after recv first message WM_SIZING.

@@ -33,6 +33,7 @@ add_executable(tvnviewer WIN32
   ViewerMenu.cpp
   ViewerVncAuthHandler.cpp
   ViewerWindow.cpp
+  shell/LegacyFrameHost.cpp
   tvnviewer.rc
   dpi-aware.manifest)
 

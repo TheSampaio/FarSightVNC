@@ -339,6 +339,7 @@
     <ClCompile Include="UpdateController.cpp" />
     <ClCompile Include="UpdateDialog.cpp" />
     <ClCompile Include="ViewerWindow.cpp" />
+    <ClCompile Include="shell\LegacyFrameHost.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="AboutDialog.h" />
@@ -378,6 +379,8 @@
     <ClInclude Include="ViewerMenu.h" />
     <ClInclude Include="ViewerVncAuthHandler.h" />
     <ClInclude Include="ViewerWindow.h" />
+    <ClInclude Include="shell\LegacyFrameHost.h" />
+    <ClInclude Include="shell\SessionHost.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="res\appicon.ico" />
