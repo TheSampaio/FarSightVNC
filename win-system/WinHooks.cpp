@@ -22,13 +22,17 @@
 //-------------------------------------------------------------------------
 //
 // Modified for FarSightVNC on 2026-11-01: pure helpers for the low level keyboard hook.
+// Modified for FarSightVNC on 2026-11-11: a key-up takes the same path (posted or passed to Windows) as its key-down.
 //
 
 #include "WinHooks.h"
 #include "win-system/SystemException.h"
 
+#include <string.h>
+
 HHOOK WinHooks::s_hooks = 0;
 HookEventListener *WinHooks::s_eventListener = 0;
+WinHooks::KeyRouter WinHooks::s_keyRouter;
 
 WinHooks::WinHooks()
 {
@@ -58,6 +62,8 @@ LRESULT CALLBACK WinHooks::lowLevelKeyboardHook(int nCode, WPARAM wParam, LPARAM
 void WinHooks::registerKeyboardHook(HookEventListener *hookEventListener)
 {
   unregisterKeyboardHook(0);
+  // Keys held now were pressed without the hook: Windows owns their release.
+  s_keyRouter.reset();
   s_eventListener = hookEventListener;
   HINSTANCE hinst = GetModuleHandle(0);
   s_hooks = SetWindowsHookEx(WH_KEYBOARD_LL, lowLevelKeyboardHook, hinst, 0);
@@ -106,6 +112,42 @@ WinHooks::HookKeyAction WinHooks::decideKeyAction(DWORD vkCode, DWORD flags)
   }
   // Post every physical key to the same queue, then swallow the source event.
   return HOOK_KEY_POST;
+}
+
+WinHooks::KeyRouter::KeyRouter()
+{
+  reset();
+}
+
+void WinHooks::KeyRouter::reset()
+{
+  memset(m_owner, OWNER_NONE, sizeof(m_owner));
+}
+
+WinHooks::HookKeyAction WinHooks::KeyRouter::route(DWORD vkCode, DWORD flags,
+                                                   bool viewerOwnsKeyboard)
+{
+  if (decideKeyAction(vkCode, flags) == HOOK_KEY_PASS) {
+    return HOOK_KEY_PASS;
+  }
+  unsigned char &owner = m_owner[vkCode & 0xff];
+  if (flags & LLKHF_UP) {
+    // A key-up without a recorded key-down was pressed before the hook was
+    // installed, so Windows has its key-down.
+    bool viewer = owner == OWNER_VIEWER;
+    owner = OWNER_NONE;
+    return viewer ? HOOK_KEY_POST : HOOK_KEY_PASS;
+  }
+  // Autorepeat keeps the owner of the first key-down.
+  if (owner == OWNER_NONE) {
+    owner = viewerOwnsKeyboard ? OWNER_VIEWER : OWNER_SYSTEM;
+  }
+  return owner == OWNER_VIEWER ? HOOK_KEY_POST : HOOK_KEY_PASS;
+}
+
+WinHooks::HookKeyAction WinHooks::routeKey(DWORD vkCode, DWORD flags, bool viewerOwnsKeyboard)
+{
+  return s_keyRouter.route(vkCode, flags, viewerOwnsKeyboard);
 }
 
 LPARAM WinHooks::makeKeyMessageLParam(DWORD scanCode, DWORD flags)

@@ -27,6 +27,8 @@
 //
 // Keyboard layouts are loaded only for translation (never activated) and the
 // ones that were not loaded before are unloaded at exit.
+//
+// Modified for FarSightVNC on 2026-11-11: Ctrl shortcuts and key-up routing of the keyboard hook.
 
 #include "rfb/RfbKeySym.h"
 #include "win-system/WinHooks.h"
@@ -868,6 +870,48 @@ void testAbnt2QuestionMarkAltGr(LogWriter *log)
 }
 
 //----------------------------------------------------------------------------
+// Ctrl+C/V/X/Z/A with either Ctrl, as the system (VK_CONTROL) and as the low
+// level hook (VK_LCONTROL/VK_RCONTROL) report it, in both release orders: the
+// letter keysym only, no Alt keysym, and every key released at the end.
+
+void testCtrlShortcuts(const Layout &lay, LogWriter *log)
+{
+  const char letters[] = {'C', 'V', 'X', 'Z', 'A'};
+  struct CtrlKey { const char *name; unsigned vk; bool ext; UINT32 sym; };
+  const CtrlKey ctrls[] = {
+    {"LCtrl", VK_CONTROL, false, XK_Control_L},
+    {"RCtrl", VK_CONTROL, true, XK_Control_R},
+    {"hook LCtrl", VK_LCONTROL, false, XK_Control_L},
+    {"hook RCtrl", VK_RCONTROL, true, XK_Control_R},
+  };
+  for (size_t c = 0; c < sizeof(ctrls) / sizeof(ctrls[0]); c++) {
+    for (size_t i = 0; i < sizeof(letters); i++) {
+      unsigned vk = letters[i];
+      unsigned scan = MapVirtualKeyExW(vk, MAPVK_VK_TO_VSC, lay.hkl);
+      UINT32 sym = symOf((WCHAR)(vk - 'A' + 'a'));
+      for (int ctrlFirst = 0; ctrlFirst < 2; ctrlFirst++) {
+        Harness h(lay.hkl, log);
+        h.down(ctrls[c].vk, SC_CTRL, ctrls[c].ext);
+        h.down(vk, scan);
+        if (ctrlFirst) {
+          h.up(ctrls[c].vk, SC_CTRL, ctrls[c].ext);
+          h.up(vk, scan);
+        } else {
+          h.up(vk, scan);
+          h.up(ctrls[c].vk, SC_CTRL, ctrls[c].ext);
+        }
+        Seq e;
+        e.d(ctrls[c].sym).d(sym);
+        if (ctrlFirst) e.u(ctrls[c].sym).u(sym); else e.u(sym).u(ctrls[c].sym);
+        std::string name = std::string(ctrls[c].name) + "+" + letters[i] +
+                           (ctrlFirst ? ", Ctrl released first" : "");
+        finish(label(lay, name.c_str()), h, e);
+      }
+    }
+  }
+}
+
+//----------------------------------------------------------------------------
 // H5: focus loss
 
 void testFocusLoss(LogWriter *log)
@@ -943,6 +987,70 @@ void testHook()
             WinHooks::decideKeyAction('A', LLKHF_INJECTED) == WinHooks::HOOK_KEY_PASS);
   checkTrue("H4 injected key release is not swallowed",
             WinHooks::decideKeyAction('A', LLKHF_INJECTED | LLKHF_UP) == WinHooks::HOOK_KEY_PASS);
+}
+
+//----------------------------------------------------------------------------
+// K: a key-up takes the path of its key-down. Before, a Ctrl pressed in
+// another window and released in the viewer was swallowed: Windows kept Ctrl
+// (or Alt, Win) down and every focus restoration pressed it on the server again.
+
+void testKeyRouter()
+{
+  const WinHooks::HookKeyAction PASS = WinHooks::HOOK_KEY_PASS;
+  const WinHooks::HookKeyAction POST = WinHooks::HOOK_KEY_POST;
+  const DWORD EXT = LLKHF_EXTENDED;
+  const DWORD UP = LLKHF_UP;
+  {
+    WinHooks::KeyRouter r;
+    bool ok = r.route(VK_LCONTROL, 0, true) == POST && r.route('C', 0, true) == POST &&
+              r.route('C', UP, true) == POST && r.route(VK_LCONTROL, UP, true) == POST;
+    checkTrue("K1 Ctrl+C typed in the viewer is posted, key-ups included", ok);
+  }
+  {
+    WinHooks::KeyRouter r;
+    bool ok = r.route(VK_RCONTROL, EXT, false) == PASS &&     // pressed in another window
+              r.route(VK_RCONTROL, EXT, true) == PASS &&      // autorepeat in the viewer
+              r.route(VK_RCONTROL, EXT | UP, true) == PASS;   // released in the viewer
+    checkTrue("K2 Ctrl pressed elsewhere and released in the viewer reaches Windows", ok);
+  }
+  {
+    WinHooks::KeyRouter r;
+    bool ok = r.route(VK_LMENU, 0, false) == PASS &&
+              r.route(VK_LMENU, LLKHF_ALTDOWN | UP, true) == PASS;
+    checkTrue("K3 Alt pressed elsewhere and released in the viewer reaches Windows", ok);
+  }
+  {
+    WinHooks::KeyRouter r;
+    checkTrue("K4 key-up of a key held when the hook was installed reaches Windows",
+              r.route(VK_LWIN, EXT | UP, true) == PASS);
+  }
+  {
+    WinHooks::KeyRouter r;
+    bool ok = r.route(VK_LCONTROL, 0, true) == POST &&
+              r.route(VK_LCONTROL, 0, false) == POST &&       // autorepeat after the focus left
+              r.route(VK_LCONTROL, UP, false) == POST;
+    checkTrue("K5 Ctrl pressed in the viewer and released elsewhere stays out of Windows", ok);
+  }
+  {
+    WinHooks::KeyRouter r;
+    r.route(VK_LCONTROL, 0, true);
+    r.reset();
+    bool ok = r.route(VK_LCONTROL, UP, true) == PASS && r.route('A', 0, true) == POST;
+    checkTrue("K6 reset forgets the keys pressed under the previous hook", ok);
+  }
+  {
+    WinHooks::KeyRouter r;
+    bool ok = r.route(VK_LCONTROL, 0, false) == PASS && r.route(VK_LCONTROL, UP, false) == PASS &&
+              r.route(VK_LCONTROL, 0, true) == POST && r.route(VK_LCONTROL, UP, true) == POST;
+    checkTrue("K7 a released key is routed again on its next press", ok);
+  }
+  {
+    WinHooks::KeyRouter r;
+    bool ok = r.route('A', LLKHF_INJECTED, true) == PASS &&
+              r.route('A', LLKHF_INJECTED | UP, true) == PASS &&
+              r.route(VK_CAPITAL, 0, true) == PASS && r.route(VK_CAPITAL, UP, true) == PASS;
+    checkTrue("K8 injected and lock keys stay with Windows", ok);
+  }
 }
 
 //----------------------------------------------------------------------------
@@ -1035,6 +1143,7 @@ int main()
     testHookStyleModifiers(lay, &log);
     testPlainKeys(lay, &log);
     testCtrlLetter(lay, &log);
+    testCtrlShortcuts(lay, &log);
     testDeadKeys(lay, &log);
   }
   testAltGrAbnt2(&log);
@@ -1046,6 +1155,7 @@ int main()
   testWinKey(&log);
   testFocusLoss(&log);
   testHook();
+  testKeyRouter();
   testStateTable();
   testHookOwnership();
   testSyntheticModifierFocus(&log);

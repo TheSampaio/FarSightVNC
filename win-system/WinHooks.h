@@ -22,6 +22,7 @@
 //-------------------------------------------------------------------------
 //
 // Modified for FarSightVNC on 2026-11-01: pure helpers for the low level keyboard hook.
+// Modified for FarSightVNC on 2026-11-11: a key-up takes the same path (posted or passed to Windows) as its key-down.
 //
 
 #include "util/CommonHeader.h"
@@ -45,8 +46,33 @@ public:
     HOOK_KEY_POST
   };
 
-  // Pure decision function of the low level hook (unit-testable).
+  // Pure decision function of the low level hook (unit-testable): keys that
+  // always stay with Windows (injected, lock keys).
   static HookKeyAction decideKeyAction(DWORD vkCode, DWORD flags);
+
+  // Routes each physical key event so that a key-up takes the same path as
+  // its key-down. A key pressed while the viewer owned the keyboard is posted
+  // to the viewer until it is released, even if the focus moved meanwhile. A
+  // key pressed before (held when the viewer took the keyboard) stays with
+  // Windows until it is released. Otherwise Windows saw a key-down without
+  // its key-up (Ctrl/Alt/Win stuck in the local desktop) and the viewer
+  // pressed that key on the server again at every focus restoration.
+  class KeyRouter
+  {
+  public:
+    KeyRouter();
+    void reset();
+    // viewerOwnsKeyboard: the viewer is the foreground window, has the focus
+    // and sends keys to the server (or is in full screen).
+    HookKeyAction route(DWORD vkCode, DWORD flags, bool viewerOwnsKeyboard);
+  private:
+    enum Owner { OWNER_NONE, OWNER_VIEWER, OWNER_SYSTEM };
+    unsigned char m_owner[256];
+  };
+
+  // Routes a key event of the installed hook (see KeyRouter). The routing
+  // state starts empty at every registration.
+  static HookKeyAction routeKey(DWORD vkCode, DWORD flags, bool viewerOwnsKeyboard);
 
   // Builds the lParam of a WM_KEYDOWN/WM_KEYUP message from the
   // KBDLLHOOKSTRUCT scanCode and flags fields (unit-testable).
@@ -73,4 +99,6 @@ private:
 
   // Handler to the processing hooks function.
   static HookEventListener *s_eventListener;
+
+  static KeyRouter s_keyRouter;
 };
