@@ -233,6 +233,13 @@ try {
       Invoke-Case "ABNT2 $($c.Name)+$letter, Ctrl released first" $desk @($cD, $lD, $cU, $lU) @("+$($c.Sym)", "+$sym", "-$($c.Sym)", "-$sym")
     }
   }
+
+  # Print Screen stays local: nothing is sent, also with Alt held.
+  $psD = @('d', $VK.Snapshot, $SC.Snapshot, $true); $psU = @('u', $VK.Snapshot, $SC.Snapshot, $true)
+  Invoke-Case 'Print Screen is not sent' $desk @($psD, $psU) @()
+  Invoke-Case 'Print Screen key-up alone is not sent' $desk @(,$psU) @()
+  Invoke-Case 'Alt+Print Screen sends only Alt' $desk `
+    @(@('d', $VK.LAlt, $SC.Alt), $psD, $psU, @('u', $VK.LAlt, $SC.Alt)) @('+ffe9', '-ffe9')
 } catch {
   [void]$results.Add([pscustomobject]@{ Case = 'harness'; Passed = $false; Balanced = $false; Expected = 'no error'; Actual = $_.Exception.Message })
 } finally {

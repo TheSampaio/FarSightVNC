@@ -28,7 +28,7 @@
 // Keyboard layouts are loaded only for translation (never activated) and the
 // ones that were not loaded before are unloaded at exit.
 //
-// Modified for FarSightVNC on 2026-11-11: Ctrl shortcuts and key-up routing of the keyboard hook.
+// Modified for FarSightVNC on 2026-11-11: Ctrl shortcuts and key-up routing of the keyboard hook; Print Screen stays local.
 
 #include "rfb/RfbKeySym.h"
 #include "win-system/WinHooks.h"
@@ -1054,6 +1054,43 @@ void testKeyRouter()
 }
 
 //----------------------------------------------------------------------------
+// P: Print Screen is not sent to the server and the hook leaves it to Windows
+// (screenshots, Snipping Tool), also with Alt.
+
+void testPrintScreen(LogWriter *log)
+{
+  const unsigned SC_SNAPSHOT = 0x37;   // E0 37
+  const DWORD EXT = LLKHF_EXTENDED;
+  checkTrue("P1 hook leaves Print Screen to Windows",
+            WinHooks::decideKeyAction(VK_SNAPSHOT, EXT) == WinHooks::HOOK_KEY_PASS &&
+            WinHooks::decideKeyAction(VK_SNAPSHOT, EXT | LLKHF_UP) == WinHooks::HOOK_KEY_PASS);
+  checkTrue("P2 hook leaves Alt+Print Screen to Windows",
+            WinHooks::decideKeyAction(VK_SNAPSHOT, EXT | LLKHF_ALTDOWN) == WinHooks::HOOK_KEY_PASS &&
+            WinHooks::decideKeyAction(VK_SNAPSHOT, EXT | LLKHF_ALTDOWN | LLKHF_UP) == WinHooks::HOOK_KEY_PASS);
+  {
+    WinHooks::KeyRouter r;
+    checkTrue("P3 routing leaves Print Screen to Windows while the viewer has the keyboard",
+              r.route(VK_SNAPSHOT, EXT, true) == WinHooks::HOOK_KEY_PASS &&
+              r.route(VK_SNAPSHOT, EXT | LLKHF_UP, true) == WinHooks::HOOK_KEY_PASS);
+  }
+  {
+    Harness h(g_abnt2->hkl, log);
+    h.tap(VK_SNAPSHOT, SC_SNAPSHOT, true);
+    h.up(VK_SNAPSHOT, SC_SNAPSHOT, true);   // Windows often sends only the key-up
+    finish("P4 Print Screen sends nothing to the server", h, Seq());
+  }
+  {
+    Harness h(g_abnt2->hkl, log);
+    h.down(VK_MENU, SC_ALT);
+    h.tap(VK_SNAPSHOT, SC_SNAPSHOT, true);
+    h.up(VK_MENU, SC_ALT);
+    Seq e;
+    e.d(XK_Alt_L).u(XK_Alt_L);
+    finish("P5 Alt+Print Screen sends only Alt", h, e);
+  }
+}
+
+//----------------------------------------------------------------------------
 // R2: key state table of hook-posted keys, R3: hook ownership
 
 void testStateTable()
@@ -1156,6 +1193,7 @@ int main()
   testFocusLoss(&log);
   testHook();
   testKeyRouter();
+  testPrintScreen(&log);
   testStateTable();
   testHookOwnership();
   testSyntheticModifierFocus(&log);

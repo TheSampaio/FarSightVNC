@@ -22,7 +22,7 @@
 //-------------------------------------------------------------------------
 //
 // Modified for FarSightVNC on 2026-11-01: pure helpers for the low level keyboard hook.
-// Modified for FarSightVNC on 2026-11-11: a key-up takes the same path (posted or passed to Windows) as its key-down.
+// Modified for FarSightVNC on 2026-11-11: a key-up takes the same path (posted or passed to Windows) as its key-down; Print Screen stays local.
 //
 
 #include "util/CommonHeader.h"
@@ -47,7 +47,7 @@ public:
   };
 
   // Pure decision function of the low level hook (unit-testable): keys that
-  // always stay with Windows (injected, lock keys).
+  // always stay with Windows (injected, lock keys, Print Screen).
   static HookKeyAction decideKeyAction(DWORD vkCode, DWORD flags);
 
   // Routes each physical key event so that a key-up takes the same path as

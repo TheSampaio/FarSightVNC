@@ -22,7 +22,7 @@
 //-------------------------------------------------------------------------
 //
 // Modified for FarSightVNC on 2026-11-01: pure helpers for the low level keyboard hook.
-// Modified for FarSightVNC on 2026-11-11: a key-up takes the same path (posted or passed to Windows) as its key-down.
+// Modified for FarSightVNC on 2026-11-11: a key-up takes the same path (posted or passed to Windows) as its key-down; Print Screen stays local.
 //
 
 #include "WinHooks.h"
@@ -106,8 +106,9 @@ unsigned char WinHooks::applyKeyToStateTable(BYTE *keys, WPARAM virtKey, LPARAM 
 
 WinHooks::HookKeyAction WinHooks::decideKeyAction(DWORD vkCode, DWORD flags)
 {
+  // Print Screen (also Alt+Print Screen) is for the local screenshot tools.
   if ((flags & LLKHF_INJECTED) || vkCode == VK_CAPITAL ||
-      vkCode == VK_NUMLOCK || vkCode == VK_SCROLL) {
+      vkCode == VK_NUMLOCK || vkCode == VK_SCROLL || vkCode == VK_SNAPSHOT) {
     return HOOK_KEY_PASS;
   }
   // Post every physical key to the same queue, then swallow the source event.
