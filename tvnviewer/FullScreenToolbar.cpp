@@ -20,6 +20,8 @@
 // Modified for FarSightVNC on 2026-11-11: rewritten as a floating pill drawn
 // with ChromeRenderer; the buttons are the SessionActionStrip of the session
 // toolbar.
+// Modified for FarSightVNC on 2026-11-11: Disconnect ends the session (back to
+// the Home page) instead of closing the shell.
 //
 
 #include "FullScreenToolbar.h"
@@ -379,7 +381,8 @@ void FullScreenToolbar::onCommand(WPARAM wParam, LPARAM lParam)
     return;
   }
   if (id == ID_PILL_DISCONNECT) {
-    PostMessage(m_owner, WM_CLOSE, 0, 0);
+    // Ends the session; the shell goes back to its Home page.
+    PostMessage(m_commandTarget, WM_CLOSE, 0, 0);
   } else {
     // Leaving full screen destroys this window: the session handles the
     // command later.

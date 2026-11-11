@@ -21,6 +21,8 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-11: New connection opens a shell window on the Home page.
+//
 
 #include "ControlTrayIcon.h"
 #include "ResourceStrings.h"
@@ -150,7 +152,7 @@ void ControlTrayIcon::onShowMainWindow()
 
 void ControlTrayIcon::onNewConnection()
 {
-  m_application->showLoginDialog();
+  m_application->showHome();
 }
 
 void ControlTrayIcon::onListeningOptions()

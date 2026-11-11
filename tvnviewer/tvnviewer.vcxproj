@@ -339,6 +339,7 @@
     <ClCompile Include="UpdateController.cpp" />
     <ClCompile Include="UpdateDialog.cpp" />
     <ClCompile Include="ViewerWindow.cpp" />
+    <ClCompile Include="shell\HomePage.cpp" />
     <ClCompile Include="shell\SessionActionStrip.cpp" />
     <ClCompile Include="shell\SessionToolbar.cpp" />
     <ClCompile Include="shell\ShellWindow.cpp" />
@@ -382,6 +383,9 @@
     <ClInclude Include="ViewerMenu.h" />
     <ClInclude Include="ViewerVncAuthHandler.h" />
     <ClInclude Include="ViewerWindow.h" />
+    <ClInclude Include="shell\HomeActions.h" />
+    <ClInclude Include="shell\HomePage.h" />
+    <ClInclude Include="shell\HomeTab.h" />
     <ClInclude Include="shell\SessionHost.h" />
     <ClInclude Include="shell\SessionTab.h" />
     <ClInclude Include="shell\SessionActionStrip.h" />

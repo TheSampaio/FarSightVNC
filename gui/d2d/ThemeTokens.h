@@ -36,6 +36,9 @@ struct ThemeTokens
   ThemeColor text;         // Primary text and glyphs.
   ThemeColor mutedText;    // Secondary text, disabled glyphs.
   ThemeColor accent;       // Selection, focus, primary button.
+  ThemeColor accentHover;  // Primary button hovered.
+  ThemeColor accentPressed; // Primary button pressed.
+  ThemeColor accentText;   // Text on the accent color.
   ThemeColor hover;        // Background of a hovered button.
   ThemeColor closeHover;   // Background of the hovered close button.
   ThemeColor closeHoverText;
@@ -72,6 +75,9 @@ inline constexpr ThemeTokens kLightTheme = {
   .text           = 0x18181B,
   .mutedText      = 0x71717A,
   .accent         = 0x2563EB,
+  .accentHover    = 0x1D4ED8,
+  .accentPressed  = 0x1E40AF,
+  .accentText     = 0xFFFFFF,
   .hover          = 0xE4E4E7,
   .closeHover     = 0xE81123,
   .closeHoverText = 0xFFFFFF,

@@ -21,6 +21,8 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-11: without a host the viewer starts on the Home page instead of the login dialog.
+//
 
 #include "client-config-lib/ViewerConfig.h"
 #include "log-writer/LogWriter.h"
@@ -85,7 +87,8 @@ int APIENTRY _tWinMain(HINSTANCE hInstance, HINSTANCE,
     } else if (!condata.isEmpty()) {
       tvnViewer.newConnection(&condata, &conConf);
     } else {
-      tvnViewer.showLoginDialog();
+      // The start screen: a shell window on the Home page.
+      tvnViewer.showHome();
     }
     result = tvnViewer.run();
   } catch (const Exception &ex) {

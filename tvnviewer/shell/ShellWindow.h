@@ -20,6 +20,7 @@
 #ifndef _SHELL_WINDOW_H_
 #define _SHELL_WINDOW_H_
 
+#include "HomeActions.h"
 #include "SessionHost.h"
 #include "ShellTab.h"
 #include "TitleBar.h"
@@ -51,8 +52,9 @@ private:
 };
 
 // Top-level frame of the viewer (window class TvnWindowClass): it hosts the
-// session view as a child below its title bar, owns the frame state (full
-// screen, default size, DPI) and forwards the frame events to the active tab.
+// Home page or the session view as a child below its title bar, owns the
+// frame state (full screen, default size, DPI) and forwards the frame events
+// to the active tab.
 //
 // The title bar is drawn in the client area with Direct2D (TitleBar): the
 // window keeps WS_OVERLAPPEDWINDOW (resize borders, Aero Snap, system menu),
@@ -62,17 +64,28 @@ private:
 //
 // The application owns the shells; a shell whose window is destroyed is
 // deleted by the application (see isDestroyed()). A shell outlives its
-// session when the session is reconnected: the next session is shown in the
-// same frame.
+// session: a reconnected session is shown in the same frame, and a session
+// that ends (closed by the server, disconnected, reconnection cancelled)
+// gives way to the Home page. Closing the shell ends its session and
+// destroys the shell.
 class ShellWindow : public BaseWindow,
                     public SessionHost
 {
 public:
-  ShellWindow(const TCHAR *windowClassName, Logger *logger);
+  // home receives the actions of the Home page.
+  ShellWindow(const TCHAR *windowClassName, Logger *logger, HomeActions *home);
   virtual ~ShellWindow();
 
-  // Shows tab in the content area and makes it the active tab.
+  // Shows tab in the content area and makes it the active tab. There is one
+  // tab per shell until the browser-like tabs exist: tab replaces the
+  // current one.
   void attachTab(std::unique_ptr<ShellTab> tab);
+  // Shows the Home page in the content area; a frame that was never shown
+  // gets its default Home size and is shown.
+  void showHome();
+  bool isShowingHome() const;
+  // The state of the application shown by the tabs changed.
+  void onAppStateChanged();
 
   // True after the window received WM_NCDESTROY.
   bool isDestroyed() const;
@@ -128,7 +141,13 @@ private:
 
   LogWriter m_logWriter;
   SystemInformation m_sysinf;
+  HomeActions *m_home;
   TabModel m_tabs;
+  // The active tab is the Home page.
+  bool m_showsHome;
+  // The user closes the shell: the end of the session destroys it instead
+  // of showing the Home page.
+  bool m_closeRequested;
   // Focused descendant saved when the shell is deactivated.
   HWND m_lastFocus;
   bool m_destroyed;

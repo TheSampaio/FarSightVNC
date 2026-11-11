@@ -34,6 +34,7 @@
 // Modified for FarSightVNC on 2026-11-11: SessionToolbar (Direct2D) replaces the comctl toolbar; the session state drives it.
 // Modified for FarSightVNC on 2026-11-11: the full screen toolbar is a floating pill with the session actions and state.
 // Modified for FarSightVNC on 2026-11-11: the remote screen always fits the window (no scale modes, no scroll bars).
+// Modified for FarSightVNC on 2026-11-11: New connection opens a shell window on the Home page.
 //
 
 #include "config-lib/IniFileSettingsManager.h"
@@ -529,7 +530,7 @@ void ViewerWindow::commandToolBar()
 
 void ViewerWindow::commandNewConnection()
 {
-  m_application->postMessage(TvnViewer::WM_USER_SHOW_LOGIN_DIALOG);
+  m_application->postMessage(TvnViewer::WM_USER_SHOW_HOME);
 }
 
 void ViewerWindow::commandSaveSession()

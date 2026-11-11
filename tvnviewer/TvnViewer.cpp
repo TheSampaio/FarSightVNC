@@ -24,10 +24,12 @@
 // Modified for FarSightVNC on 2026-11-01: message loop translates remote keyboard input after dispatch.
 // Modified for FarSightVNC on 2026-11-11: every session is shown in its own shell window, owned by the application.
 // Modified for FarSightVNC on 2026-11-11: a reconnection reuses the shell window of the session.
+// Modified for FarSightVNC on 2026-11-11: the Home page of a shell window replaces the login dialog; a shell returns to Home when its session ends.
 //
 
 #include "TvnViewer.h"
 #include "shell/SessionTab.h"
+#include "client-config-lib/ConnectionConfigSM.h"
 #include "network/socket/WindowsSocket.h"
 #include "util/ResourceLoader.h"
 #include "resource.h"
@@ -54,7 +56,6 @@ TvnViewer::TvnViewer(HINSTANCE appInstance, const TCHAR *windowClassName,
   m_hAccelTable = rLoader->loadAccelerator(IDR_ACCEL_APP_KEYS);
 
   m_trayIcon = new ControlTrayIcon(this);
-  m_loginDialog = new LoginDialog(this);
 }
 
 TvnViewer::~TvnViewer()
@@ -66,7 +67,6 @@ TvnViewer::~TvnViewer()
   m_instances.destroyAllInstances();
   m_shells.clear();
 
-  delete m_loginDialog;
   delete m_trayIcon;
 
   unregisterViewerWindowClass();
@@ -126,6 +126,7 @@ void TvnViewer::startListening(const int listeningPort)
 
   startListeningServer(listeningPort);
   m_trayIcon->showIcon();
+  notifyShells();
 }
 
 void TvnViewer::stopListening()
@@ -135,8 +136,54 @@ void TvnViewer::stopListening()
     stopListeningServer();
 
     m_isListening = false;
-    m_loginDialog->setListening(false);
+    notifyShells();
   }
+}
+
+bool TvnViewer::isListening() const
+{
+  return m_isListening;
+}
+
+void TvnViewer::toggleListening()
+{
+  if (m_isListening) {
+    stopListening();
+  } else {
+    startListening(ViewerConfig::getInstance()->getListenPort());
+  }
+}
+
+void TvnViewer::connectFromHome(HWND shell, const StringStorage *host,
+                                const ConnectionConfig *config)
+{
+  // What the login dialog did on Connect: the host goes to the top of the
+  // history and the options of the connection are saved for it.
+  ConnectionHistory *conHistory = ViewerConfig::getInstance()->getConnectionHistory();
+  conHistory->load();
+  conHistory->addHost(host->getString());
+  conHistory->save();
+
+  ConnectionConfig conConfig(*config);
+  if (!host->isEmpty()) {
+    ConnectionConfigSM ccsm(RegistryPaths::VIEWER_PATH, host->getString());
+    conConfig.saveToStorage(&ccsm);
+  }
+
+  ConnectionData conData;
+  conData.setHost(host);
+  postMessage(WM_USER_HOME_CONNECT, 0,
+              reinterpret_cast<LPARAM>(new ReconnectRequest(conData, conConfig, shell)));
+}
+
+void TvnViewer::openHome()
+{
+  postMessage(WM_USER_SHOW_HOME);
+}
+
+void TvnViewer::openConfiguration()
+{
+  postMessage(WM_USER_CONFIGURATION);
 }
 
 void TvnViewer::addInstance(ViewerInstance *viewerInstance)
@@ -173,7 +220,7 @@ ShellWindow *TvnViewer::createShell()
 {
   m_shells.push_back(std::unique_ptr<ShellWindow>(
     new ShellWindow(m_viewerWindowClassName.getString(),
-                    ViewerConfig::getInstance()->getLogger())));
+                    ViewerConfig::getInstance()->getLogger(), this)));
   return m_shells.back().get();
 }
 
@@ -197,9 +244,14 @@ void TvnViewer::deleteDeadShells()
   }
 }
 
-bool TvnViewer::isVisibleLoginDialog() const
+void TvnViewer::notifyShells()
 {
-  return !!m_loginDialog->getControl()->getWindow();
+  std::list<std::unique_ptr<ShellWindow> >::iterator iter;
+  for (iter = m_shells.begin(); iter != m_shells.end(); ++iter) {
+    if (!(*iter)->isDestroyed()) {
+      (*iter)->onAppStateChanged();
+    }
+  }
 }
 
 void TvnViewer::newConnection(const StringStorage *hostName, const ConnectionConfig *config)
@@ -215,12 +267,9 @@ void TvnViewer::newConnection(const ConnectionData *conData, const ConnectionCon
   runInstance(copyConData, config);
 }
 
-void TvnViewer::showLoginDialog()
+void TvnViewer::showHome()
 {
-  m_loginDialog->setListening(m_isListening);
-  m_loginDialog->loadIcon(IDI_APPICON);
-  m_loginDialog->show();
-  addModelessDialog(m_loginDialog->getControl()->getWindow());
+  createShell()->showHome();
 }
 
 void TvnViewer::createWindow(const TCHAR *className)
@@ -397,7 +446,6 @@ bool TvnViewer::onTimer(WPARAM idTimer)
     deleteDeadShells();
     if (m_instances.empty() &&
         m_shells.empty() &&
-        !isVisibleLoginDialog() &&
         !m_isListening) {
       shutdown();
     }
@@ -427,8 +475,8 @@ LRESULT CALLBACK TvnViewer::wndProc(HWND hWnd, UINT msg, WPARAM wparam, LPARAM l
         _this->newListeningConnection();
         break;
 
-      case WM_USER_SHOW_LOGIN_DIALOG:
-        _this->showLoginDialog();
+      case WM_USER_SHOW_HOME:
+        _this->showHome();
         break;
 
       case WM_USER_CONFIGURATION:
@@ -470,6 +518,16 @@ LRESULT CALLBACK TvnViewer::wndProc(HWND hWnd, UINT msg, WPARAM wparam, LPARAM l
         _this->runInstance(&request->conData, &request->conConfig,
                            _this->findShell(request->shell));
         _this->m_instances.decreaseToReconnect();
+        break;
+      }
+
+      case WM_USER_HOME_CONNECT: {
+        std::unique_ptr<ReconnectRequest> request(reinterpret_cast<ReconnectRequest *>(lparam));
+        // Only a shell that still shows its Home page takes the session.
+        ShellWindow *shell = _this->findShell(request->shell);
+        if (shell != nullptr && shell->isShowingHome()) {
+          _this->runInstance(&request->conData, &request->conConfig, shell);
+        }
         break;
       }
 

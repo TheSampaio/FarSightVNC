@@ -41,6 +41,13 @@ public:
   virtual void onFrameSizing() { m_window->onFrameSizing(); }
   virtual void onDisplayChange() { m_window->onFrameDisplayChange(); }
   virtual void onDpiChanged(UINT dpi, bool frameMoved) { m_window->onFrameDpiChanged(dpi, frameMoved); }
+  virtual bool requestClose()
+  {
+    // The session ends the shell (onSessionEnded()) unless it refuses to
+    // close (file transfer in progress).
+    SendMessage(m_window->getHWnd(), WM_CLOSE, 0, 0);
+    return false;
+  }
 
 private:
   ViewerWindow *m_window;

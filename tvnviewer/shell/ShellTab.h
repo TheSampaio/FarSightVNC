@@ -47,6 +47,13 @@ public:
   // WM_DPICHANGED of the shell, before the shell takes the rectangle
   // suggested by the system (frameMoved) or keeps its full screen size.
   virtual void onDpiChanged(UINT dpi, bool frameMoved) = 0;
+
+  // The user closes the shell (WM_CLOSE). Returns true when the shell can
+  // be destroyed at once; a session closes itself instead and ends the
+  // shell through SessionHost::onSessionEnded().
+  virtual bool requestClose() { return true; }
+  // State of the application shown by the tab changed (listening mode).
+  virtual void onAppStateChanged() {}
 };
 
 #endif

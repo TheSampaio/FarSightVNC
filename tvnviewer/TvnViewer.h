@@ -23,6 +23,7 @@
 //
 // Modified for FarSightVNC on 2026-11-11: every session is shown in its own shell window, owned by the application.
 // Modified for FarSightVNC on 2026-11-11: a reconnection reuses the shell window of the session.
+// Modified for FarSightVNC on 2026-11-11: the Home page of a shell window replaces the login dialog.
 //
 
 #ifndef _TVN_VIEWER_H_
@@ -32,9 +33,9 @@
 #include "ConfigurationDialog.h"
 #include "ConnectionListener.h"
 #include "ControlTrayIcon.h"
-#include "LoginDialog.h"
 #include "OptionsDialog.h"
 #include "ViewerCollector.h"
+#include "shell/HomeActions.h"
 #include "shell/ShellWindow.h"
 #include "win-system/WindowsApplication.h"
 
@@ -47,10 +48,10 @@
 
 class ViewerCollector;
 class ControlTrayIcon;
-class LoginDialog;
 class UpdateController;
 
-class TvnViewer : public WindowsApplication
+class TvnViewer : public WindowsApplication,
+                  public HomeActions
 {
 public:
   TvnViewer(HINSTANCE appInstance,
@@ -58,10 +59,8 @@ public:
             const TCHAR *viewerWindowClassName);
   virtual ~TvnViewer();
 
-  //
-  // show login dialog
-  //
-  void showLoginDialog();
+  // Opens a new shell window on the Home page (the start screen).
+  void showHome();
 
   //
   // show options for listening mode
@@ -88,6 +87,14 @@ public:
   void startListening(int listeningPort);
   void stopListening();
 
+  // HomeActions implementation.
+  virtual void connectFromHome(HWND shell, const StringStorage *host,
+                               const ConnectionConfig *config);
+  virtual bool isListening() const;
+  virtual void toggleListening();
+  virtual void openHome();
+  virtual void openConfiguration();
+
   // Inherited from WindowsApplication
   void registerWindowClass(WNDCLASS *wndClass);
   static LRESULT CALLBACK wndProc(HWND hWnd, UINT msg, WPARAM wparam, LPARAM lparam);
@@ -98,8 +105,8 @@ public:
   // this message must sended after accepted new listening-connection
   static const int WM_USER_NEW_LISTENING = WM_USER + 1;
 
-  // this message need send if you need show login dialog
-  static const int WM_USER_SHOW_LOGIN_DIALOG = WM_USER + 2;
+  // Opens a new shell window on the Home page (new connection).
+  static const int WM_USER_SHOW_HOME = WM_USER + 2;
 
   // this message need send if you need show configuration dialog
   static const int WM_USER_CONFIGURATION = WM_USER + 3;
@@ -112,7 +119,12 @@ public:
   // deletes it.
   static const int WM_USER_RECONNECT = WM_USER + 5;
 
-  // Payload of WM_USER_RECONNECT.
+  // Connects from the Home page of a shell window, which then shows the
+  // session. LPARAM is a ReconnectRequest allocated with new; the
+  // application deletes it.
+  static const int WM_USER_HOME_CONNECT = WM_USER + 11;
+
+  // Payload of WM_USER_RECONNECT and WM_USER_HOME_CONNECT.
   struct ReconnectRequest
   {
     ReconnectRequest(const ConnectionData &data, const ConnectionConfig &config, HWND frame)
@@ -121,8 +133,8 @@ public:
     }
     ConnectionData conData;
     ConnectionConfig conConfig;
-    // Shell window of the dropped session; the new session is shown in it
-    // while it exists.
+    // Shell window of the dropped session (or of the Home page); the new
+    // session is shown in it while it exists.
     HWND shell;
   };
 
@@ -170,11 +182,10 @@ protected:
   void startInstance(ViewerInstance *viewerInst, ShellWindow *shell);
   // Deletes the shells whose window was destroyed.
   void deleteDeadShells();
+  // Tells the live shells that the listening mode changed.
+  void notifyShells();
   // Live shell with the window hwnd, or null.
   ShellWindow *findShell(HWND hwnd) const;
-
-  // This method return true, if login dialog is visible.
-  bool isVisibleLoginDialog() const;
 
   bool onTimer(WPARAM idTimer);
 
@@ -199,7 +210,6 @@ private:
   ConfigurationDialog m_configurationDialog;
   OptionsDialog m_optionsDialog;
 
-  LoginDialog *m_loginDialog;
   ControlTrayIcon *m_trayIcon;
   ConnectionListener *m_conListener;
   std::unique_ptr<UpdateController> m_updateController;

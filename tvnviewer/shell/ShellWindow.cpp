@@ -18,6 +18,7 @@
 //
 
 #include "ShellWindow.h"
+#include "HomeTab.h"
 
 #include "gui/DpiUtils.h"
 #include "../NamingDefs.h"
@@ -36,6 +37,11 @@ namespace {
 const TCHAR kShellProperty[] = _T("FarSightVNC.ShellWindow");
 // Height of the top resize edge inside the title bar, in DIPs.
 const int kTopResizeEdge = 5;
+// Title of the Home tab and size of the content of a new Home window, in
+// DIPs.
+const TCHAR kHomeTitle[] = _T("Home");
+const float kHomeWidth = 900.0f;
+const float kHomeHeight = 640.0f;
 
 // MARGINS of uxtheme.h, declared here because util/winhdr.h hides the DWM
 // API (WINVER 0x0501); DwmExtendFrameIntoClientArea is loaded at run time.
@@ -105,8 +111,11 @@ ShellTab *TabModel::active() const
   return m_active < m_tabs.size() ? m_tabs[m_active].get() : 0;
 }
 
-ShellWindow::ShellWindow(const TCHAR *windowClassName, Logger *logger)
+ShellWindow::ShellWindow(const TCHAR *windowClassName, Logger *logger, HomeActions *home)
 : m_logWriter(logger),
+  m_home(home),
+  m_showsHome(false),
+  m_closeRequested(false),
   m_lastFocus(0),
   m_destroyed(false),
   m_sessionWasShown(false),
@@ -520,12 +529,48 @@ void ShellWindow::updateDwmFrame()
 
 void ShellWindow::attachTab(std::unique_ptr<ShellTab> tab)
 {
+  // The tab that is replaced (the Home page) destroys its view.
+  m_tabs.clear();
+  m_showsHome = false;
   m_tabs.add(std::move(tab));
   m_lastFocus = 0;
   layoutActiveTab();
   // A reconnected session arrives in an active frame (no WM_ACTIVATE).
   if (GetActiveWindow() == m_hWnd) {
     focusActiveTab();
+  }
+}
+
+void ShellWindow::showHome()
+{
+  if (m_hWnd == 0) {
+    return;
+  }
+  attachTab(std::unique_ptr<ShellTab>(new HomeTab(m_hWnd, m_home)));
+  m_showsHome = true;
+  StringStorage windowTitle(WindowNames::TVN_WINDOW_TITLE_NAME);
+  StringStorage tabTitle(kHomeTitle);
+  setTitle(&windowTitle, &tabTitle);
+  if (!IsWindowVisible(m_hWnd)) {
+    // A new window, or one whose session ended before it was shown (a
+    // connection from the command line that failed).
+    requestClientSize(m_chrome.dipsToPixels(kHomeWidth), m_chrome.dipsToPixels(kHomeHeight));
+    ShowWindow(m_hWnd, SW_SHOW);
+    SetForegroundWindow(m_hWnd);
+  }
+  InvalidateRect(m_hWnd, 0, FALSE);
+}
+
+bool ShellWindow::isShowingHome() const
+{
+  return m_showsHome;
+}
+
+void ShellWindow::onAppStateChanged()
+{
+  ShellTab *tab = m_tabs.active();
+  if (tab != 0) {
+    tab->onAppStateChanged();
   }
 }
 
@@ -689,18 +734,25 @@ void ShellWindow::onSessionEnded(bool reconnecting)
   }
   m_tabs.clear();
   m_lastFocus = 0;
-  if (!reconnecting) {
-    // The session view is a child: destroying the shell destroys it too. The
-    // application deletes this object later (isDestroyed()).
+  if (!reconnecting && m_closeRequested) {
+    // The user closed the shell. The session view is a child: destroying
+    // the shell destroys it too. The application deletes this object later
+    // (isDestroyed()).
     destroyWindow();
     return;
   }
-  // The frame waits for the reconnected session (TvnViewer::runInstance()).
   if (view != 0) {
     DestroyWindow(view);
   }
   // The next session adds its own menu to a fresh system menu.
   GetSystemMenu(m_hWnd, TRUE);
+  if (reconnecting) {
+    // The frame waits for the reconnected session (TvnViewer::runInstance()).
+    return;
+  }
+  // Back to the Home page, in a windowed frame.
+  exitFullscreen();
+  showHome();
 }
 
 bool ShellWindow::onCommand(WPARAM wParam, LPARAM lParam)
@@ -738,13 +790,14 @@ bool ShellWindow::onMessage(UINT message, WPARAM wParam, LPARAM lParam)
     focusActiveTab();
     return true;
   case WM_CLOSE:
-    // Closing the shell stops the session; the session ends the shell (see
-    // onSessionEnded()). Only the handle is kept: the tab goes away meanwhile.
-    if (tab != 0) {
-      HWND view = tab->viewHwnd();
-      SendMessage(view, WM_CLOSE, 0, 0);
-    } else {
+    // Closing the shell stops the session, which then destroys the shell
+    // (onSessionEnded()); the tab is gone when requestClose() returns.
+    m_closeRequested = true;
+    if (tab == 0 || tab->requestClose()) {
       destroyWindow();
+    } else if (!m_destroyed) {
+      // The session refused to close (file transfer in progress).
+      m_closeRequested = false;
     }
     return true;
   case WM_DPICHANGED:
