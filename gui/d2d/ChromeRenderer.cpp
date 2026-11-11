@@ -60,6 +60,31 @@ SharedFactories &sharedFactories()
   return factories;
 }
 
+// Family of the system icon font, or 0 when none is installed. Checked once.
+const wchar_t *iconFontFamily(IDWriteFactory *factory)
+{
+  static bool checked = false;
+  static const wchar_t *family = 0;
+  if (checked || factory == 0) {
+    return family;
+  }
+  checked = true;
+  IDWriteFontCollection *collection = 0;
+  if (FAILED(factory->GetSystemFontCollection(&collection, FALSE)) || collection == 0) {
+    return family;
+  }
+  static const wchar_t *const candidates[] = { L"Segoe Fluent Icons", L"Segoe MDL2 Assets" };
+  for (size_t i = 0; i < sizeof(candidates) / sizeof(candidates[0]) && family == 0; i++) {
+    UINT32 index = 0;
+    BOOL exists = FALSE;
+    if (SUCCEEDED(collection->FindFamilyName(candidates[i], &index, &exists)) && exists) {
+      family = candidates[i];
+    }
+  }
+  collection->Release();
+  return family;
+}
+
 D2D1_COLOR_F toColor(ThemeColor color)
 {
   return D2D1::ColorF(color);
@@ -249,9 +274,16 @@ void ChromeRenderer::drawRoundRect(const D2D1_RECT_F &rect, float radius, ThemeC
 
 IDWriteTextFormat *ChromeRenderer::getTextFormat(float fontSize, DWRITE_FONT_WEIGHT weight)
 {
+  return getFormat(m_fontFamily, fontSize, weight);
+}
+
+IDWriteTextFormat *ChromeRenderer::getFormat(const wchar_t *family, float fontSize,
+                                             DWRITE_FONT_WEIGHT weight)
+{
   int sizeKey = static_cast<int>(floorf(fontSize * 100.0f + 0.5f));
   for (size_t i = 0; i < m_formats.size(); i++) {
-    if (m_formats[i].sizeKey == sizeKey && m_formats[i].weight == weight) {
+    if (m_formats[i].sizeKey == sizeKey && m_formats[i].weight == weight &&
+        wcscmp(m_formats[i].family, family) == 0) {
       return m_formats[i].format;
     }
   }
@@ -260,7 +292,7 @@ IDWriteTextFormat *ChromeRenderer::getTextFormat(float fontSize, DWRITE_FONT_WEI
     return 0;
   }
   IDWriteTextFormat *format = 0;
-  if (FAILED(factory->CreateTextFormat(m_fontFamily, 0, weight,
+  if (FAILED(factory->CreateTextFormat(family, 0, weight,
                                        DWRITE_FONT_STYLE_NORMAL,
                                        DWRITE_FONT_STRETCH_NORMAL,
                                        fontSize, L"", &format))) {
@@ -274,7 +306,7 @@ IDWriteTextFormat *ChromeRenderer::getTextFormat(float fontSize, DWRITE_FONT_WEI
   DWRITE_TRIMMING trimming = { DWRITE_TRIMMING_GRANULARITY_CHARACTER, 0, 0 };
   format->SetTrimming(&trimming, m_ellipsis);
 
-  CachedFormat cached = { sizeKey, weight, format };
+  CachedFormat cached = { family, sizeKey, weight, format };
   m_formats.push_back(cached);
   return format;
 }
@@ -301,6 +333,23 @@ void ChromeRenderer::drawGlyph(const wchar_t *glyph, const D2D1_RECT_F &box, The
   float size = (box.bottom - box.top) * 0.75f;
   drawText(glyph, box, color, size, DWRITE_FONT_WEIGHT_SEMI_BOLD,
            DWRITE_TEXT_ALIGNMENT_CENTER);
+}
+
+bool ChromeRenderer::drawIconGlyph(wchar_t codepoint, const D2D1_RECT_F &box, ThemeColor color,
+                                   float size)
+{
+  const wchar_t *family = iconFontFamily(getDWriteFactory());
+  if (family == 0) {
+    return false;
+  }
+  IDWriteTextFormat *format = getFormat(family, size, DWRITE_FONT_WEIGHT_NORMAL);
+  if (format == 0) {
+    return false;
+  }
+  format->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+  wchar_t text[2] = { codepoint, 0 };
+  m_target->DrawText(text, 1, format, box, brush(color), D2D1_DRAW_TEXT_OPTIONS_CLIP);
+  return true;
 }
 
 bool ChromeRenderer::supportsSvgGlyphs()

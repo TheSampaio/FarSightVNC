@@ -22,6 +22,8 @@
 
 #include "SessionHost.h"
 #include "ShellTab.h"
+#include "TitleBar.h"
+#include "gui/d2d/ChromeRenderer.h"
 #include "gui/BaseWindow.h"
 #include "log-writer/LogWriter.h"
 #include "region/Rect.h"
@@ -49,9 +51,14 @@ private:
 };
 
 // Top-level frame of the viewer (window class TvnWindowClass): it hosts the
-// session view as a child that fills its client area, owns the frame state
-// (full screen, default size, DPI) and forwards the frame events to the
-// active tab. Native caption for now.
+// session view as a child below its title bar, owns the frame state (full
+// screen, default size, DPI) and forwards the frame events to the active tab.
+//
+// The title bar is drawn in the client area with Direct2D (TitleBar): the
+// window keeps WS_OVERLAPPEDWINDOW (resize borders, Aero Snap, system menu),
+// WM_NCCALCSIZE removes only the native caption and WM_NCHITTEST maps the
+// bar to caption, window buttons (HTMAXBUTTON opens the Snap Layouts of
+// Windows 11) and the top resize edge. In full screen there is no title bar.
 //
 // The application owns the shells; a shell whose window is destroyed is
 // deleted by the application (see isDestroyed()). A shell outlives its
@@ -83,6 +90,14 @@ public:
   virtual void onSessionEnded(bool reconnecting);
 
 private:
+  // Window procedure installed over the one of the window class: the title
+  // bar needs message results (hit test codes) that BaseWindow cannot
+  // return. Unhandled messages go on to the class procedure.
+  static LRESULT CALLBACK frameProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
+  bool onFrameMessage(UINT message, WPARAM wParam, LPARAM lParam, LRESULT *result);
+  LRESULT callBaseProc(UINT message, WPARAM wParam, LPARAM lParam);
+  void restoreBaseProc();
+
   virtual bool onMessage(UINT message, WPARAM wParam, LPARAM lParam);
   virtual bool onCommand(WPARAM wParam, LPARAM lParam);
   virtual bool onSysCommand(WPARAM wParam, LPARAM lParam);
@@ -90,6 +105,22 @@ private:
   void onActivate(WPARAM wParam);
   void onDpiChanged(WPARAM wParam, LPARAM lParam);
   void layoutActiveTab();
+
+  // Title bar.
+  LRESULT hitTest(WPARAM wParam, LPARAM lParam);
+  // Height of the title bar in pixels, 0 in full screen.
+  int titleBarHeight() const;
+  // Resize frame of a maximized window that lies outside of the monitor.
+  int maximizedFrameThickness() const;
+  void layoutTitleBar();
+  void invalidateTitleBar();
+  void paint();
+  void updateDwmFrame();
+  // Window button under a non-client hit test code, or TITLE_BAR_NONE.
+  static TitleBarPart windowButtonFromHitCode(WPARAM hitCode);
+  TitleBarPart partAtClientPoint(LPARAM lParam) const;
+  void trackMouseLeave(bool nonClient);
+  void executeTitleBarPart(TitleBarPart part);
   void focusActiveTab();
   // Frame rectangle for a client area of width x height on the work area of
   // the shell's monitor.
@@ -111,6 +142,13 @@ private:
   WINDOWPLACEMENT m_windowedPlacement;
   // Default frame size applied by requestClientSize().
   Rect m_rcNormal;
+
+  WNDPROC m_baseProc;
+  ChromeRenderer m_chrome;
+  TitleBar m_titleBar;
+  bool m_frameActive;
+  bool m_trackingMouse;
+  bool m_trackingNcMouse;
 };
 
 #endif

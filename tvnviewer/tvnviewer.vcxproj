@@ -340,6 +340,7 @@
     <ClCompile Include="UpdateDialog.cpp" />
     <ClCompile Include="ViewerWindow.cpp" />
     <ClCompile Include="shell\ShellWindow.cpp" />
+    <ClCompile Include="shell\TitleBar.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="AboutDialog.h" />
@@ -383,6 +384,7 @@
     <ClInclude Include="shell\SessionTab.h" />
     <ClInclude Include="shell\ShellTab.h" />
     <ClInclude Include="shell\ShellWindow.h" />
+    <ClInclude Include="shell\TitleBar.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="res\appicon.ico" />

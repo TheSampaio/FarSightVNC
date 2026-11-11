@@ -72,6 +72,11 @@ public:
   // placeholder; the icon phase draws Lucide SVG documents here when
   // supportsSvgGlyphs() is true and keeps the text as the fallback.
   void drawGlyph(const wchar_t *glyph, const D2D1_RECT_F &box, ThemeColor color);
+  // Draws codepoint of the system icon font (Segoe Fluent Icons on Windows
+  // 11, Segoe MDL2 Assets on Windows 10) centered in box, size in DIPs.
+  // Returns false and draws nothing when neither font is installed; the
+  // caller then draws a placeholder with drawGlyph().
+  bool drawIconGlyph(wchar_t codepoint, const D2D1_RECT_F &box, ThemeColor color, float size);
   // True when the render target is an ID2D1DeviceContext5 (Windows 10 1703
   // or later), which can draw SVG documents.
   bool supportsSvgGlyphs();
@@ -89,12 +94,14 @@ private:
   ChromeRenderer(const ChromeRenderer &);
   ChromeRenderer &operator=(const ChromeRenderer &);
 
+  IDWriteTextFormat *getFormat(const wchar_t *family, float fontSize, DWRITE_FONT_WEIGHT weight);
   bool createTarget();
   void discardTarget();
   ID2D1SolidColorBrush *brush(ThemeColor color);
 
   struct CachedFormat
   {
+    const wchar_t *family;
     int sizeKey;  // Size in 1/100 DIP.
     DWRITE_FONT_WEIGHT weight;
     IDWriteTextFormat *format;

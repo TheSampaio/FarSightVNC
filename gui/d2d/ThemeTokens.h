@@ -39,6 +39,8 @@ struct ThemeTokens
   ThemeColor hover;        // Background of a hovered button.
   ThemeColor closeHover;   // Background of the hovered close button.
   ThemeColor closeHoverText;
+  ThemeColor pressed;      // Background of a pressed button.
+  ThemeColor closePressed; // Background of the pressed close button.
 
   // Shapes and sizes, in DIPs.
   float cornerRadius;
@@ -68,6 +70,8 @@ inline constexpr ThemeTokens kLightTheme = {
   .hover          = 0xE4E4E7,
   .closeHover     = 0xE81123,
   .closeHoverText = 0xFFFFFF,
+  .pressed        = 0xD4D4D8,
+  .closePressed   = 0xF1707A,
 
   .cornerRadius   = 6.0f,
   .titleBarHeight = 40.0f,
