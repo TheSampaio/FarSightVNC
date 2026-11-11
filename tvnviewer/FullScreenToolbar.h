@@ -17,78 +17,99 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //
 // Modified for FarSightVNC on 2026-11-03: connection state label.
+// Modified for FarSightVNC on 2026-11-11: rewritten as a floating pill drawn
+// with ChromeRenderer; the buttons are the SessionActionStrip of the session
+// toolbar.
 //
 
 #ifndef _FULL_SCREEN_TOOLBAR_H_
 #define _FULL_SCREEN_TOOLBAR_H_
 
 #include "util/CommonHeader.h"
-#include "gui/ToolBar.h"
 #include "FullScreenToolbarLogic.h"
+#include "shell/SessionActionStrip.h"
 
-#include <memory>
+#include <string>
 
-// Small floating toolbar shown at the top center of a monitor while the viewer
-// is in full screen. It is a top-level popup owned by the viewer window that
-// never takes the activation or the keyboard focus (WS_EX_NOACTIVATE,
-// MA_NOACTIVATE); pointer input over it goes to it, not to the remote desktop.
-// Button commands are posted to the owner as WM_COMMAND (the ids of the main
-// toolbar) or WM_CLOSE (disconnect).
-class FullScreenToolbar
+// Floating pill shown at the top center of a monitor while the session is in
+// full screen, in the style of AnyDesk and RustDesk: the session name and the
+// session actions of the windowed toolbar (same SessionActionStrip, same
+// state) plus pin, leave full screen and disconnect. It is a layered
+// (per-pixel alpha) topmost popup owned by the full screen shell that never
+// takes the activation or the keyboard focus (WS_EX_NOACTIVATE,
+// MA_NOACTIVATE); after a click the focus goes back to the remote desktop.
+//
+// FullScreenToolbarLogic decides when it shows: on entering full screen,
+// when the pointer touches the top edge of a monitor or hovers it; it hides
+// after a delay unless pinned. Hidden, it leaves a small grab handle at the
+// top center of the monitor that brings it back when hovered.
+class FullScreenToolbar : private SessionToolbarListener
 {
 public:
-  static const TCHAR WINDOW_CLASS_NAME[];
-  // Command ids of the buttons that have no main toolbar counterpart.
-  static const int ID_PIN = 0xA850;
-  static const int ID_DISCONNECT = 0xA860;
-  // Text-only label with the connection state; it has no action.
-  static const int ID_STATE = 0xA870;
-
   FullScreenToolbar();
   ~FullScreenToolbar();
 
-  // Creates the window and shows it on the monitor until the auto-hide delay
-  // expires. Does nothing if it is already created.
-  void create(HWND owner, HMONITOR monitor);
+  // Creates the pill, owned by owner (the shell), and shows it on the
+  // monitor until the auto-hide delay expires. Session commands are posted
+  // to commandTarget and drop-downs go to listener; disconnect closes owner.
+  // Does nothing if it is already created.
+  void create(HWND owner, HWND commandTarget, SessionToolbarListener *listener,
+              HWND focusTarget, HMONITOR monitor);
   void destroy();
   bool isCreated() const { return m_hwnd != 0; }
   HWND getHWnd() const { return m_hwnd; }
 
-  // Shows the toolbar on the monitor (it moves there if needed).
+  // Shows the pill on the monitor (it moves there if needed).
   void showOn(HMONITOR monitor);
   // Pointer position over the remote desktop, in screen coordinates.
   void onPointerMove(POINT screenPoint);
-  void enableButton(int id, bool enable);
-  // Sets the connection state label (copied, truncated to 31 characters).
-  void setStateText(const TCHAR *text);
+  // Session state (kept while the pill does not exist).
+  void setState(const SessionToolbarState &state);
+  // Session name and connection state shown as small text.
+  void setLabel(const TCHAR *text);
 
 private:
+  FullScreenToolbar(const FullScreenToolbar &);
+  FullScreenToolbar &operator=(const FullScreenToolbar &);
+
   static LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
   LRESULT onMessage(UINT message, WPARAM wParam, LPARAM lParam);
-  bool registerClass();
-  void createButtons();
+  static bool registerClass();
+
+  // Implementation of SessionToolbarListener: forwards the drop-downs.
+  virtual void onToolbarMenu(SessionAction action, const RECT &anchor);
+
+  // Places the window on the monitor, expanded (pill) or collapsed (handle).
   void layout(HMONITOR monitor);
-  void applyDpi(UINT dpi);
-  void hideNow();
-  void onCommand(int id);
+  void render();
+  void expand(HMONITOR monitor);
+  void collapse();
+  void onCommand(WPARAM wParam, LPARAM lParam);
+  void applyState();
   bool isPointerNear() const;
-  HWND toolbarControl() const;
   int nearMargin() const;
   FullScreenToolbarLogic::Box toolbarBox() const;
-  const TCHAR *tooltipText(int id) const;
 
   static const UINT_PTR TIMER_AUTO_HIDE = 1;
   static const UINT TIMER_AUTO_HIDE_PERIOD = 100;
 
   HWND m_hwnd;
   HWND m_owner;
+  HWND m_commandTarget;
+  SessionToolbarListener *m_listener;
   HMONITOR m_monitor;
-  UINT m_dpi;
-  HFONT m_font;
   bool m_inLayout;
-  std::unique_ptr<ToolBar> m_toolbar;
+  bool m_expanded;
+  ChromeRenderer m_chrome;
+  SessionActionStrip m_strip;
   FullScreenToolbarLogic m_logic;
-  TCHAR m_stateText[32];
+  SessionToolbarState m_sessionState;
+  std::wstring m_label;
+
+  // Layout in DIPs, relative to the window.
+  D2D1_RECT_F m_pill;
+  D2D1_RECT_F m_labelRect;
+  D2D1_RECT_F m_labelDivider;
 };
 
 #endif

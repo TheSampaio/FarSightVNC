@@ -35,6 +35,12 @@
 //
 // Use: attach() once the window exists, resize() on WM_SIZE, setDpi() on
 // WM_DPICHANGED, and in WM_PAINT beginDraw(), the draw calls, endDraw().
+//
+// A layered window (WS_EX_LAYERED, attachLayered()) has per-pixel alpha
+// instead: it is drawn into a 32-bit bitmap that endDraw() hands to
+// UpdateLayeredWindow(), so its transparent pixels show what is below and
+// let the pointer through. It receives no WM_PAINT; the owner calls
+// beginDraw()/endDraw() whenever its content changes.
 class ChromeRenderer
 {
 public:
@@ -44,6 +50,8 @@ public:
   // Binds the renderer to a window. dpi is the DPI of the window
   // (DpiUtils::getDpiForWindow); fontFamily comes from ThemeTokens.
   void attach(HWND hwnd, UINT dpi, const wchar_t *fontFamily = kLightTheme.fontFamily);
+  // Same for a layered popup window; resize() gives the size of the window.
+  void attachLayered(HWND hwnd, UINT dpi, const wchar_t *fontFamily = kLightTheme.fontFamily);
   void setDpi(UINT dpi);
   UINT getDpi() const;
   // Client size of the window in pixels.
@@ -60,8 +68,12 @@ public:
   void endDraw();
 
   void clear(ThemeColor color);
+  // Clears to fully transparent pixels (layered windows).
+  void clearTransparent();
   void fillRect(const D2D1_RECT_F &rect, ThemeColor color);
-  void fillRoundRect(const D2D1_RECT_F &rect, float radius, ThemeColor color);
+  // opacity is 0..1; below 1 it blends (soft shadows of layered windows).
+  void fillRoundRect(const D2D1_RECT_F &rect, float radius, ThemeColor color,
+                     float opacity = 1.0f);
   void drawRoundRect(const D2D1_RECT_F &rect, float radius, ThemeColor color,
                      float strokeWidth = 1.0f);
   // One line of text, vertically centered in rect, cut with an ellipsis.
@@ -84,6 +96,9 @@ public:
   // Text format of the cache for a size (DIPs) and weight, or 0. The cache
   // owns it; it lives as long as the renderer.
   IDWriteTextFormat *getTextFormat(float fontSize, DWRITE_FONT_WEIGHT weight);
+  // Width in DIPs of one line of text, or 0 without DirectWrite.
+  float measureText(const wchar_t *text, float fontSize,
+                    DWRITE_FONT_WEIGHT weight = DWRITE_FONT_WEIGHT_NORMAL);
 
   // Factories shared by every renderer of the process, created on first use
   // and kept until exit. 0 when Direct2D or DirectWrite is unavailable.
@@ -97,7 +112,9 @@ private:
   IDWriteTextFormat *getFormat(const wchar_t *family, float fontSize, DWRITE_FONT_WEIGHT weight);
   bool createTarget();
   void discardTarget();
-  ID2D1SolidColorBrush *brush(ThemeColor color);
+  ID2D1SolidColorBrush *brush(ThemeColor color, float opacity = 1.0f);
+  bool prepareLayeredBitmap();
+  void releaseLayeredBitmap();
 
   struct CachedFormat
   {
@@ -112,7 +129,17 @@ private:
   HWND m_hwnd;
   UINT m_dpi;
   const wchar_t *m_fontFamily;
-  ID2D1HwndRenderTarget *m_target;
+  // m_target is m_hwndTarget or m_dcTarget (layered), never both.
+  ID2D1RenderTarget *m_target;
+  ID2D1HwndRenderTarget *m_hwndTarget;
+  ID2D1DCRenderTarget *m_dcTarget;
+  bool m_layered;
+  // Bitmap of a layered window.
+  HDC m_layeredDc;
+  HBITMAP m_layeredBitmap;
+  HGDIOBJ m_layeredOldBitmap;
+  SIZE m_layeredSize;     // Size of the window.
+  SIZE m_layeredBitmapSize;
   ID2D1SolidColorBrush *m_brush;
   // -1: not checked yet for the current target.
   int m_svgSupport;

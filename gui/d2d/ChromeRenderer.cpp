@@ -98,14 +98,23 @@ ChromeRenderer::ChromeRenderer()
   m_dpi(96),
   m_fontFamily(kLightTheme.fontFamily),
   m_target(0),
+  m_hwndTarget(0),
+  m_dcTarget(0),
+  m_layered(false),
+  m_layeredDc(0),
+  m_layeredBitmap(0),
+  m_layeredOldBitmap(0),
   m_brush(0),
   m_svgSupport(-1)
 {
+  m_layeredSize.cx = m_layeredSize.cy = 0;
+  m_layeredBitmapSize.cx = m_layeredBitmapSize.cy = 0;
 }
 
 ChromeRenderer::~ChromeRenderer()
 {
   discardTarget();
+  releaseLayeredBitmap();
   for (size_t i = 0; i < m_formats.size(); i++) {
     safeRelease(m_formats[i].format);
   }
@@ -143,6 +152,18 @@ void ChromeRenderer::attach(HWND hwnd, UINT dpi, const wchar_t *fontFamily)
     discardTarget();
   }
   m_hwnd = hwnd;
+  m_layered = false;
+  m_fontFamily = fontFamily;
+  setDpi(dpi);
+}
+
+void ChromeRenderer::attachLayered(HWND hwnd, UINT dpi, const wchar_t *fontFamily)
+{
+  if (hwnd != m_hwnd || !m_layered) {
+    discardTarget();
+  }
+  m_hwnd = hwnd;
+  m_layered = true;
   m_fontFamily = fontFamily;
   setDpi(dpi);
 }
@@ -162,7 +183,13 @@ UINT ChromeRenderer::getDpi() const
 
 void ChromeRenderer::resize(UINT width, UINT height)
 {
-  if (m_target != 0 && FAILED(m_target->Resize(D2D1::SizeU(width, height)))) {
+  if (m_layered) {
+    // The bitmap is made again at the next beginDraw().
+    m_layeredSize.cx = static_cast<LONG>(width);
+    m_layeredSize.cy = static_cast<LONG>(height);
+    return;
+  }
+  if (m_hwndTarget != 0 && FAILED(m_hwndTarget->Resize(D2D1::SizeU(width, height)))) {
     discardTarget();
   }
 }
@@ -186,19 +213,33 @@ bool ChromeRenderer::createTarget()
   if (factory == 0 || m_hwnd == 0) {
     return false;
   }
-  RECT client;
-  if (!GetClientRect(m_hwnd, &client)) {
-    return false;
-  }
-  D2D1_RENDER_TARGET_PROPERTIES properties = D2D1::RenderTargetProperties(
-    D2D1_RENDER_TARGET_TYPE_DEFAULT,
-    D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE),
-    static_cast<float>(m_dpi), static_cast<float>(m_dpi));
-  D2D1_HWND_RENDER_TARGET_PROPERTIES hwndProperties = D2D1::HwndRenderTargetProperties(
-    m_hwnd, D2D1::SizeU(client.right - client.left, client.bottom - client.top));
-  if (FAILED(factory->CreateHwndRenderTarget(properties, hwndProperties, &m_target))) {
-    m_target = 0;
-    return false;
+  if (m_layered) {
+    // Premultiplied alpha, as UpdateLayeredWindow() expects it.
+    D2D1_RENDER_TARGET_PROPERTIES properties = D2D1::RenderTargetProperties(
+      D2D1_RENDER_TARGET_TYPE_DEFAULT,
+      D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
+      static_cast<float>(m_dpi), static_cast<float>(m_dpi));
+    if (FAILED(factory->CreateDCRenderTarget(&properties, &m_dcTarget))) {
+      m_dcTarget = 0;
+      return false;
+    }
+    m_target = m_dcTarget;
+  } else {
+    RECT client;
+    if (!GetClientRect(m_hwnd, &client)) {
+      return false;
+    }
+    D2D1_RENDER_TARGET_PROPERTIES properties = D2D1::RenderTargetProperties(
+      D2D1_RENDER_TARGET_TYPE_DEFAULT,
+      D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE),
+      static_cast<float>(m_dpi), static_cast<float>(m_dpi));
+    D2D1_HWND_RENDER_TARGET_PROPERTIES hwndProperties = D2D1::HwndRenderTargetProperties(
+      m_hwnd, D2D1::SizeU(client.right - client.left, client.bottom - client.top));
+    if (FAILED(factory->CreateHwndRenderTarget(properties, hwndProperties, &m_hwndTarget))) {
+      m_hwndTarget = 0;
+      return false;
+    }
+    m_target = m_hwndTarget;
   }
   m_target->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
   if (FAILED(m_target->CreateSolidColorBrush(D2D1::ColorF(0), &m_brush))) {
@@ -213,14 +254,72 @@ bool ChromeRenderer::createTarget()
 void ChromeRenderer::discardTarget()
 {
   safeRelease(m_brush);
-  safeRelease(m_target);
+  m_target = 0;
+  safeRelease(m_hwndTarget);
+  safeRelease(m_dcTarget);
   m_svgSupport = -1;
+}
+
+bool ChromeRenderer::prepareLayeredBitmap()
+{
+  if (m_layeredSize.cx <= 0 || m_layeredSize.cy <= 0) {
+    return false;
+  }
+  if (m_layeredBitmap != 0 && m_layeredBitmapSize.cx == m_layeredSize.cx &&
+      m_layeredBitmapSize.cy == m_layeredSize.cy) {
+    return true;
+  }
+  releaseLayeredBitmap();
+  BITMAPINFO info;
+  ZeroMemory(&info, sizeof(info));
+  info.bmiHeader.biSize = sizeof(info.bmiHeader);
+  info.bmiHeader.biWidth = m_layeredSize.cx;
+  info.bmiHeader.biHeight = -m_layeredSize.cy;  // Top-down.
+  info.bmiHeader.biPlanes = 1;
+  info.bmiHeader.biBitCount = 32;
+  info.bmiHeader.biCompression = BI_RGB;
+  void *bits = 0;
+  m_layeredDc = CreateCompatibleDC(0);
+  if (m_layeredDc == 0) {
+    return false;
+  }
+  m_layeredBitmap = CreateDIBSection(m_layeredDc, &info, DIB_RGB_COLORS, &bits, 0, 0);
+  if (m_layeredBitmap == 0) {
+    releaseLayeredBitmap();
+    return false;
+  }
+  m_layeredOldBitmap = SelectObject(m_layeredDc, m_layeredBitmap);
+  m_layeredBitmapSize = m_layeredSize;
+  return true;
+}
+
+void ChromeRenderer::releaseLayeredBitmap()
+{
+  if (m_layeredDc != 0) {
+    if (m_layeredOldBitmap != 0) {
+      SelectObject(m_layeredDc, m_layeredOldBitmap);
+    }
+    DeleteDC(m_layeredDc);
+  }
+  if (m_layeredBitmap != 0) {
+    DeleteObject(m_layeredBitmap);
+  }
+  m_layeredDc = 0;
+  m_layeredBitmap = 0;
+  m_layeredOldBitmap = 0;
+  m_layeredBitmapSize.cx = m_layeredBitmapSize.cy = 0;
 }
 
 bool ChromeRenderer::beginDraw()
 {
   if (!createTarget()) {
     return false;
+  }
+  if (m_layered) {
+    RECT area = { 0, 0, m_layeredSize.cx, m_layeredSize.cy };
+    if (!prepareLayeredBitmap() || FAILED(m_dcTarget->BindDC(m_layeredDc, &area))) {
+      return false;
+    }
   }
   m_target->BeginDraw();
   m_target->SetTransform(D2D1::Matrix3x2F::Identity());
@@ -235,13 +334,23 @@ void ChromeRenderer::endDraw()
   HRESULT hr = m_target->EndDraw();
   if (hr == D2DERR_RECREATE_TARGET) {
     discardTarget();
-    InvalidateRect(m_hwnd, 0, FALSE);
+    if (!m_layered) {
+      InvalidateRect(m_hwnd, 0, FALSE);
+    }
+    return;
+  }
+  if (m_layered && SUCCEEDED(hr)) {
+    POINT source = { 0, 0 };
+    BLENDFUNCTION blend = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
+    UpdateLayeredWindow(m_hwnd, 0, 0, &m_layeredSize, m_layeredDc, &source, 0, &blend,
+                        ULW_ALPHA);
   }
 }
 
-ID2D1SolidColorBrush *ChromeRenderer::brush(ThemeColor color)
+ID2D1SolidColorBrush *ChromeRenderer::brush(ThemeColor color, float opacity)
 {
   m_brush->SetColor(toColor(color));
+  m_brush->SetOpacity(opacity);
   return m_brush;
 }
 
@@ -250,14 +359,20 @@ void ChromeRenderer::clear(ThemeColor color)
   m_target->Clear(toColor(color));
 }
 
+void ChromeRenderer::clearTransparent()
+{
+  m_target->Clear(D2D1::ColorF(0, 0.0f));
+}
+
 void ChromeRenderer::fillRect(const D2D1_RECT_F &rect, ThemeColor color)
 {
   m_target->FillRectangle(rect, brush(color));
 }
 
-void ChromeRenderer::fillRoundRect(const D2D1_RECT_F &rect, float radius, ThemeColor color)
+void ChromeRenderer::fillRoundRect(const D2D1_RECT_F &rect, float radius, ThemeColor color,
+                                   float opacity)
 {
-  m_target->FillRoundedRectangle(D2D1::RoundedRect(rect, radius, radius), brush(color));
+  m_target->FillRoundedRectangle(D2D1::RoundedRect(rect, radius, radius), brush(color, opacity));
 }
 
 void ChromeRenderer::drawRoundRect(const D2D1_RECT_F &rect, float radius, ThemeColor color,
@@ -309,6 +424,25 @@ IDWriteTextFormat *ChromeRenderer::getFormat(const wchar_t *family, float fontSi
   CachedFormat cached = { family, sizeKey, weight, format };
   m_formats.push_back(cached);
   return format;
+}
+
+float ChromeRenderer::measureText(const wchar_t *text, float fontSize, DWRITE_FONT_WEIGHT weight)
+{
+  IDWriteTextFormat *format = getTextFormat(fontSize, weight);
+  IDWriteFactory *factory = getDWriteFactory();
+  if (format == 0 || factory == 0 || text == 0) {
+    return 0.0f;
+  }
+  IDWriteTextLayout *layout = 0;
+  if (FAILED(factory->CreateTextLayout(text, static_cast<UINT32>(wcslen(text)), format,
+                                       100000.0f, 1000.0f, &layout))) {
+    return 0.0f;
+  }
+  DWRITE_TEXT_METRICS metrics;
+  float width = SUCCEEDED(layout->GetMetrics(&metrics)) ? metrics.widthIncludingTrailingWhitespace
+                                                        : 0.0f;
+  layout->Release();
+  return width;
 }
 
 void ChromeRenderer::drawText(const wchar_t *text, const D2D1_RECT_F &rect, ThemeColor color,

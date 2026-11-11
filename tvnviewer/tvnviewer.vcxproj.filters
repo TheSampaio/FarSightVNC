@@ -79,6 +79,9 @@
     <ClCompile Include="ViewerWindow.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="shell\SessionActionStrip.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="shell\SessionToolbar.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -211,6 +214,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="shell\SessionTab.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="shell\SessionActionStrip.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="shell\SessionToolbar.h">

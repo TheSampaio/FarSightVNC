@@ -31,6 +31,7 @@
 // Modified for FarSightVNC on 2026-11-11: the shell handles DPI changes and full screen state; a reconnection reuses the shell.
 // Modified for FarSightVNC on 2026-11-11: the tab of the shell shows only the session name.
 // Modified for FarSightVNC on 2026-11-11: SessionToolbar (Direct2D) replaces the comctl toolbar; the session state drives it.
+// Modified for FarSightVNC on 2026-11-11: the full screen toolbar is a floating pill with the session actions and state.
 //
 
 #ifndef _VIEWER_WINDOW_H_
@@ -230,6 +231,8 @@ protected:
   ConnectionState m_connectionState;
   void setConnectionState(ConnectionState state);
   const TCHAR *connectionStateLabel() const;
+  // Text of the full screen pill: session name and connection state.
+  StringStorage fullScreenToolbarLabel() const;
 
   // Flag is set, if instance is requires to reconnect.
   bool m_requiresReconnect;

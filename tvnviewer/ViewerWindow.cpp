@@ -32,6 +32,7 @@
 // Modified for FarSightVNC on 2026-11-11: the shell handles DPI changes and full screen state; a reconnection reuses the shell.
 // Modified for FarSightVNC on 2026-11-11: the tab of the shell shows only the session name.
 // Modified for FarSightVNC on 2026-11-11: SessionToolbar (Direct2D) replaces the comctl toolbar; the session state drives it.
+// Modified for FarSightVNC on 2026-11-11: the full screen toolbar is a floating pill with the session actions and state.
 //
 
 #include "config-lib/IniFileSettingsManager.h"
@@ -164,8 +165,6 @@ bool ViewerWindow::onCreate(LPCREATESTRUCT lps)
 void ViewerWindow::enableUserElements()
 {
   bool isEnable = !m_conConf->isViewOnly();
-
-  m_fsToolbar.enableButton(IDS_TB_CTRLALTDEL, isEnable);
 
   UINT enableMenu = static_cast<UINT>(!isEnable);
   m_menu.enableMenuItem(IDS_TB_CTRLALTDEL, enableMenu);
@@ -909,9 +908,10 @@ void ViewerWindow::doFullScr()
   SetFocus(m_dsktWnd.getHWnd());
   applyScreenChanges(true);
 
-  m_fsToolbar.setStateText(connectionStateLabel());
-  m_fsToolbar.create(m_host->rootHwnd(), fullScreenToolbarMonitor());
-  m_fsToolbar.enableButton(IDS_TB_CTRLALTDEL, !m_conConf->isViewOnly());
+  m_fsToolbar.setLabel(fullScreenToolbarLabel().getString());
+  m_fsToolbar.setState(toolbarState());
+  m_fsToolbar.create(m_host->rootHwnd(), getHWnd(), this, m_dsktWnd.getHWnd(),
+                     fullScreenToolbarMonitor());
 
   if (config->isPromptOnFullscreenEnabled()) {
     postMessage(WM_USER_FS_WARNING);
@@ -1058,7 +1058,7 @@ void ViewerWindow::setConnectionState(ConnectionState state)
   StringStorage windowName = formatWindowTitle();
   StringStorage sessionName = formatSessionName();
   m_host->setTitle(&windowName, &sessionName);
-  m_fsToolbar.setStateText(connectionStateLabel());
+  m_fsToolbar.setLabel(fullScreenToolbarLabel().getString());
 }
 
 const TCHAR *ViewerWindow::connectionStateLabel() const
@@ -1068,6 +1068,21 @@ const TCHAR *ViewerWindow::connectionStateLabel() const
   case STATE_CONNECTED: return _T("Connected");
   default: return _T("Disconnected");
   }
+}
+
+StringStorage ViewerWindow::fullScreenToolbarLabel() const
+{
+  // The session name, and the connection state while it is not connected.
+  StringStorage label = formatSessionName();
+  if (m_connectionState != STATE_CONNECTED) {
+    if (label.isEmpty()) {
+      label.setString(connectionStateLabel());
+    } else {
+      label.appendString(_T(" \x00B7 "));
+      label.appendString(connectionStateLabel());
+    }
+  }
+  return label;
 }
 
 bool ViewerWindow::offerReconnect(bool sessionWasEstablished, const StringStorage *reason)
@@ -1376,7 +1391,9 @@ SessionToolbarState ViewerWindow::toolbarState() const
 
 void ViewerWindow::updateToolbar()
 {
-  m_toolbar.setState(toolbarState());
+  SessionToolbarState state = toolbarState();
+  m_toolbar.setState(state);
+  m_fsToolbar.setState(state);
 }
 
 namespace {
