@@ -40,7 +40,9 @@ public:
 
   // Shows the frame (the session is ready or a reconnection is shown).
   virtual void showFrame() = 0;
-  virtual void setTitle(const StringStorage *title) = 0;
+  // windowTitle names the frame (taskbar, Alt+Tab); tabTitle, the session
+  // name alone, is shown in the tab of the session.
+  virtual void setTitle(const StringStorage *windowTitle, const StringStorage *tabTitle) = 0;
 
   // Covers monitorRect (screen coordinates, one monitor or the virtual
   // screen) with a borderless topmost frame. Called again while in full

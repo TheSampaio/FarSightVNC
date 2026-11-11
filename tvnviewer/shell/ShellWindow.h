@@ -81,7 +81,7 @@ public:
   virtual HWND hostHwnd() const;
   virtual HWND rootHwnd() const;
   virtual void showFrame();
-  virtual void setTitle(const StringStorage *title);
+  virtual void setTitle(const StringStorage *windowTitle, const StringStorage *tabTitle);
   virtual void enterFullscreen(const RECT &monitorRect);
   virtual void exitFullscreen();
   virtual bool isFullscreen() const;

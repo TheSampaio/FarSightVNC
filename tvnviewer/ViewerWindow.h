@@ -29,6 +29,7 @@
 // Modified for FarSightVNC on 2026-11-11: frame operations (title, full screen, size, DPI, end of session) go through SessionHost.
 // Modified for FarSightVNC on 2026-11-11: child window (FsvSessionView) of the shell window, which forwards the frame events.
 // Modified for FarSightVNC on 2026-11-11: the shell handles DPI changes and full screen state; a reconnection reuses the shell.
+// Modified for FarSightVNC on 2026-11-11: the tab of the shell shows only the session name.
 //
 
 #ifndef _VIEWER_WINDOW_H_
@@ -260,6 +261,8 @@ private:
   void switchFullScreenMode();
   void dialogConfiguration();
   void adjustWindowSize();
+  // Remote desktop name, or the host while it is unknown (tab title).
+  StringStorage formatSessionName() const;
   StringStorage formatWindowName() const;
   // formatWindowName() with the connection state when it is not "connected".
   StringStorage formatWindowTitle() const;

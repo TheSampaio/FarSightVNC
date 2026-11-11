@@ -30,6 +30,7 @@
 // Modified for FarSightVNC on 2026-11-11: frame operations (title, full screen, size, DPI, end of session) go through SessionHost.
 // Modified for FarSightVNC on 2026-11-11: child window (FsvSessionView) of the shell window; frame events come from the shell, dialogs are owned by it.
 // Modified for FarSightVNC on 2026-11-11: the shell handles DPI changes and full screen state; a reconnection reuses the shell.
+// Modified for FarSightVNC on 2026-11-11: the tab of the shell shows only the session name.
 //
 
 #include "config-lib/IniFileSettingsManager.h"
@@ -1081,7 +1082,8 @@ void ViewerWindow::showWindow()
   m_host->showFrame();
 
   StringStorage windowName = formatWindowTitle();
-  m_host->setTitle(&windowName);
+  StringStorage sessionName = formatSessionName();
+  m_host->setTitle(&windowName, &sessionName);
   m_dsktWnd.setWindowText(&windowName);
 
 }
@@ -1096,7 +1098,8 @@ void ViewerWindow::setConnectionState(ConnectionState state)
 {
   m_connectionState = state;
   StringStorage windowName = formatWindowTitle();
-  m_host->setTitle(&windowName);
+  StringStorage sessionName = formatSessionName();
+  m_host->setTitle(&windowName, &sessionName);
   m_fsToolbar.setStateText(connectionStateLabel());
 }
 
@@ -1390,12 +1393,18 @@ void ViewerWindow::updateKeyState()
   }
 }
 
-StringStorage ViewerWindow::formatWindowName() const
+StringStorage ViewerWindow::formatSessionName() const
 {
   StringStorage desktopName = m_viewerCore->getRemoteDesktopName();
   if (desktopName.isEmpty() && !m_conData->getHost().isEmpty()) {
     desktopName = m_conData->getHost();
   }
+  return desktopName;
+}
+
+StringStorage ViewerWindow::formatWindowName() const
+{
+  StringStorage desktopName = formatSessionName();
   StringStorage windowName;
   if (!desktopName.isEmpty()) {
     windowName.format(_T("%s | %s"), ProductNames::VIEWER_PRODUCT_NAME, desktopName.getString());

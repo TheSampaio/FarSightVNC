@@ -549,11 +549,13 @@ void ShellWindow::showFrame()
   show();
 }
 
-void ShellWindow::setTitle(const StringStorage *title)
+void ShellWindow::setTitle(const StringStorage *windowTitle, const StringStorage *tabTitle)
 {
-  // The window keeps the title (taskbar, Alt+Tab); the tab shows it.
-  setWindowText(title);
-  m_titleBar.setTitle(toWide(title->getString()));
+  // The window keeps the full title (taskbar, Alt+Tab); the tab shows only
+  // the session name (the window title while there is none).
+  setWindowText(windowTitle);
+  const StringStorage *tab = tabTitle->isEmpty() ? windowTitle : tabTitle;
+  m_titleBar.setTitle(toWide(tab->getString()));
   invalidateTitleBar();
 }
 
