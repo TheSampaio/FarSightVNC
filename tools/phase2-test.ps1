@@ -399,10 +399,13 @@ try {
         foreach ($t in $top) {
           $classes += [FsvNative]::ClassName($t)
           foreach ($c in [FsvNative]::Descendants($t)) {
+            # The remote desktop is a TvnWindowClass descendant; the session view
+            # around it (FsvSessionView, toolbar included) is larger.
             if (-not [FsvNative]::Visible($c)) { continue }
+            $classes += "  child:" + [FsvNative]::ClassName($c)
+            if ([FsvNative]::ClassName($c) -ne 'TvnWindowClass') { continue }
             $sz = [FsvNative]::ClientSize($c)
             if ($sz[0] * $sz[1] -gt $area) { $area = $sz[0] * $sz[1]; $child = $c }
-            $classes += "  child:" + [FsvNative]::ClassName($c)
           }
         }
         if ($child -eq [IntPtr]::Zero) {

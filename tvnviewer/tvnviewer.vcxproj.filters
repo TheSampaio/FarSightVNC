@@ -82,6 +82,9 @@
     <ClCompile Include="shell\LegacyFrameHost.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="shell\ShellWindow.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="AboutDialog.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -205,6 +208,15 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="shell\SessionHost.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="shell\SessionTab.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="shell\ShellTab.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="shell\ShellWindow.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="AboutDialog.h">

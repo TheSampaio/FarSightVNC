@@ -22,6 +22,7 @@
 //-------------------------------------------------------------------------
 //
 // Modified for FarSightVNC on 2026-11-03: a reconnection attempt shows its window while connecting.
+// Modified for FarSightVNC on 2026-11-11: the session window is a child of the given frame (SessionHost).
 //
 
 #include "ViewerInstance.h"
@@ -31,13 +32,15 @@
 
 ViewerInstance::ViewerInstance(WindowsApplication *application,
                                ConnectionData *condata,
-                               const ConnectionConfig *conConf)
+                               const ConnectionConfig *conConf,
+                               SessionHost *host)
 : m_conConf(*conConf),
   m_condata(*condata),
   m_socket(0),
   m_viewerWnd(application,
               &m_condata,
               &m_conConf,
+              host,
               ViewerConfig::getInstance()->getLogger()),
   m_vncAuthHandler(&m_condata),
   m_viewerCore(ViewerConfig::getInstance()->getLogger())
@@ -47,6 +50,7 @@ ViewerInstance::ViewerInstance(WindowsApplication *application,
 ViewerInstance::ViewerInstance(WindowsApplication *application,
                                ConnectionData *condata,
                                const ConnectionConfig *conConf,
+                               SessionHost *host,
                                SocketIPv4 *socket)
 : m_conConf(*conConf),
   m_condata(*condata),
@@ -54,6 +58,7 @@ ViewerInstance::ViewerInstance(WindowsApplication *application,
   m_viewerWnd(application,
               &m_condata,
               &m_conConf,
+              host,
               ViewerConfig::getInstance()->getLogger()),
   m_vncAuthHandler(&m_condata),
   m_viewerCore(ViewerConfig::getInstance()->getLogger())
@@ -77,6 +82,11 @@ ViewerInstance::~ViewerInstance()
 void ViewerInstance::waitViewer()
 {
   m_viewerCore.waitTermination();
+}
+
+ViewerWindow *ViewerInstance::getViewerWindow()
+{
+  return &m_viewerWnd;
 }
 
 bool ViewerInstance::requiresReconnect() const

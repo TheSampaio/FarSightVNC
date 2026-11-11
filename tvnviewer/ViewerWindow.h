@@ -27,6 +27,7 @@
 // Modified for FarSightVNC on 2026-11-03: first connection opens maximized and fitted to the window.
 // Modified for FarSightVNC on 2026-11-07: the connected session is shown by the window thread (WM_USER_CONNECTED).
 // Modified for FarSightVNC on 2026-11-11: frame operations (title, full screen, size, DPI, end of session) go through SessionHost.
+// Modified for FarSightVNC on 2026-11-11: child window (FsvSessionView) of the shell window, which forwards the frame events.
 //
 
 #ifndef _VIEWER_WINDOW_H_
@@ -40,7 +41,7 @@
 #include "OptionsDialog.h"
 #include "ScaleManager.h"
 #include "ViewerMenu.h"
-#include "shell/LegacyFrameHost.h"
+#include "shell/SessionHost.h"
 #include "gui/ToolBar.h"
 #include "log-writer/LogWriter.h"
 #include "viewer-core/FileTransferCapability.h"
@@ -56,9 +57,10 @@ class ViewerWindow : public BaseWindow,
                      private DesktopPointerListener
 {
 public:
+  // Creates the session view as a child of host->hostHwnd().
   ViewerWindow(WindowsApplication *application,
                ConnectionData *conData, ConnectionConfig *conConf,
-               Logger *logger = 0);
+               SessionHost *host, Logger *logger = 0);
   virtual ~ViewerWindow();
 
   void setFileTransfer(FileTransferCapability *ft);
@@ -79,6 +81,21 @@ public:
   // "connecting" state in its title. Used by reconnection attempts.
   //
   void showConnecting();
+
+  //
+  // Events of the top-level frame (the shell), which only a top-level
+  // window receives.
+  //
+  // WM_COMMAND or WM_SYSCOMMAND; returns true when the command is handled.
+  bool onFrameCommand(WPARAM wParam, LPARAM lParam);
+  // WM_ACTIVATE: the keyboard hook follows the activation of the frame.
+  void onFrameActivate(WPARAM wParam);
+  // WM_SIZING: the user sizes the frame, which keeps that size from now on.
+  void onFrameSizing();
+  void onFrameDisplayChange();
+  void onFrameDpiChanged(WPARAM wParam, LPARAM lParam);
+  // Window that takes the keyboard focus (the remote desktop).
+  HWND getFocusHwnd() const;
 
   static const int WM_USER_ERROR = WM_USER + 1;
   static const int WM_USER_STOP = WM_USER + 2;
@@ -166,9 +183,7 @@ protected:
   ViewerMenu m_menu;
   ConnectionData *m_conData;
 
-  // The top-level frame of the session. Today the session window is its own
-  // frame (m_legacyHost).
-  LegacyFrameHost m_legacyHost;
+  // The top-level frame (shell) that hosts the session view.
   SessionHost *m_host;
 
   // This variable save Exception after call onError().
@@ -180,7 +195,7 @@ protected:
   bool m_isFullScr;
 
 
-  // Flag is set after recv first message WM_SIZING.
+  // Flag is set after the first WM_SIZING of the frame.
   bool m_sizeIsChanged;
   // The first connection of the window opens it maximized and fitted.
   bool m_isFirstConnection;

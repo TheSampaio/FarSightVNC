@@ -21,6 +21,8 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-11: window class of the session view hosted by the shell window.
+//
 
 #ifndef _NAMING_DEFS_H_
 #define _NAMING_DEFS_H_
@@ -60,6 +62,8 @@ public:
   static const TCHAR TVN_WINDOW_CLASS_NAME[];
   static const TCHAR TVN_WINDOW_TITLE_NAME[];
   static const TCHAR TVN_SUB_WINDOW_TITLE_NAME[];
+  // Session view, a child of the shell window (class TVN_WINDOW_CLASS_NAME).
+  static const TCHAR FSV_SESSION_VIEW_CLASS_NAME[];
 };
 
 #endif

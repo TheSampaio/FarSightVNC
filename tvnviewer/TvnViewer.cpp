@@ -22,9 +22,11 @@
 //-------------------------------------------------------------------------
 //
 // Modified for FarSightVNC on 2026-11-01: message loop translates remote keyboard input after dispatch.
+// Modified for FarSightVNC on 2026-11-11: every session is shown in its own shell window, owned by the application.
 //
 
 #include "TvnViewer.h"
+#include "shell/SessionTab.h"
 #include "network/socket/WindowsSocket.h"
 #include "util/ResourceLoader.h"
 #include "resource.h"
@@ -61,6 +63,7 @@ TvnViewer::~TvnViewer()
 
   m_logWriter.info(_T("Viewer collector: destroy all instances"));
   m_instances.destroyAllInstances();
+  m_shells.clear();
 
   delete m_loginDialog;
   delete m_trayIcon;
@@ -149,10 +152,36 @@ void TvnViewer::runInstance(const StringStorage *hostName, const ConnectionConfi
 
 void TvnViewer::runInstance(ConnectionData *conData, const ConnectionConfig *config)
 {
-  ViewerInstance *viewerInst = new ViewerInstance(this, conData, config);
+  ShellWindow *shell = createShell();
+  startInstance(new ViewerInstance(this, conData, config, shell), shell);
+}
+
+ShellWindow *TvnViewer::createShell()
+{
+  m_shells.push_back(std::unique_ptr<ShellWindow>(
+    new ShellWindow(m_viewerWindowClassName.getString(),
+                    ViewerConfig::getInstance()->getLogger())));
+  return m_shells.back().get();
+}
+
+void TvnViewer::startInstance(ViewerInstance *viewerInst, ShellWindow *shell)
+{
+  shell->attachTab(std::unique_ptr<ShellTab>(new SessionTab(viewerInst)));
   viewerInst->start();
 
   addInstance(viewerInst);
+}
+
+void TvnViewer::deleteDeadShells()
+{
+  std::list<std::unique_ptr<ShellWindow> >::iterator iter = m_shells.begin();
+  while (iter != m_shells.end()) {
+    if ((*iter)->isDestroyed()) {
+      iter = m_shells.erase(iter);
+    } else {
+      ++iter;
+    }
+  }
 }
 
 bool TvnViewer::isVisibleLoginDialog() const
@@ -219,10 +248,16 @@ void TvnViewer::registerViewerWindowClass()
   m_viewerWndClass.hbrBackground = GetSysColorBrush(COLOR_WINDOW);
 
   RegisterClass(&m_viewerWndClass);
+
+  // The session view, a child of the shell window (m_viewerWndClass).
+  m_sessionViewWndClass = m_viewerWndClass;
+  m_sessionViewWndClass.lpszClassName = WindowNames::FSV_SESSION_VIEW_CLASS_NAME;
+  RegisterClass(&m_sessionViewWndClass);
 }
 
 void TvnViewer::unregisterViewerWindowClass()
 {
+  UnregisterClass(m_sessionViewWndClass.lpszClassName, GetModuleHandle(0));
   UnregisterClass(m_viewerWndClass.lpszClassName, GetModuleHandle(0));
 }
 
@@ -325,12 +360,14 @@ void TvnViewer::newListeningConnection()
   if (m_conListener != 0) {
     SocketIPv4 *socket = m_conListener->getNewConnection();
     while (socket != 0) {
+      // Each incoming connection gets its own shell window.
+      ShellWindow *shell = createShell();
       ViewerInstance *viewerInst = new ViewerInstance(this,
                                                       &connectionData,
                                                       &connectionConfig,
+                                                      shell,
                                                       socket);
-      viewerInst->start();
-      addInstance(viewerInst);
+      startInstance(viewerInst, shell);
 
       socket = m_conListener->getNewConnection();
     }
@@ -341,8 +378,12 @@ bool TvnViewer::onTimer(WPARAM idTimer)
 {
   switch (idTimer) {
   case TIMER_DELETE_DEAD_INSTANCE:
+    // The sessions go first: a dead shell may still be the host of a
+    // stopped session.
     m_instances.deleteDeadInstances();
+    deleteDeadShells();
     if (m_instances.empty() &&
+        m_shells.empty() &&
         !isVisibleLoginDialog() &&
         !m_isListening) {
       shutdown();

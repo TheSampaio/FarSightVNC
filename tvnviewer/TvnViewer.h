@@ -21,6 +21,8 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-11: every session is shown in its own shell window, owned by the application.
+//
 
 #ifndef _TVN_VIEWER_H_
 #define _TVN_VIEWER_H_
@@ -32,11 +34,13 @@
 #include "LoginDialog.h"
 #include "OptionsDialog.h"
 #include "ViewerCollector.h"
+#include "shell/ShellWindow.h"
 #include "win-system/WindowsApplication.h"
 
 #include "log-writer/LogWriter.h"
 #include "thread/AutoLock.h"
 
+#include <list>
 #include <map>
 #include <memory>
 
@@ -139,8 +143,16 @@ protected:
   void unregisterViewerWindowClass();
   static LRESULT CALLBACK wndProcViewer(HWND hWnd, UINT msg, WPARAM wparam, LPARAM lparam);
 
+  // Starts a session in a new shell window.
   void runInstance(ConnectionData *conData, const ConnectionConfig *config);
   void runInstance(const StringStorage *hostName, const ConnectionConfig *config);
+
+  // Creates a hidden shell window, owned by the application.
+  ShellWindow *createShell();
+  // Shows the session of viewerInst in shell and starts it.
+  void startInstance(ViewerInstance *viewerInst, ShellWindow *shell);
+  // Deletes the shells whose window was destroyed.
+  void deleteDeadShells();
 
   // This method return true, if login dialog is visible.
   bool isVisibleLoginDialog() const;
@@ -148,6 +160,9 @@ protected:
   bool onTimer(WPARAM idTimer);
 
   ViewerCollector m_instances;
+  // Top-level windows of the sessions. A shell is deleted after its window
+  // is destroyed (deleteDeadShells()).
+  std::list<std::unique_ptr<ShellWindow> > m_shells;
 
   // class name of viewer-window
   StringStorage m_viewerWindowClassName;
@@ -171,6 +186,7 @@ private:
   std::unique_ptr<UpdateController> m_updateController;
 
   WNDCLASS m_viewerWndClass;
+  WNDCLASS m_sessionViewWndClass;
 };
 
 #endif

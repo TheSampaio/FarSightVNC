@@ -28,6 +28,7 @@
 // Modified for FarSightVNC on 2026-11-04: "FarSightVNC | <host>" title; system shortcuts go to the server in windowed mode too.
 // Modified for FarSightVNC on 2026-11-07: a session opened in full screen no longer freezes the viewer (window work moved to the window thread).
 // Modified for FarSightVNC on 2026-11-11: frame operations (title, full screen, size, DPI, end of session) go through SessionHost.
+// Modified for FarSightVNC on 2026-11-11: child window (FsvSessionView) of the shell window; frame events come from the shell, dialogs are owned by it.
 //
 
 #include "config-lib/IniFileSettingsManager.h"
@@ -46,6 +47,7 @@
 ViewerWindow::ViewerWindow(WindowsApplication *application,
                            ConnectionData *conData,
                            ConnectionConfig *conConf,
+                           SessionHost *host,
                            Logger *logger)
 : m_ccsm(RegistryPaths::VIEWER_PATH,
          conData->getHost().getString()),
@@ -58,8 +60,7 @@ ViewerWindow::ViewerWindow(WindowsApplication *application,
   m_viewerCore(0),
   m_fileTransfer(0),
   m_conData(conData),
-  m_legacyHost(this, &m_logWriter),
-  m_host(&m_legacyHost),
+  m_host(host),
   m_dsktWnd(&m_logWriter, conConf),
   m_isConnected(false),
   m_connectionState(STATE_CONNECTING),
@@ -85,11 +86,14 @@ ViewerWindow::ViewerWindow(WindowsApplication *application,
   m_standardScale.push_back(400);
 
   StringStorage windowClass = WindowNames::TVN_WINDOW_CLASS_NAME;
+  StringStorage viewClass = WindowNames::FSV_SESSION_VIEW_CLASS_NAME;
   StringStorage titleName = WindowNames::TVN_WINDOW_TITLE_NAME;
   StringStorage subTitleName = WindowNames::TVN_SUB_WINDOW_TITLE_NAME;
 
-  setClass(&windowClass);
-  createWindow(&titleName, WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN | WS_CLIPSIBLINGS);
+  // The session view fills the client area of the shell (the frame).
+  setClass(&viewClass);
+  createWindow(&titleName, WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN | WS_CLIPSIBLINGS,
+               m_host->hostHwnd(), 0, 0, 0, 0);
 
   m_dsktWnd.setClass(&windowClass);
   m_dsktWnd.createWindow(&subTitleName,
@@ -128,10 +132,10 @@ void ViewerWindow::setRemoteViewerCore(RemoteViewerCore *pCore)
 
 bool ViewerWindow::onCreate(LPCREATESTRUCT lps)
 {
-  m_control.setWindow(m_hWnd);
+  // Dialogs of the session are owned by the frame.
+  m_control.setWindow(m_host->rootHwnd());
 
   setClassCursor(LoadCursor(NULL, IDC_ARROW));
-  loadIcon(IDI_APPICON);
   m_toolbar.loadToolBarfromRes(IDB_TOOLBAR);
   m_toolbar.setButtonsRange(IDS_TB_NEWCONNECTION);
   m_toolbar.setViewAutoButtons(4, ToolBar::TB_Style_sep);
@@ -144,7 +148,9 @@ bool ViewerWindow::onCreate(LPCREATESTRUCT lps)
   if (dpi != DpiUtils::DEFAULT_DPI) {
     m_toolbar.setDpi(dpi);
   }
-  m_menu.getSystemMenu(getHWnd());
+  // The session menu lives in the system menu of the frame, which forwards
+  // its commands (onFrameCommand()).
+  m_menu.getSystemMenu(m_host->rootHwnd());
   m_menu.loadMenu();
   addDisplayMenus();
   applySettings();
@@ -273,7 +279,10 @@ void ViewerWindow::changeCursor(int type)
       hcur = rLoader->loadStandardCursor(IDC_ARROW);
       break;
   }
-  setClassCursor(hcur);
+  // The cursor of the remote desktop is the class cursor of its window.
+  if (m_dsktWnd.getHWnd() != 0) {
+    m_dsktWnd.setClassCursor(hcur);
+  }
 }
 
 bool ViewerWindow::onSysCommand(WPARAM wParam, LPARAM lParam)
@@ -284,9 +293,6 @@ bool ViewerWindow::onSysCommand(WPARAM wParam, LPARAM lParam)
 bool ViewerWindow::onMessage(UINT message, WPARAM wParam, LPARAM lParam)
 {
   switch (message) {
-  case WM_SIZING:
-    m_sizeIsChanged = true;
-    return false;
   case WM_NCDESTROY:
     m_stopped = true;
     return true;
@@ -305,37 +311,12 @@ bool ViewerWindow::onMessage(UINT message, WPARAM wParam, LPARAM lParam)
     return onCreate((LPCREATESTRUCT) lParam);
   case WM_SIZE:
     return onSize(wParam, lParam);
-  case WM_DPICHANGED:
-    return onDpiChanged(wParam, lParam);
   case WM_USER_AUTH_ERROR:
     return onAuthError(wParam);
   case WM_USER_ERROR:
     return onError();
   case WM_USER_DISCONNECT:
     return onDisconnect();
-  case WM_ACTIVATE:
-    // The keyboard hook sends system shortcuts (Win, Alt+Tab, Ctrl+Esc...)
-    // to the server while the viewer is the active window, windowed or not.
-    if (LOWORD(wParam) == WA_ACTIVE || LOWORD(wParam) == WA_CLICKACTIVE) {
-      // full screen viewer can be minimized from other screen
-      if (IsIconic(m_host->rootHwnd())) {
-        return true;
-      }
-      try {
-        // Registration of keyboard hook.
-        m_winHooks.registerKeyboardHook(this);
-        // Switching off ignoring win key.
-        m_dsktWnd.setWinKeyIgnore(false);
-      } catch (Exception &e) {
-        m_logWriter.error(_T("%s"), e.getMessage());
-      }
-    } else if (LOWORD(wParam) == WA_INACTIVE) {
-      // Unregistration of keyboard hook.
-      m_winHooks.unregisterKeyboardHook(this);
-      // Switching on ignoring win key.
-      m_dsktWnd.setWinKeyIgnore(true);
-    }
-    return true;
   case WM_SETFOCUS:
     return onFocus(wParam);
   case WM_ERASEBKGND:
@@ -344,12 +325,59 @@ bool ViewerWindow::onMessage(UINT message, WPARAM wParam, LPARAM lParam)
     return onKillFocus(wParam);
   case WM_TIMER:
     return onTimer(wParam);
-  case WM_DISPLAYCHANGE:
-    onDisplayChange();
-    adjustWindowSize();
-
   }
   return false;
+}
+
+bool ViewerWindow::onFrameCommand(WPARAM wParam, LPARAM lParam)
+{
+  return onCommand(wParam, lParam);
+}
+
+void ViewerWindow::onFrameActivate(WPARAM wParam)
+{
+  // The keyboard hook sends system shortcuts (Win, Alt+Tab, Ctrl+Esc...)
+  // to the server while the viewer is the active window, windowed or not.
+  if (LOWORD(wParam) == WA_ACTIVE || LOWORD(wParam) == WA_CLICKACTIVE) {
+    // full screen viewer can be minimized from other screen
+    if (IsIconic(m_host->rootHwnd())) {
+      return;
+    }
+    try {
+      // Registration of keyboard hook.
+      m_winHooks.registerKeyboardHook(this);
+      // Switching off ignoring win key.
+      m_dsktWnd.setWinKeyIgnore(false);
+    } catch (Exception &e) {
+      m_logWriter.error(_T("%s"), e.getMessage());
+    }
+  } else if (LOWORD(wParam) == WA_INACTIVE) {
+    // Unregistration of keyboard hook.
+    m_winHooks.unregisterKeyboardHook(this);
+    // Switching on ignoring win key.
+    m_dsktWnd.setWinKeyIgnore(true);
+  }
+}
+
+void ViewerWindow::onFrameSizing()
+{
+  m_sizeIsChanged = true;
+}
+
+void ViewerWindow::onFrameDisplayChange()
+{
+  onDisplayChange();
+  adjustWindowSize();
+}
+
+void ViewerWindow::onFrameDpiChanged(WPARAM wParam, LPARAM lParam)
+{
+  onDpiChanged(wParam, lParam);
+}
+
+HWND ViewerWindow::getFocusHwnd() const
+{
+  return m_dsktWnd.getHWnd();
 }
 
 bool ViewerWindow::onEraseBackground(HDC hdc)
@@ -385,7 +413,7 @@ void ViewerWindow::dialogConnectionOptions()
   dialog.setConnected();
   dialog.setConnectionConfig(m_conConf);
   // FIXME: Removed Control from this code and another
-  Control control = getHWnd();
+  Control control = m_host->rootHwnd();
   dialog.setParent(&control);
 
   if (dialog.showModal() == 1) {
@@ -418,7 +446,7 @@ void ViewerWindow::dialogConnectionInfo()
              geometry.getHeight(),
              pixelSize,
              &kbdName[0]);
-  MessageBox(getHWnd(),
+  MessageBox(m_host->rootHwnd(),
              str.getString(),
              StringTable::getString(IDS_CONNECTION_INFO_CAPTION),
              MB_OK | MB_ICONINFORMATION);
@@ -565,7 +593,7 @@ void ViewerWindow::commandSaveSession()
   OPENFILENAME ofn;
   ZeroMemory(&ofn, sizeof(ofn));
   ofn.lStructSize = sizeof(ofn);
-  ofn.hwndOwner = m_hWnd;
+  ofn.hwndOwner = m_host->rootHwnd();
   ofn.lpstrFilter = &filter.front();
   ofn.lpstrDefExt = _T("vnc");
   ofn.lpstrFile= fileName;
@@ -586,7 +614,7 @@ void ViewerWindow::commandSaveSession()
       sm.setUINT(_T("port"), m_conData->getPort());
 
       if (m_conData->isSetPassword()) {
-        int whetherToSavePass = MessageBox(m_hWnd,
+        int whetherToSavePass = MessageBox(m_host->rootHwnd(),
           StringTable::getString(IDS_QUESTION_SAVE_PASSWORD),
           StringTable::getString(IDS_SECURITY_WARNING_CAPTION),
           MB_YESNO);
@@ -1094,7 +1122,7 @@ bool ViewerWindow::offerReconnect(bool sessionWasEstablished, const StringStorag
   if (!autoRetry) {
     details.appendString(_T("\n\nNo automatic attempts are left."));
   }
-  HWND owner = IsWindowVisible(getHWnd()) ? getHWnd() : 0;
+  HWND owner = IsWindowVisible(m_host->rootHwnd()) ? m_host->rootHwnd() : 0;
   bool reconnect = ReconnectDialog::show(owner,
                                          formatWindowName().getString(),
                                          instruction.getString(),
@@ -1123,7 +1151,7 @@ bool ViewerWindow::onDisconnect()
   if (offerReconnect(m_isConnected, &m_disconnectMessage)) {
     return true;
   }
-  MessageBox(getHWnd(),
+  MessageBox(m_host->rootHwnd(),
              m_disconnectMessage.getString(),
              formatWindowName().getString(),
              MB_OK);
@@ -1172,7 +1200,7 @@ bool ViewerWindow::onError()
   }
   StringStorage error;
   error.format(_T("Error in %s: %s"), ProductNames::VIEWER_PRODUCT_NAME, m_error.getMessage());
-  MessageBox(getHWnd(),
+  MessageBox(m_host->rootHwnd(),
              error.getString(),
              formatWindowName().getString(),
              MB_OK | MB_ICONERROR);
