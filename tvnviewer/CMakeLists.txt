@@ -41,7 +41,9 @@ fsv_configure_executable(tvnviewer)
 set_target_properties(tvnviewer PROPERTIES OUTPUT_NAME fsvncviewer)
 target_include_directories(tvnviewer PRIVATE ${FSV_ROOT})
 
-# The libraries of the ProjectReference items; comctl32 comes from AdditionalDependencies.
+# The libraries of the ProjectReference items; comctl32 and the Direct2D,
+# DirectWrite and DWM system libraries of the window chrome come from
+# AdditionalDependencies.
 target_link_libraries(tvnviewer PRIVATE
   client-config-lib
   config-lib
@@ -61,7 +63,10 @@ target_link_libraries(tvnviewer PRIVATE
   viewer-core
   win-system
   zlib
-  comctl32)
+  comctl32
+  d2d1
+  dwrite
+  dwmapi)
 
 # Common Controls 6 dependency (AdditionalManifestDependencies); dpi-aware.manifest
 # above is merged into the embedded manifest by mt.exe (AdditionalManifestFiles).

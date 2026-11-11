@@ -4,6 +4,7 @@ add_library(gui STATIC
   BaseDialog.cpp
   BaseWindow.cpp
   DibFrameBuffer.cpp
+  d2d/ChromeRenderer.cpp
   drawing/Bitmap.cpp
   drawing/BitmapGraphics.cpp
   drawing/Brush.cpp
