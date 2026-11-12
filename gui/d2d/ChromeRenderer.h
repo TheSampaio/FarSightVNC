@@ -16,6 +16,8 @@
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //
+// Modified for FarSightVNC on 2026-11-12: drawSvgIcon() draws the embedded Lucide SVG icons (SvgIconCache).
+//
 
 #ifndef _CHROME_RENDERER_H_
 #define _CHROME_RENDERER_H_
@@ -27,6 +29,8 @@
 #include <vector>
 
 #include "ThemeTokens.h"
+
+class SvgIconCache;
 
 // Draws the window chrome (title bar, toolbar, pages) of one window with
 // Direct2D and DirectWrite. Coordinates and sizes are in DIPs; the render
@@ -84,10 +88,15 @@ public:
   // trimmed (notes and descriptions of the pages).
   void drawParagraph(const wchar_t *text, const D2D1_RECT_F &rect, ThemeColor color,
                      float fontSize, DWRITE_FONT_WEIGHT weight = DWRITE_FONT_WEIGHT_NORMAL);
-  // Draws an icon centered in box. For now the glyph is a short text
-  // placeholder; the icon phase draws Lucide SVG documents here when
-  // supportsSvgGlyphs() is true and keeps the text as the fallback.
+  // Draws a short text placeholder of an icon centered in box: the fallback
+  // of drawSvgIcon() and drawIconGlyph().
   void drawGlyph(const wchar_t *glyph, const D2D1_RECT_F &box, ThemeColor color);
+  // Draws the Lucide icon of the RCDATA resource resourceId (vendor/lucide/)
+  // in color, centered in box and scaled to it (DIPs, so at the DPI of the
+  // window). Returns false and draws nothing when the system cannot draw SVG
+  // (before Windows 10 1703) or the icon cannot be parsed; the caller then
+  // draws a fallback glyph.
+  bool drawSvgIcon(int resourceId, const D2D1_RECT_F &box, ThemeColor color);
   // Draws codepoint of the system icon font (Segoe Fluent Icons on Windows
   // 11, Segoe MDL2 Assets on Windows 10) centered in box, size in DIPs.
   // Returns false and draws nothing when neither font is installed; the
@@ -155,6 +164,8 @@ private:
   ID2D1SolidColorBrush *m_brush;
   // -1: not checked yet for the current target.
   int m_svgSupport;
+  // Parsed SVG icons of the current target (released with it).
+  SvgIconCache *m_svgIcons;
 };
 
 #endif

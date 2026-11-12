@@ -16,20 +16,15 @@
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //
+// Modified for FarSightVNC on 2026-11-12: drawSvgIcon() draws the embedded Lucide SVG icons (SvgIconCache).
+//
 
 #include "ChromeRenderer.h"
+#include "SvgIcons.h"
 
 #include <math.h>
 
 namespace {
-
-// IID of ID2D1DeviceContext5 (d2d1_3.h, Windows 10 1703). util/winhdr.h fixes
-// WINVER 0x0501, under which the SDK hides that interface and the DirectWrite
-// types it uses, so only its IID is declared here for the run-time check of
-// supportsSvgGlyphs(). The icon phase, which calls it, compiles its source
-// with a newer WINVER (as ReconnectDialog.cpp does).
-const IID IID_D2D1DeviceContext5 =
-  { 0x7836d248, 0x68cc, 0x4df6, { 0xb9, 0xe8, 0xde, 0x99, 0x1b, 0xf6, 0x2e, 0xb7 } };
 
 template <class T> void safeRelease(T *&object)
 {
@@ -105,7 +100,8 @@ ChromeRenderer::ChromeRenderer()
   m_layeredBitmap(0),
   m_layeredOldBitmap(0),
   m_brush(0),
-  m_svgSupport(-1)
+  m_svgSupport(-1),
+  m_svgIcons(new SvgIconCache)
 {
   m_layeredSize.cx = m_layeredSize.cy = 0;
   m_layeredBitmapSize.cx = m_layeredBitmapSize.cy = 0;
@@ -114,6 +110,7 @@ ChromeRenderer::ChromeRenderer()
 ChromeRenderer::~ChromeRenderer()
 {
   discardTarget();
+  delete m_svgIcons;
   releaseLayeredBitmap();
   for (size_t i = 0; i < m_formats.size(); i++) {
     safeRelease(m_formats[i].format);
@@ -253,6 +250,8 @@ bool ChromeRenderer::createTarget()
 
 void ChromeRenderer::discardTarget()
 {
+  // The SVG documents belong to the device of the target.
+  m_svgIcons->release();
   safeRelease(m_brush);
   m_target = 0;
   safeRelease(m_hwndTarget);
@@ -510,9 +509,6 @@ float ChromeRenderer::measureParagraph(const wchar_t *text, float width, float f
 
 void ChromeRenderer::drawGlyph(const wchar_t *glyph, const D2D1_RECT_F &box, ThemeColor color)
 {
-  // Icon phase: when supportsSvgGlyphs(), look up the SVG document of the
-  // glyph and draw it with ID2D1DeviceContext5::DrawSvgDocument, keeping
-  // this text placeholder as the fallback of older systems.
   float size = (box.bottom - box.top) * 0.75f;
   drawText(glyph, box, color, size, DWRITE_FONT_WEIGHT_SEMI_BOLD,
            DWRITE_TEXT_ALIGNMENT_CENTER);
@@ -541,10 +537,12 @@ bool ChromeRenderer::supportsSvgGlyphs()
     if (m_target == 0) {
       return false;
     }
-    IUnknown *context = 0;
-    m_svgSupport = SUCCEEDED(m_target->QueryInterface(IID_D2D1DeviceContext5,
-                                                      reinterpret_cast<void **>(&context))) ? 1 : 0;
-    safeRelease(context);
+    m_svgSupport = m_svgIcons->attach(m_target) ? 1 : 0;
   }
   return m_svgSupport == 1;
+}
+
+bool ChromeRenderer::drawSvgIcon(int resourceId, const D2D1_RECT_F &box, ThemeColor color)
+{
+  return supportsSvgGlyphs() && m_svgIcons->draw(resourceId, box, color);
 }

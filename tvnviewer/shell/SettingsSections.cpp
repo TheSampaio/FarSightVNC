@@ -16,6 +16,8 @@
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //
+// Modified for FarSightVNC on 2026-11-12: Third-party notices (Lucide) in About.
+//
 
 #include "SettingsSections.h"
 
@@ -54,6 +56,25 @@ const wchar_t kLicense[] =
   L"This program is free software; you can redistribute it and/or modify it under the "
   L"terms of the GNU General Public License, version 2 or (at your option) any later "
   L"version. It comes WITH ABSOLUTELY NO WARRANTY; see the license for details.";
+// Notice of Lucide (vendor/lucide/LICENSE of lucide-static 0.468.0): ISC, with
+// portions from Feather (MIT). The copyright line is kept as in that file and
+// must stay in sync with docs/shipping/LEIAME.txt and README.txt.
+const wchar_t kLucideSource[] =
+  L"Icons: Lucide (https://lucide.dev), lucide-static 0.468.0, ISC License.";
+const wchar_t kLucideCopyright[] =
+  L"Copyright (c) for portions of Lucide are held by Cole Bemis 2013-2022 as part of "
+  L"Feather (MIT). All other copyright (c) for Lucide are held by Lucide Contributors 2022.";
+const wchar_t kLucidePermission[] =
+  L"Permission to use, copy, modify, and/or distribute this software for any purpose with "
+  L"or without fee is hereby granted, provided that the above copyright notice and this "
+  L"permission notice appear in all copies.";
+const wchar_t kLucideDisclaimer[] =
+  L"THE SOFTWARE IS PROVIDED \"AS IS\" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD "
+  L"TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO "
+  L"EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL "
+  L"DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER "
+  L"IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN "
+  L"CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.";
 
 struct SectionInfo
 {
@@ -587,6 +608,11 @@ public:
     form->note(L"Source code: https://github.com/TheSampaio/FarSightVNC");
     form->button(CTL_WEB_SITE, L"Visit the web site");
     form->button(CTL_LICENSE, L"GPL license", true);
+    form->header(L"Third-party notices");
+    form->note(kLucideSource);
+    form->note(kLucideCopyright);
+    form->note(kLucidePermission);
+    form->note(kLucideDisclaimer);
   }
 
   virtual void onCommand(UINT controlId, UINT notification)

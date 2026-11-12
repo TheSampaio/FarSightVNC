@@ -16,8 +16,12 @@
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //
+// Modified for FarSightVNC on 2026-11-12: "+" button (new connection, Lucide icon) right after the tab.
+//
 
 #include "TitleBar.h"
+
+#include "../resource.h"
 
 namespace {
 
@@ -32,6 +36,7 @@ const float kNewTabWidth = 28.0f;
 const float kTabVerticalMargin = 6.0f;
 const float kCaptionGlyphSize = 10.0f;
 const float kSettingsGlyphSize = 14.0f;
+const float kNewTabIconSize = 16.0f;
 
 // Codepoints of Segoe Fluent Icons / Segoe MDL2 Assets. The icon phase
 // replaces them with Lucide icons.
@@ -40,6 +45,8 @@ const wchar_t kGlyphMaximize = 0xE922;
 const wchar_t kGlyphRestore = 0xE923;
 const wchar_t kGlyphClose = 0xE8BB;
 const wchar_t kGlyphSettings = 0xE713;
+// Fallback of the Lucide "plus" icon (Windows 10 before 1703).
+const wchar_t kGlyphAdd = 0xE710;
 
 bool contains(const D2D1_RECT_F &rect, float x, float y)
 {
@@ -189,6 +196,8 @@ const D2D1_RECT_F &TitleBar::partRect(TitleBarPart part) const
     return m_maximize;
   case TITLE_BAR_CLOSE:
     return m_close;
+  case TITLE_BAR_NEW_TAB:
+    return m_tabs.newTabSlot();
   default:
     return m_empty;
   }
@@ -255,6 +264,29 @@ void TitleBar::paintCaptionButton(ChromeRenderer *renderer, TitleBarPart part, w
   }
 }
 
+void TitleBar::paintNewTabButton(ChromeRenderer *renderer, bool active) const
+{
+  const ThemeTokens &theme = kLightTheme;
+  const D2D1_RECT_F &rect = m_tabs.newTabSlot();
+  if (rect.right - rect.left <= 0.0f) {
+    return;
+  }
+  ThemeColor background;
+  if (buttonBackground(TITLE_BAR_NEW_TAB, &background)) {
+    renderer->fillRoundRect(rect, theme.cornerRadius, background);
+  }
+  ThemeColor glyph = active ? theme.text : theme.mutedText;
+  float cx = (rect.left + rect.right) / 2.0f;
+  float cy = (rect.top + rect.bottom) / 2.0f;
+  float half = kNewTabIconSize / 2.0f;
+  D2D1_RECT_F icon = D2D1::RectF(cx - half, cy - half, cx + half, cy + half);
+  // The Lucide icon, else the system icon font, else a text "+".
+  if (!renderer->drawSvgIcon(IDR_LUCIDE_PLUS, icon, glyph) &&
+      !renderer->drawIconGlyph(kGlyphAdd, rect, glyph, kNewTabIconSize - 2.0f)) {
+    renderer->drawGlyph(L"+", rect, glyph);
+  }
+}
+
 void TitleBar::paint(ChromeRenderer *renderer, bool active, bool maximized) const
 {
   const ThemeTokens &theme = kLightTheme;
@@ -286,6 +318,7 @@ void TitleBar::paint(ChromeRenderer *renderer, bool active, bool maximized) cons
     }
   }
 
+  paintNewTabButton(renderer, active);
   paintCaptionButton(renderer, TITLE_BAR_SETTINGS, kGlyphSettings, L"\x2699", active);
   paintCaptionButton(renderer, TITLE_BAR_MINIMIZE, kGlyphMinimize, L"\x2014", active);
   paintCaptionButton(renderer, TITLE_BAR_MAXIMIZE, maximized ? kGlyphRestore : kGlyphMaximize,

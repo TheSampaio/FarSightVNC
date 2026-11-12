@@ -16,6 +16,8 @@
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //
+// Modified for FarSightVNC on 2026-11-12: "+" new connection button of the title bar (client button, tooltip).
+//
 
 #include "ShellWindow.h"
 #include "HomeTab.h"
@@ -23,6 +25,8 @@
 #include "gui/DpiUtils.h"
 #include "../NamingDefs.h"
 #include "../resource.h"
+
+#include <CommCtrl.h>
 
 #ifndef SM_CXPADDEDBORDER
 #define SM_CXPADDEDBORDER 92
@@ -47,6 +51,10 @@ const wchar_t kSettingsTitle[] = L"Settings";
 SettingsSectionId s_lastSection = SETTINGS_APPEARANCE;
 const float kHomeWidth = 900.0f;
 const float kHomeHeight = 640.0f;
+
+// Tooltip of the "+" button.
+const wchar_t kNewConnectionTooltip[] = L"New connection (Ctrl+N)";
+const UINT_PTR kNewTabToolId = 1;
 
 // MARGINS of uxtheme.h, declared here because util/winhdr.h hides the DWM
 // API (WINVER 0x0501); DwmExtendFrameIntoClientArea is loaded at run time.
@@ -97,6 +105,12 @@ bool isWindowButton(TitleBarPart part)
   return part == TITLE_BAR_MINIMIZE || part == TITLE_BAR_MAXIMIZE || part == TITLE_BAR_CLOSE;
 }
 
+// Buttons in the client area of the shell (the others are non-client).
+bool isClientButton(TitleBarPart part)
+{
+  return part == TITLE_BAR_SETTINGS || part == TITLE_BAR_NEW_TAB;
+}
+
 }
 
 void TabModel::add(std::unique_ptr<ShellTab> tab)
@@ -128,6 +142,7 @@ ShellWindow::ShellWindow(const TCHAR *windowClassName, Logger *logger, HomeActio
   m_sessionWasShown(false),
   m_isFullscreen(false),
   m_baseProc(0),
+  m_tooltip(0),
   m_frameActive(false),
   m_trackingMouse(false),
   m_trackingNcMouse(false)
@@ -147,6 +162,7 @@ ShellWindow::ShellWindow(const TCHAR *windowClassName, Logger *logger, HomeActio
   m_baseProc = reinterpret_cast<WNDPROC>(
     SetWindowLongPtr(m_hWnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(frameProc)));
   m_chrome.attach(m_hWnd, DpiUtils::getDpiForWindow(m_hWnd));
+  createTooltip();
   updateDwmFrame();
   // Recalculates the frame without the caption (WM_NCCALCSIZE).
   SetWindowPos(m_hWnd, 0, 0, 0, 0, 0,
@@ -203,6 +219,10 @@ bool ShellWindow::onFrameMessage(UINT message, WPARAM wParam, LPARAM lParam, LRE
     closeSettings();
     *result = 0;
     return true;
+  }
+  if (m_tooltip != 0 && message >= WM_MOUSEFIRST && message <= WM_MOUSELAST) {
+    MSG relay = { m_hWnd, message, wParam, lParam, 0, { 0, 0 } };
+    SendMessage(m_tooltip, TTM_RELAYEVENT, 0, reinterpret_cast<LPARAM>(&relay));
   }
   switch (message) {
   case WM_NCCALCSIZE:
@@ -282,20 +302,20 @@ bool ShellWindow::onFrameMessage(UINT message, WPARAM wParam, LPARAM lParam, LRE
   }
   case WM_MOUSEMOVE:
   {
-    // Only the settings button of the bar is in the client area; the rest
-    // of the client area belongs to the session view.
+    // Only the settings and "+" buttons of the bar are in the client area;
+    // the rest of the client area belongs to the session view.
     TitleBarPart part = partAtClientPoint(lParam);
-    if (part == TITLE_BAR_SETTINGS) {
+    if (isClientButton(part)) {
       trackMouseLeave(false);
     }
-    if (m_titleBar.setHover(part == TITLE_BAR_SETTINGS ? part : TITLE_BAR_NONE)) {
+    if (m_titleBar.setHover(isClientButton(part) ? part : TITLE_BAR_NONE)) {
       invalidateTitleBar();
     }
     return false;
   }
   case WM_MOUSELEAVE:
     m_trackingMouse = false;
-    if (m_titleBar.hover() == TITLE_BAR_SETTINGS && m_titleBar.pressed() == TITLE_BAR_NONE) {
+    if (isClientButton(m_titleBar.hover()) && m_titleBar.pressed() == TITLE_BAR_NONE) {
       m_titleBar.setHover(TITLE_BAR_NONE);
       invalidateTitleBar();
     }
@@ -303,28 +323,35 @@ bool ShellWindow::onFrameMessage(UINT message, WPARAM wParam, LPARAM lParam, LRE
     return true;
   case WM_LBUTTONDOWN:
   case WM_LBUTTONDBLCLK:
-    if (partAtClientPoint(lParam) != TITLE_BAR_SETTINGS) {
+  {
+    TitleBarPart part = partAtClientPoint(lParam);
+    if (!isClientButton(part)) {
       return false;
     }
-    m_titleBar.setPressed(TITLE_BAR_SETTINGS);
+    m_titleBar.setPressed(part);
+    m_titleBar.setHover(part);
     SetCapture(m_hWnd);
     invalidateTitleBar();
     *result = 0;
     return true;
+  }
   case WM_LBUTTONUP:
-    if (m_titleBar.pressed() != TITLE_BAR_SETTINGS) {
+  {
+    TitleBarPart pressed = m_titleBar.pressed();
+    if (!isClientButton(pressed)) {
       return false;
     }
     m_titleBar.setPressed(TITLE_BAR_NONE);
     ReleaseCapture();
     invalidateTitleBar();
-    if (partAtClientPoint(lParam) == TITLE_BAR_SETTINGS) {
-      executeTitleBarPart(TITLE_BAR_SETTINGS);
+    if (partAtClientPoint(lParam) == pressed) {
+      executeTitleBarPart(pressed);
     }
     *result = 0;
     return true;
+  }
   case WM_CAPTURECHANGED:
-    if (m_titleBar.pressed() == TITLE_BAR_SETTINGS) {
+    if (isClientButton(m_titleBar.pressed())) {
       m_titleBar.setPressed(TITLE_BAR_NONE);
       invalidateTitleBar();
     }
@@ -415,6 +442,7 @@ LRESULT ShellWindow::hitTest(WPARAM wParam, LPARAM lParam)
   case TITLE_BAR_CLOSE:
     return HTCLOSE;
   case TITLE_BAR_SETTINGS:
+  case TITLE_BAR_NEW_TAB:
     return HTCLIENT;
   default:
     // Logo, tab and empty space drag the window; a double click maximizes
@@ -478,6 +506,10 @@ void ShellWindow::executeTitleBarPart(TitleBarPart part)
     // Opens or closes the Settings page (onCommand()).
     PostMessage(m_hWnd, WM_COMMAND, IDS_TB_CONFIGURATION, 0);
     break;
+  case TITLE_BAR_NEW_TAB:
+    // Same as Ctrl+N: a new shell window on the Home page (posted).
+    m_home->openHome();
+    break;
   default:
     break;
   }
@@ -488,6 +520,44 @@ void ShellWindow::layoutTitleBar()
   RECT client;
   GetClientRect(m_hWnd, &client);
   m_titleBar.layout(m_chrome.pixelsToDips(client.right - client.left));
+  updateTooltipRect();
+}
+
+void ShellWindow::createTooltip()
+{
+  // The mouse messages of the window are relayed to it (onFrameMessage()).
+  m_tooltip = CreateWindowExW(WS_EX_TOPMOST, TOOLTIPS_CLASSW, 0,
+                              WS_POPUP | TTS_ALWAYSTIP | TTS_NOPREFIX,
+                              CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
+                              m_hWnd, 0, GetModuleHandle(0), 0);
+  if (m_tooltip == 0) {
+    return;
+  }
+  TOOLINFOW tool;
+  ZeroMemory(&tool, sizeof(tool));
+  tool.cbSize = sizeof(tool);
+  tool.hwnd = m_hWnd;
+  tool.uId = kNewTabToolId;
+  tool.lpszText = const_cast<wchar_t *>(kNewConnectionTooltip);
+  SendMessage(m_tooltip, TTM_ADDTOOLW, 0, reinterpret_cast<LPARAM>(&tool));
+}
+
+void ShellWindow::updateTooltipRect()
+{
+  if (m_tooltip == 0) {
+    return;
+  }
+  const D2D1_RECT_F &button = m_titleBar.newTabRect();
+  TOOLINFOW tool;
+  ZeroMemory(&tool, sizeof(tool));
+  tool.cbSize = sizeof(tool);
+  tool.hwnd = m_hWnd;
+  tool.uId = kNewTabToolId;
+  tool.rect.left = m_chrome.dipsToPixels(button.left);
+  tool.rect.top = m_chrome.dipsToPixels(button.top);
+  tool.rect.right = m_chrome.dipsToPixels(button.right);
+  tool.rect.bottom = m_chrome.dipsToPixels(button.bottom);
+  SendMessage(m_tooltip, TTM_NEWTOOLRECTW, 0, reinterpret_cast<LPARAM>(&tool));
 }
 
 void ShellWindow::invalidateTitleBar()

@@ -16,6 +16,8 @@
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //
+// Modified for FarSightVNC on 2026-11-12: "+" new connection button of the title bar (client button, tooltip).
+//
 
 #ifndef _SHELL_WINDOW_H_
 #define _SHELL_WINDOW_H_
@@ -147,6 +149,8 @@ private:
   // Resize frame of a maximized window that lies outside of the monitor.
   int maximizedFrameThickness() const;
   void layoutTitleBar();
+  void createTooltip();
+  void updateTooltipRect();
   void invalidateTitleBar();
   void paint();
   void updateDwmFrame();
@@ -189,6 +193,8 @@ private:
   Rect m_rcNormal;
 
   WNDPROC m_baseProc;
+  // Tooltip of the "+" button (owned by the window), or 0.
+  HWND m_tooltip;
   ChromeRenderer m_chrome;
   TitleBar m_titleBar;
   bool m_frameActive;

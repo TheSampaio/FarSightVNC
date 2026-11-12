@@ -16,6 +16,8 @@
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //
+// Modified for FarSightVNC on 2026-11-12: "+" button (new connection, Lucide icon) right after the tab.
+//
 
 #ifndef _TITLE_BAR_H_
 #define _TITLE_BAR_H_
@@ -31,7 +33,7 @@ enum TitleBarPart
   TITLE_BAR_NONE,
   TITLE_BAR_CAPTION,   // Empty space, logo: drags the window.
   TITLE_BAR_TAB,
-  TITLE_BAR_NEW_TAB,   // Reserved slot of the future "+" button.
+  TITLE_BAR_NEW_TAB,   // "+" button: new connection (a new tab once tabs exist).
   TITLE_BAR_SETTINGS,
   TITLE_BAR_MINIMIZE,
   TITLE_BAR_MAXIMIZE,
@@ -52,6 +54,7 @@ public:
 
   size_t count() const { return m_tabs.size(); }
   const D2D1_RECT_F &tab(size_t index) const { return m_tabs[index]; }
+  // "+" button; empty (zero width) when the strip is too short for it.
   const D2D1_RECT_F &newTabSlot() const { return m_newTab; }
 
 private:
@@ -75,6 +78,8 @@ public:
   // Lays the bar out for a client area width in DIPs.
   void layout(float width);
   TitleBarPart hitTest(float x, float y) const;
+  // Rectangle of the "+" button (DIPs), for its tooltip.
+  const D2D1_RECT_F &newTabRect() const { return m_tabs.newTabSlot(); }
 
   void setTitle(const std::wstring &title);
   // The Settings page is shown: the settings button looks selected.
@@ -94,6 +99,7 @@ public:
 private:
   void paintCaptionButton(ChromeRenderer *renderer, TitleBarPart part, wchar_t icon,
                           const wchar_t *placeholder, bool active) const;
+  void paintNewTabButton(ChromeRenderer *renderer, bool active) const;
   // Background of a button for its hover/pressed state, or false (none).
   bool buttonBackground(TitleBarPart part, ThemeColor *color) const;
   const D2D1_RECT_F &partRect(TitleBarPart part) const;

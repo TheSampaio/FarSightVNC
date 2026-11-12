@@ -6,6 +6,7 @@
 // Modified for FarSightVNC on 2026-11-09: IDs of the update dialog and IDS_CHECK_FOR_UPDATES.
 // Modified for FarSightVNC on 2026-11-11: IDB_TOOLBAR removed (no toolbar bitmap any more).
 // Modified for FarSightVNC on 2026-11-11: IDs of the removed login dialog, its logo bitmap and licensing URL removed.
+// Modified for FarSightVNC on 2026-11-12: IDR_LUCIDE_PLUS, the Lucide "plus" icon (RCDATA).
 //
 #define IDI_CNOCURSOR                   102
 #define IDI_CSMALLDOT                   103
@@ -73,6 +74,7 @@
 #define IDD_OPTIONS_INPUT               233
 #define IDD_OPTIONS_NETWORK             234
 #define IDD_UPDATE_DIALOG               235
+#define IDR_LUCIDE_PLUS                 236
 #define IDC_LABEL                       1001
 #define IDC_FILENAME_EDIT               1002
 #define IDC_FILENAME_LABEL              1004
@@ -174,7 +176,7 @@
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        236
+#define _APS_NEXT_RESOURCE_VALUE        237
 #define _APS_NEXT_COMMAND_VALUE         40010
 #define _APS_NEXT_CONTROL_VALUE         1124
 #define _APS_NEXT_SYMED_VALUE           101
