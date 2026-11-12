@@ -21,6 +21,8 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-11: theme choice (Auto, Light, Dark) of the Settings page.
+//
 
 #include "ViewerConfig.h"
 
@@ -35,7 +37,7 @@
 
 ViewerConfig::ViewerConfig(const TCHAR registryPath[])
 : m_logLevel(0), m_listenPort(5500), m_historyLimit(32),
-  m_showToolbar(true), m_promptOnFullscreen(true),
+  m_showToolbar(true), m_promptOnFullscreen(true), m_theme(THEME_AUTO),
   m_conHistory(&m_conHistoryKey, m_historyLimit),
   m_logger(0)
 {
@@ -79,6 +81,13 @@ bool ViewerConfig::loadFromStorage(SettingsManager *storage)
     loadAllOk = false;
   }
 
+  // New in FarSightVNC: a missing value keeps the default (Auto) and is not
+  // an error.
+  int theme;
+  if (storage->getInt(_T("Theme"), &theme)) {
+    setTheme(theme);
+  }
+
   return loadAllOk;
 }
 
@@ -91,6 +100,7 @@ bool ViewerConfig::saveToStorage(SettingsManager *storage) const
   TEST_FAIL(storage->setInt(_T("HistoryLimit"), m_historyLimit), saveAllOk);
   TEST_FAIL(storage->setBoolean(_T("NoToolbar"), m_showToolbar), saveAllOk);
   TEST_FAIL(storage->setBoolean(_T("SkipFullScreenPrompt"), !m_promptOnFullscreen), saveAllOk);
+  TEST_FAIL(storage->setInt(_T("Theme"), m_theme), saveAllOk);
 
   return saveAllOk;
 }
@@ -194,6 +204,21 @@ bool ViewerConfig::isPromptOnFullscreenEnabled() const
 {
   AutoLock l(&m_cs);
   return m_promptOnFullscreen;
+}
+
+void ViewerConfig::setTheme(int theme)
+{
+  AutoLock l(&m_cs);
+  if (theme < THEME_AUTO || theme > THEME_DARK) {
+    theme = THEME_AUTO;
+  }
+  m_theme = theme;
+}
+
+int ViewerConfig::getTheme() const
+{
+  AutoLock l(&m_cs);
+  return m_theme;
 }
 
 const TCHAR *ViewerConfig::getPathToLogFile() const

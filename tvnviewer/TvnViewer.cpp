@@ -26,6 +26,7 @@
 // Modified for FarSightVNC on 2026-11-11: a reconnection reuses the shell window of the session.
 // Modified for FarSightVNC on 2026-11-11: the Home page of a shell window replaces the login dialog; a shell returns to Home when its session ends.
 // Modified for FarSightVNC on 2026-11-11: the Settings page of a shell window (SettingsActions).
+// Modified for FarSightVNC on 2026-11-11: the Settings page replaces the configuration and about dialogs.
 //
 
 #include "TvnViewer.h"
@@ -48,9 +49,6 @@ TvnViewer::TvnViewer(HINSTANCE appInstance, const TCHAR *windowClassName,
   m_logWriter.info(_T("Init WinSock 2.1"));
   WindowsSocket::startup(2, 1);
   registerViewerWindowClass();
-
-  m_configurationDialog.setListenerOfUpdate(this);
-  m_aboutDialog.setCheckForUpdatesHandler([this]() { postMessage(WM_USER_CHECK_UPDATES); });
 
   // working with accelerator
   ResourceLoader *rLoader = ResourceLoader::getInstance();
@@ -192,9 +190,56 @@ void TvnViewer::removeDialogWindow(HWND window)
   removeModelessDialog(window);
 }
 
-void TvnViewer::openConfigurationDialog()
+void TvnViewer::onViewerConfigChanged()
 {
-  postMessage(WM_USER_CONFIGURATION);
+  postMessage(WM_USER_CONFIGURATION_RELOAD);
+}
+
+UpdateController::Preferences TvnViewer::updatePreferences()
+{
+  if (m_updateController) {
+    return m_updateController->preferences();
+  }
+  UpdateController::Preferences none = { false, false, false, false, 0, std::wstring() };
+  return none;
+}
+
+void TvnViewer::setUpdateAutoCheck(bool enabled)
+{
+  if (m_updateController) {
+    m_updateController->setAutoCheck(enabled);
+  }
+}
+
+void TvnViewer::setUpdatePrereleases(bool enabled)
+{
+  if (m_updateController) {
+    m_updateController->setIncludePrereleases(enabled);
+  }
+}
+
+void TvnViewer::showSettings(SettingsSectionId section)
+{
+  // The foreground shell, else the first one, else a new one on Home.
+  ShellWindow *shell = nullptr;
+  HWND foreground = GetForegroundWindow();
+  std::list<std::unique_ptr<ShellWindow> >::iterator iter;
+  for (iter = m_shells.begin(); iter != m_shells.end(); ++iter) {
+    if (!(*iter)->isDestroyed() && IsWindowVisible((*iter)->getHWnd()) &&
+        (shell == nullptr || (*iter)->getHWnd() == foreground)) {
+      shell = iter->get();
+    }
+  }
+  if (shell == nullptr) {
+    shell = createShell();
+    shell->showHome();
+  }
+  HWND hwnd = shell->getHWnd();
+  if (IsIconic(hwnd)) {
+    ShowWindow(hwnd, SW_RESTORE);
+  }
+  SetForegroundWindow(hwnd);
+  shell->openSettings(section);
 }
 
 void TvnViewer::checkForUpdates()
@@ -376,14 +421,12 @@ void TvnViewer::showListeningOptions()
 
 void TvnViewer::showConfiguration()
 {
-  m_configurationDialog.show();
-  addModelessDialog(m_configurationDialog.getControl()->getWindow());
+  showSettings(SETTINGS_GENERAL);
 }
 
 void TvnViewer::showAboutViewer()
 {
-  m_aboutDialog.show();
-  addModelessDialog(m_aboutDialog.getControl()->getWindow());
+  showSettings(SETTINGS_ABOUT);
 }
 
 int TvnViewer::processMessages()

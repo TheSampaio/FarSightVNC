@@ -21,6 +21,7 @@
 #define _SETTINGS_ACTIONS_H_
 
 #include "util/winhdr.h"
+#include "../UpdateController.h"
 
 // What the Settings page asks of the application (TvnViewer).
 class SettingsActions
@@ -33,9 +34,14 @@ public:
   virtual void addDialogWindow(HWND window) = 0;
   virtual void removeDialogWindow(HWND window) = 0;
 
-  // Opens the configuration dialog of the viewer (posted). The General
-  // section replaces it in the next step.
-  virtual void openConfigurationDialog() = 0;
+  // ViewerConfig changed and was saved: the listening mode follows a new
+  // port (posted), the Home pages refresh.
+  virtual void onViewerConfigChanged() = 0;
+
+  // Updates (UpdateController).
+  virtual UpdateController::Preferences updatePreferences() = 0;
+  virtual void setUpdateAutoCheck(bool enabled) = 0;
+  virtual void setUpdatePrereleases(bool enabled) = 0;
   // Runs the update check now, like "Check for updates..." (posted).
   virtual void checkForUpdates() = 0;
 };

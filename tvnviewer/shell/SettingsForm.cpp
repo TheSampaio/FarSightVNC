@@ -297,6 +297,7 @@ SettingsForm::Row SettingsForm::newRow(RowKind kind, const wchar_t *text, int in
   row.control = 0;
   row.extra = 0;
   row.value = 0;
+  row.trailing = 0;
   row.top = 0.0f;
   row.height = 0.0f;
   return row;
@@ -401,9 +402,9 @@ HWND SettingsForm::trackBar(UINT id, UINT lowId, const wchar_t *low, UINT highId
 HWND SettingsForm::button(UINT id, const wchar_t *label, bool sameRow)
 {
   HWND hwnd = createControl(L"BUTTON", label, BS_PUSHBUTTON | WS_TABSTOP | WS_GROUP, id);
-  if (sameRow && !m_rows.empty() && m_rows.back().extra == 0 &&
-      m_rows.back().kind == ROW_FIELD) {
-    m_rows.back().extra = hwnd;
+  if (sameRow && !m_rows.empty() && m_rows.back().trailing == 0 &&
+      (m_rows.back().kind == ROW_FIELD || m_rows.back().kind == ROW_BUTTON)) {
+    m_rows.back().trailing = hwnd;
     return hwnd;
   }
   Row row = newRow(ROW_BUTTON, label, 0);
@@ -422,6 +423,13 @@ float SettingsForm::textWidth(const wchar_t *text) const
   // GDI and DirectWrite widths differ slightly: a little room is added.
   float width = const_cast<ChromeRenderer &>(m_chrome).measureText(text, kControlFontSize);
   return std::ceil(width) + kGap;
+}
+
+float SettingsForm::buttonWidthOf(HWND button) const
+{
+  wchar_t text[64] = L"";
+  GetWindowTextW(button, text, 64);
+  return (std::max)(kButtonMinWidth, textWidth(text) + 2.0f * kButtonPadding);
 }
 
 float SettingsForm::contentLeft() const
@@ -519,30 +527,14 @@ void SettingsForm::placeRows()
       place(row.label, x, center - kFieldHeight / 2.0f, kLabelWidth - kGap, kFieldHeight);
       float controlLeft = x + kLabelWidth;
       float controlWidth = row.width > 0.0f ? row.width : available - kLabelWidth;
-      if (row.extra != 0 && GetWindowLongPtr(row.extra, GWL_STYLE) & BS_PUSHBUTTON) {
-        // A button after the field (not the spin buttons).
-      }
       wchar_t className[16] = L"";
       GetClassNameW(row.control, className, 16);
       bool combo = _wcsicmp(className, L"COMBOBOX") == 0;
-      HWND button = 0;
-      HWND spin = 0;
-      if (row.extra != 0) {
-        GetClassNameW(row.extra, className, 16);
-        if (_wcsicmp(className, L"BUTTON") == 0) {
-          button = row.extra;
-        } else {
-          spin = row.extra;
-        }
-      }
-      float buttonWidth = 0.0f;
-      if (button != 0) {
-        wchar_t text[64] = L"";
-        GetWindowTextW(button, text, 64);
-        buttonWidth = (std::max)(kButtonMinWidth, textWidth(text) + 2.0f * kButtonPadding);
-        if (row.width <= 0.0f) {
-          controlWidth -= buttonWidth + kGap;
-        }
+      HWND button = row.trailing;
+      HWND spin = row.extra;
+      float buttonWidth = button != 0 ? buttonWidthOf(button) : 0.0f;
+      if (button != 0 && row.width <= 0.0f) {
+        controlWidth -= buttonWidth + kGap;
       }
       if (combo) {
         // The closed height of a combo box follows its font: center it.
@@ -575,8 +567,12 @@ void SettingsForm::placeRows()
       break;
     case ROW_BUTTON:
     {
-      float buttonWidth = (std::max)(kButtonMinWidth, textWidth(row.text.c_str()) + 2.0f * kButtonPadding);
+      float buttonWidth = buttonWidthOf(row.control);
       place(row.control, x, center - kButtonHeight / 2.0f, buttonWidth, kButtonHeight);
+      if (row.trailing != 0) {
+        place(row.trailing, x + buttonWidth + kGap, center - kButtonHeight / 2.0f,
+              buttonWidthOf(row.trailing), kButtonHeight);
+      }
       break;
     }
     default:
@@ -607,7 +603,8 @@ void SettingsForm::ensureVisible(HWND control)
 {
   for (size_t i = 0; i < m_rows.size(); i++) {
     const Row &row = m_rows[i];
-    if (row.control != control && row.extra != control && row.label != control) {
+    if (row.control != control && row.extra != control && row.label != control &&
+        row.trailing != control) {
       continue;
     }
     RECT client;

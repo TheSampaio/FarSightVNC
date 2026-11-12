@@ -21,6 +21,8 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-11: theme choice (Auto, Light, Dark) of the Settings page.
+//
 
 #ifndef _VIEWER_CONFIG_H_
 #define _VIEWER_CONFIG_H_
@@ -86,6 +88,12 @@ public:
   // Returns "show toolbar" flag
   bool isToolbarShown() const;
 
+  // Theme of the window chrome (Settings, Appearance). Stored now; the
+  // light theme is the only one drawn until the theme phase.
+  enum Theme { THEME_AUTO = 0, THEME_LIGHT = 1, THEME_DARK = 2 };
+  void setTheme(int theme);
+  int getTheme() const;
+
   // Sets "prompt on fullscreen flag"
   void promptOnFullscreen(bool promt);
   // Returns "prompt on fullscreen flag"
@@ -111,6 +119,8 @@ protected:
   // If set then app must show promt dialog when viewer window
   // become fullscreen
   bool m_promptOnFullscreen;
+  // Theme (THEME_AUTO, THEME_LIGHT or THEME_DARK).
+  int m_theme;
   // Log file
   StringStorage m_pathToLogFile;
   StringStorage m_logName;

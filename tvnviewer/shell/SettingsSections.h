@@ -36,15 +36,11 @@ namespace SettingsSections
   const wchar_t *title(SettingsSectionId section);
   wchar_t glyph(SettingsSectionId section);
 
-  // Connection and Input: the options of new connections (defaults, saved
-  // in History\.default at every change), with the logic of the Options
-  // dialog (ConnectionOptionsForm).
-  std::unique_ptr<SettingsSection> connection(ConnectionConfig *defaults);
-  std::unique_ptr<SettingsSection> input(ConnectionConfig *defaults);
-  // A section that comes in the next step: its title and a short text,
-  // with the legacy dialog that still holds its settings, if any.
-  std::unique_ptr<SettingsSection> placeholder(SettingsSectionId section,
-                                               SettingsActions *actions);
+  // The section of an ID. Connection and Input edit defaults, the options of
+  // new connections (saved in History\.default at every change).
+  std::unique_ptr<SettingsSection> create(SettingsSectionId section,
+                                          ConnectionConfig *defaults,
+                                          SettingsActions *actions);
 }
 
 #endif

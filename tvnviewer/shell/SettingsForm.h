@@ -77,7 +77,8 @@ public:
   // caption and value IDs may be 0.
   HWND trackBar(UINT id, UINT lowId, const wchar_t *low, UINT highId, const wchar_t *high,
                 UINT valueId, int indent = 0);
-  // Push button on its own row, or after the control of the previous row.
+  // Push button on its own row, or after the field or button of the
+  // previous row.
   HWND button(UINT id, const wchar_t *label, bool sameRow = false);
 
   // Control of the form by ID, or 0.
@@ -109,8 +110,9 @@ private:
     float width;          // Width of the control, 0 for the default.
     HWND label;           // Native label (fields, track bar captions).
     HWND control;
-    HWND extra;           // Spin buttons, second caption, button after.
+    HWND extra;           // Spin buttons, second caption of a track bar.
     HWND value;           // Value of a track bar.
+    HWND trailing;        // Push button after the control of the row.
     float top;            // Layout, form coordinates.
     float height;
   };
@@ -127,6 +129,7 @@ private:
   void placeRows();
   void place(HWND hwnd, float left, float top, float width, float height);
   float textWidth(const wchar_t *text) const;
+  float buttonWidthOf(HWND button) const;
   float contentLeft() const;
   float contentWidth() const;
   void scrollTo(float offset);

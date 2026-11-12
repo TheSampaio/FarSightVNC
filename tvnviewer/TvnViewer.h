@@ -25,13 +25,12 @@
 // Modified for FarSightVNC on 2026-11-11: a reconnection reuses the shell window of the session.
 // Modified for FarSightVNC on 2026-11-11: the Home page of a shell window replaces the login dialog.
 // Modified for FarSightVNC on 2026-11-11: the Settings page of a shell window (SettingsActions).
+// Modified for FarSightVNC on 2026-11-11: the Settings page replaces the configuration and about dialogs.
 //
 
 #ifndef _TVN_VIEWER_H_
 #define _TVN_VIEWER_H_
 
-#include "AboutDialog.h"
-#include "ConfigurationDialog.h"
 #include "ConnectionListener.h"
 #include "ControlTrayIcon.h"
 #include "OptionsDialog.h"
@@ -99,8 +98,15 @@ public:
   // SettingsActions implementation.
   virtual void addDialogWindow(HWND window);
   virtual void removeDialogWindow(HWND window);
-  virtual void openConfigurationDialog();
+  virtual void onViewerConfigChanged();
+  virtual UpdateController::Preferences updatePreferences();
+  virtual void setUpdateAutoCheck(bool enabled);
+  virtual void setUpdatePrereleases(bool enabled);
   virtual void checkForUpdates();
+
+  // Shows the Settings page on section in the foreground shell window, or
+  // in a new one on the Home page (tray menu).
+  void showSettings(SettingsSectionId section);
 
   // Inherited from WindowsApplication
   void registerWindowClass(WNDCLASS *wndClass);
@@ -213,8 +219,6 @@ private:
   
   LogWriter m_logWriter;
 
-  AboutDialog m_aboutDialog;
-  ConfigurationDialog m_configurationDialog;
   OptionsDialog m_optionsDialog;
 
   ControlTrayIcon *m_trayIcon;

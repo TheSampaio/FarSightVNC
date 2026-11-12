@@ -36,6 +36,7 @@
 // Modified for FarSightVNC on 2026-11-11: the remote screen always fits the window (no scale modes, no scroll bars).
 // Modified for FarSightVNC on 2026-11-11: New connection opens a shell window on the Home page.
 // Modified for FarSightVNC on 2026-11-11: the Settings page of the shell covers the running session (no full screen, no keyboard hook).
+// Modified for FarSightVNC on 2026-11-11: About opens the About section of the Settings page.
 //
 
 #include "config-lib/IniFileSettingsManager.h"
@@ -649,7 +650,8 @@ void ViewerWindow::onCheckForUpdates()
 
 void ViewerWindow::onAbout()
 {
-  m_application->postMessage(TvnViewer::WM_USER_ABOUT);
+  // The About section of the Settings page of the shell, over this session.
+  m_host->openSettings(SETTINGS_ABOUT);
 }
 
 bool ViewerWindow::onCommand(WPARAM wParam, LPARAM lParam)

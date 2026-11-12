@@ -157,14 +157,7 @@ void SettingsPage::commit()
 
 std::unique_ptr<SettingsSection> SettingsPage::createSection(SettingsSectionId section)
 {
-  switch (section) {
-  case SETTINGS_CONNECTION:
-    return SettingsSections::connection(&m_defaultConfig);
-  case SETTINGS_INPUT:
-    return SettingsSections::input(&m_defaultConfig);
-  default:
-    return SettingsSections::placeholder(section, m_actions);
-  }
+  return SettingsSections::create(section, &m_defaultConfig, m_actions);
 }
 
 void SettingsPage::showSection(SettingsSectionId section)
