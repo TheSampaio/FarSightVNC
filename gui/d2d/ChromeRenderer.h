@@ -17,6 +17,7 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //
 // Modified for FarSightVNC on 2026-11-12: drawSvgIcon() draws the embedded Lucide SVG icons (SvgIconCache).
+// Modified for FarSightVNC on 2026-11-12: drawIconResource() draws an ICON resource of the executable.
 //
 
 #ifndef _CHROME_RENDERER_H_
@@ -97,6 +98,12 @@ public:
   // (before Windows 10 1703) or the icon cannot be parsed; the caller then
   // draws a fallback glyph.
   bool drawSvgIcon(int resourceId, const D2D1_RECT_F &box, ThemeColor color);
+  // Draws the ICON resource resourceId of the executable (the application
+  // icon) centered in box and scaled to the square that fits it (DIPs, so at
+  // the DPI of the window), with its own colors and alpha. Returns false and
+  // draws nothing when there is no render target or the icon cannot be
+  // loaded; the caller then draws a fallback.
+  bool drawIconResource(int resourceId, const D2D1_RECT_F &box);
   // Draws codepoint of the system icon font (Segoe Fluent Icons on Windows
   // 11, Segoe MDL2 Assets on Windows 10) centered in box, size in DIPs.
   // Returns false and draws nothing when neither font is installed; the
@@ -136,6 +143,11 @@ private:
   ID2D1SolidColorBrush *brush(ThemeColor color, float opacity = 1.0f);
   bool prepareLayeredBitmap();
   void releaseLayeredBitmap();
+  // Bitmap of an ICON resource at pixelSize, from the cache or loaded now;
+  // 0 when it cannot be loaded. The cache owns it.
+  ID2D1Bitmap *getIconBitmap(int resourceId, int pixelSize);
+  ID2D1Bitmap *createIconBitmap(int resourceId, int pixelSize);
+  void releaseIconBitmaps();
 
   struct CachedFormat
   {
@@ -146,6 +158,17 @@ private:
   };
   std::vector<CachedFormat> m_formats;
   IDWriteInlineObject *m_ellipsis;
+
+  struct CachedIcon
+  {
+    int resourceId;
+    int pixelSize;
+    // 0 when the icon could not be loaded: it is not tried again.
+    ID2D1Bitmap *bitmap;
+  };
+  // Icons of the current target (they belong to its device, so they are
+  // released with it).
+  std::vector<CachedIcon> m_icons;
 
   HWND m_hwnd;
   UINT m_dpi;

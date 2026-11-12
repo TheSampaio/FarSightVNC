@@ -17,6 +17,7 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //
 // Modified for FarSightVNC on 2026-11-12: "+" button (new connection, Lucide icon) right after the tab.
+// Modified for FarSightVNC on 2026-11-12: the application icon (IDI_APPICON) is the logo of the bar.
 //
 
 #include "TitleBar.h"
@@ -298,11 +299,13 @@ void TitleBar::paint(ChromeRenderer *renderer, bool active, bool maximized) cons
   float line = renderer->pixelsToDips(1);
   renderer->fillRect(D2D1::RectF(0.0f, h - line, m_width, h), theme.border);
 
-  // Placeholder logo until the icon phase.
-  renderer->fillRoundRect(m_logo, theme.cornerRadius - 1.0f,
-                          active ? theme.accent : theme.mutedText);
-  renderer->drawText(L"F", m_logo, theme.closeHoverText, theme.fontSizeSmall + 1.0f,
-                     DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
+  // The application icon, else a drawn placeholder with its initial.
+  if (!renderer->drawIconResource(IDI_APPICON, m_logo)) {
+    renderer->fillRoundRect(m_logo, theme.cornerRadius - 1.0f,
+                            active ? theme.accent : theme.mutedText);
+    renderer->drawText(L"F", m_logo, theme.closeHoverText, theme.fontSizeSmall + 1.0f,
+                       DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
+  }
 
   for (size_t i = 0; i < m_tabs.count(); i++) {
     const D2D1_RECT_F &tab = m_tabs.tab(i);

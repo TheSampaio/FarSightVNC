@@ -17,6 +17,7 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //
 // Modified for FarSightVNC on 2026-11-12: drawSvgIcon() draws the embedded Lucide SVG icons (SvgIconCache).
+// Modified for FarSightVNC on 2026-11-12: drawIconResource() draws an ICON resource of the executable.
 //
 
 #include "ChromeRenderer.h"
@@ -85,6 +86,69 @@ D2D1_COLOR_F toColor(ThemeColor color)
   return D2D1::ColorF(color);
 }
 
+// Reads bitmap as width x height top-down 32 bpp BGRA into pixels (GDI
+// converts whatever format the bitmap has). The alpha is straight, as the
+// icon stores it.
+bool readBitmapPixels(HBITMAP bitmap, int width, int height, std::vector<BYTE> *pixels)
+{
+  HDC dc = CreateCompatibleDC(0);
+  if (dc == 0) {
+    return false;
+  }
+  BITMAPINFO info;
+  ZeroMemory(&info, sizeof(info));
+  info.bmiHeader.biSize = sizeof(info.bmiHeader);
+  info.bmiHeader.biWidth = width;
+  info.bmiHeader.biHeight = -height;  // Top-down.
+  info.bmiHeader.biPlanes = 1;
+  info.bmiHeader.biBitCount = 32;
+  info.bmiHeader.biCompression = BI_RGB;
+  pixels->resize(static_cast<size_t>(width) * height * 4);
+  bool ok = GetDIBits(dc, bitmap, 0, height, &(*pixels)[0], &info, DIB_RGB_COLORS) == height;
+  DeleteDC(dc);
+  return ok;
+}
+
+bool hasAlphaChannel(const std::vector<BYTE> &pixels)
+{
+  for (size_t i = 3; i < pixels.size(); i += 4) {
+    if (pixels[i] != 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Rebuilds the alpha of an icon without an alpha channel from its AND mask:
+// a mask pixel that is set (white) is transparent, the others are opaque.
+void applyIconMask(HBITMAP mask, int width, int height, std::vector<BYTE> *pixels)
+{
+  std::vector<BYTE> maskPixels;
+  if (mask == 0 || !readBitmapPixels(mask, width, height, &maskPixels) ||
+      maskPixels.size() != pixels->size()) {
+    // Without a usable mask the whole icon stays opaque.
+    for (size_t i = 3; i < pixels->size(); i += 4) {
+      (*pixels)[i] = 255;
+    }
+    return;
+  }
+  for (size_t i = 0; i + 3 < pixels->size(); i += 4) {
+    bool transparent = maskPixels[i] != 0 || maskPixels[i + 1] != 0 || maskPixels[i + 2] != 0;
+    (*pixels)[i + 3] = transparent ? 0 : 255;
+  }
+}
+
+// Direct2D wants premultiplied alpha; the icon gives it straight.
+void premultiplyAlpha(std::vector<BYTE> *pixels)
+{
+  for (size_t i = 0; i + 3 < pixels->size(); i += 4) {
+    unsigned int alpha = (*pixels)[i + 3];
+    for (size_t channel = 0; channel < 3; channel++) {
+      (*pixels)[i + channel] = static_cast<BYTE>((*pixels)[i + channel] * alpha / 255);
+    }
+  }
+}
+
 }
 
 ChromeRenderer::ChromeRenderer()
@@ -110,6 +174,7 @@ ChromeRenderer::ChromeRenderer()
 ChromeRenderer::~ChromeRenderer()
 {
   discardTarget();
+  releaseIconBitmaps();
   delete m_svgIcons;
   releaseLayeredBitmap();
   for (size_t i = 0; i < m_formats.size(); i++) {
@@ -250,8 +315,9 @@ bool ChromeRenderer::createTarget()
 
 void ChromeRenderer::discardTarget()
 {
-  // The SVG documents belong to the device of the target.
+  // The SVG documents and the icon bitmaps belong to the device of the target.
   m_svgIcons->release();
+  releaseIconBitmaps();
   safeRelease(m_brush);
   m_target = 0;
   safeRelease(m_hwndTarget);
@@ -545,4 +611,100 @@ bool ChromeRenderer::supportsSvgGlyphs()
 bool ChromeRenderer::drawSvgIcon(int resourceId, const D2D1_RECT_F &box, ThemeColor color)
 {
   return supportsSvgGlyphs() && m_svgIcons->draw(resourceId, box, color);
+}
+
+void ChromeRenderer::releaseIconBitmaps()
+{
+  for (size_t i = 0; i < m_icons.size(); i++) {
+    safeRelease(m_icons[i].bitmap);
+  }
+  m_icons.clear();
+}
+
+ID2D1Bitmap *ChromeRenderer::createIconBitmap(int resourceId, int pixelSize)
+{
+  // No WIC here: the viewer never calls CoInitialize(). LoadImage() picks the
+  // entry of the .ico closest to pixelSize and scales it, and GDI hands the
+  // pixels over as BGRA.
+  HICON icon = static_cast<HICON>(LoadImage(GetModuleHandle(0), MAKEINTRESOURCE(resourceId),
+                                            IMAGE_ICON, pixelSize, pixelSize, LR_DEFAULTCOLOR));
+  if (icon == 0) {
+    return 0;
+  }
+  ICONINFO info;
+  ZeroMemory(&info, sizeof(info));
+  if (!GetIconInfo(icon, &info)) {
+    DestroyIcon(icon);
+    return 0;
+  }
+  ID2D1Bitmap *bitmap = 0;
+  BITMAP header;
+  std::vector<BYTE> pixels;
+  if (info.hbmColor != 0 && GetObject(info.hbmColor, sizeof(header), &header) != 0 &&
+      header.bmWidth > 0 && header.bmHeight > 0 &&
+      readBitmapPixels(info.hbmColor, header.bmWidth, header.bmHeight, &pixels)) {
+    // An icon without an alpha channel comes back fully transparent: its
+    // shape is in the mask.
+    if (!hasAlphaChannel(pixels)) {
+      applyIconMask(info.hbmMask, header.bmWidth, header.bmHeight, &pixels);
+    }
+    premultiplyAlpha(&pixels);
+    D2D1_BITMAP_PROPERTIES properties = D2D1::BitmapProperties(
+      D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
+    if (FAILED(m_target->CreateBitmap(
+          D2D1::SizeU(static_cast<UINT32>(header.bmWidth), static_cast<UINT32>(header.bmHeight)),
+          &pixels[0], static_cast<UINT32>(header.bmWidth) * 4, properties, &bitmap))) {
+      bitmap = 0;
+    }
+  }
+  if (info.hbmColor != 0) {
+    DeleteObject(info.hbmColor);
+  }
+  if (info.hbmMask != 0) {
+    DeleteObject(info.hbmMask);
+  }
+  DestroyIcon(icon);
+  return bitmap;
+}
+
+ID2D1Bitmap *ChromeRenderer::getIconBitmap(int resourceId, int pixelSize)
+{
+  for (size_t i = 0; i < m_icons.size(); i++) {
+    if (m_icons[i].resourceId == resourceId && m_icons[i].pixelSize == pixelSize) {
+      return m_icons[i].bitmap;
+    }
+  }
+  // A failed load is remembered as a null entry, so it is not retried at
+  // every paint.
+  CachedIcon cached = { resourceId, pixelSize, createIconBitmap(resourceId, pixelSize) };
+  m_icons.push_back(cached);
+  return cached.bitmap;
+}
+
+bool ChromeRenderer::drawIconResource(int resourceId, const D2D1_RECT_F &box)
+{
+  if (m_target == 0) {
+    return false;
+  }
+  float width = box.right - box.left;
+  float height = box.bottom - box.top;
+  float side = width < height ? width : height;
+  if (side <= 0.0f) {
+    return false;
+  }
+  int pixelSize = dipsToPixels(side);
+  if (pixelSize < 1) {
+    pixelSize = 1;
+  }
+  ID2D1Bitmap *bitmap = getIconBitmap(resourceId, pixelSize);
+  if (bitmap == 0) {
+    return false;
+  }
+  float centerX = (box.left + box.right) / 2.0f;
+  float centerY = (box.top + box.bottom) / 2.0f;
+  float half = side / 2.0f;
+  D2D1_RECT_F dest = D2D1::RectF(centerX - half, centerY - half,
+                                 centerX + half, centerY + half);
+  m_target->DrawBitmap(bitmap, dest, 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+  return true;
 }
