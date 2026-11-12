@@ -19,9 +19,6 @@
     <ClCompile Include="AuthenticationDialog.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="ConfigurationDialog.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="ConnectionData.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -91,9 +88,6 @@
     <ClCompile Include="shell\TitleBar.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="AboutDialog.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="UpdateController.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -145,9 +139,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="AuthenticationDialog.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="ConfigurationDialog.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="ConnectionData.h">
@@ -250,9 +241,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="shell\TitleBar.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="AboutDialog.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="BuildTime.h">

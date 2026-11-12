@@ -26,6 +26,7 @@
 // Modified for FarSightVNC on 2026-11-11: the Home page of a shell window replaces the login dialog.
 // Modified for FarSightVNC on 2026-11-11: the Settings page of a shell window (SettingsActions).
 // Modified for FarSightVNC on 2026-11-11: the Settings page replaces the configuration and about dialogs.
+// Modified for FarSightVNC on 2026-11-11: the messages of the removed configuration and about dialogs are gone.
 //
 
 #ifndef _TVN_VIEWER_H_
@@ -120,12 +121,6 @@ public:
 
   // Opens a new shell window on the Home page (new connection).
   static const int WM_USER_SHOW_HOME = WM_USER + 2;
-
-  // this message need send if you need show configuration dialog
-  static const int WM_USER_CONFIGURATION = WM_USER + 3;
-
-  // this message need send if you need show about dialog
-  static const int WM_USER_ABOUT = WM_USER + 4;
 
   // This message need send if you need reconnect to host.
   // LPARAM is a ReconnectRequest allocated with new; the application

@@ -27,6 +27,7 @@
 // Modified for FarSightVNC on 2026-11-11: the Home page of a shell window replaces the login dialog; a shell returns to Home when its session ends.
 // Modified for FarSightVNC on 2026-11-11: the Settings page of a shell window (SettingsActions).
 // Modified for FarSightVNC on 2026-11-11: the Settings page replaces the configuration and about dialogs.
+// Modified for FarSightVNC on 2026-11-11: the messages of the removed configuration and about dialogs are gone.
 //
 
 #include "TvnViewer.h"
@@ -536,14 +537,6 @@ LRESULT CALLBACK TvnViewer::wndProc(HWND hWnd, UINT msg, WPARAM wparam, LPARAM l
 
       case WM_USER_SHOW_HOME:
         _this->showHome();
-        break;
-
-      case WM_USER_CONFIGURATION:
-        _this->showConfiguration();
-        break;
-
-      case WM_USER_ABOUT:
-        _this->showAboutViewer();
         break;
 
       case WM_USER_CHECK_UPDATES:

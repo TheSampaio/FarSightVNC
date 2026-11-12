@@ -1,9 +1,7 @@
 # tvnviewer: the FarSightVNC viewer (Windows subsystem), mirrors tvnviewer.vcxproj.
 add_executable(tvnviewer WIN32
-  AboutDialog.cpp
   AuthenticationDialog.cpp
   BuildTime.cpp
-  ConfigurationDialog.cpp
   ConnectionData.cpp
   ConnectionListener.cpp
   ControlTrayIcon.cpp

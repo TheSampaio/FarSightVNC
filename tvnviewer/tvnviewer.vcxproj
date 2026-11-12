@@ -306,10 +306,8 @@
     </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="AboutDialog.cpp" />
     <ClCompile Include="AuthenticationDialog.cpp" />
     <ClCompile Include="BuildTime.cpp" />
-    <ClCompile Include="ConfigurationDialog.cpp" />
     <ClCompile Include="ConnectionData.cpp" />
     <ClCompile Include="ConnectionListener.cpp" />
     <ClCompile Include="ControlTrayIcon.cpp" />
@@ -350,10 +348,8 @@
     <ClCompile Include="shell\SettingsSections.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="AboutDialog.h" />
     <ClInclude Include="AuthenticationDialog.h" />
     <ClInclude Include="BuildTime.h" />
-    <ClInclude Include="ConfigurationDialog.h" />
     <ClInclude Include="ConnectionData.h" />
     <ClInclude Include="ConnectionListener.h" />
     <ClInclude Include="ControlTrayIcon.h" />
