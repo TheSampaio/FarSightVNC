@@ -1,13 +1,14 @@
-FarSightVNC Viewer v1.0.1a (alpha)
+FarSightVNC Viewer v1.1.0a (alpha)
 ==================================
 
 VNC client for Windows based on TightVNC Viewer 2.8.90.
 License: GNU GPL version 2 or later (see LICENSE.txt).
-Date: 2026-11-11 - branch fix/keyboard-ctrl-shortcuts.
+Date: 2026-11-12 - branch feature/ui-layout.
 
 
-Keyboard fix release (v1.0.1a): Ctrl and Alt no longer get stuck and Ctrl+C /
-Ctrl+V work again. See CHANGES IN v1.0.1a below.
+New interface release (v1.1.0a): a redesigned window with its own title bar,
+a Home screen, a Settings page and a "+" button for new connections. It also
+includes the keyboard fixes of v1.0.1a. See CHANGES IN v1.1.0a below.
 
 
 *** BREAKING CHANGE in v1.0.0a (still applies) ***
@@ -80,6 +81,26 @@ can ignore it and keep the files where they are.
   as it is.
 
 
+CHANGES IN v1.1.0a (new interface, phase 1: layout)
+---------------------------------------------------
+- New window: its own title bar with the session tab, a Settings button and
+  the Windows 11 Snap Layouts on the maximize button.
+- New Home screen when you open the viewer (address, recent and favorite
+  computers, listening mode); it replaces the old login dialog.
+- New "+" button after the tab (or Ctrl+N): opens a new window on Home.
+- New Settings page inside the window (Appearance, Connection, Input,
+  Display, General, Updates, About); it replaces the old configuration and
+  about dialogs.
+- New session toolbar and a floating full screen bar. Full screen now stays
+  above the taskbar and other windows.
+- The remote screen always fits the window (aspect ratio kept), with no
+  scroll bars. The -scale= option is ignored.
+- First Lucide icon (see THIRD-PARTY NOTICES). The Appearance setting
+  (Auto/Light/Dark) is saved, but the themes come in a later version.
+- Includes the keyboard fixes of v1.0.1a. Protocol, server side, updater and
+  saved settings are unchanged.
+
+
 CHANGES IN v1.0.1a (keyboard fixes)
 -----------------------------------
 - Fixed: Ctrl, Alt and Win pressed in another window and released in the
@@ -139,7 +160,12 @@ VERIFIED IN THIS VERSION
   favorites 88/0, updater 2103/0. The keyboard tests cover Ctrl+C/V/X/Z/A with
   both Ctrl keys, releasing keys on the path that pressed them, and Print
   Screen.
-- (Verified in v1.0.0a; the updater code did not change in v1.0.1a)
+- Against a fake server on 127.0.0.1, with the GDI and the GPU renderers: the
+  connection smoke test (4 encodings), the display and pointer test (194/0,
+  including the fit-to-window and full screen modes) and the keyboard
+  end-to-end test (39 cases). The "+" button was checked against the window
+  (hit test, hover and pressed states, a new window opens).
+- (Verified in v1.0.0a; the updater code did not change since)
   Installation of the signed release over a copy of the v0.2.1a x64
   executable placed in the new flat layout: with the old viewer open (the
   updater waits), user files kept, a tampered update rejected and a downgrade
@@ -158,8 +184,10 @@ NOT YET VERIFIED
   2.8.85 on 127.0.0.1).
 - Use on a real network (outside 127.0.0.1) and with servers other than
   TightVNC.
-- Real typing on a physical keyboard in this version (keyboard tests are
-  automated).
+- Real typing on a physical keyboard and real mouse use in this version
+  (the tests are automated).
+- Windows 10 (the interface was tested on Windows 11), a real DPI change
+  while the window is open, several monitors, and screen readers.
 
 This is an alpha release: try it on one machine first before wider use.
 

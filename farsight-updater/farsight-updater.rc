@@ -4,8 +4,8 @@
 #include <winver.h>
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 1,0,1,0
- PRODUCTVERSION 1,0,1,0
+ FILEVERSION 1,1,0,0
+ PRODUCTVERSION 1,1,0,0
  FILEFLAGSMASK 0x17L
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -22,12 +22,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "FarSightVNC contributors"
             VALUE "FileDescription", "FarSightVNC Updater"
-            VALUE "FileVersion", "1.0.1a"
+            VALUE "FileVersion", "1.1.0a"
             VALUE "InternalName", "fsvncupdater"
             VALUE "LegalCopyright", "Copyright (C) 2026 FarSightVNC contributors. Licensed under the GNU GPL, version 2 or (at your option) any later version. Based on TightVNC Viewer 2.8.90."
             VALUE "OriginalFilename", "fsvncupdater.exe"
             VALUE "ProductName", "FarSightVNC"
-            VALUE "ProductVersion", "1.0.1a"
+            VALUE "ProductVersion", "1.1.0a"
         END
     END
     BLOCK "VarFileInfo"
