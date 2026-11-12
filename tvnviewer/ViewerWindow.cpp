@@ -37,6 +37,7 @@
 // Modified for FarSightVNC on 2026-11-11: New connection opens a shell window on the Home page.
 // Modified for FarSightVNC on 2026-11-11: the Settings page of the shell covers the running session (no full screen, no keyboard hook).
 // Modified for FarSightVNC on 2026-11-11: About opens the About section of the Settings page.
+// Modified for FarSightVNC on 2026-11-11: the keyboard hook releases a key on the same path it pressed it (no Ctrl/Alt stuck locally or on the server).
 //
 
 #include "config-lib/IniFileSettingsManager.h"
@@ -1444,22 +1445,28 @@ StringStorage ViewerWindow::formatWindowTitle() const
 LRESULT ViewerWindow::onHookProc(int code, WPARAM wParam, LPARAM lParam)
 {
   HWND focus = GetFocus();
-  if (GetForegroundWindow() != m_host->rootHwnd() ||
-      (focus != m_dsktWnd.getHWnd() && !IsChild(m_dsktWnd.getHWnd(), focus))) {
-    return false;
-  }
+  // The Settings page covering the session also takes the keyboard.
+  bool ownsKeyboard = !m_covered && GetForegroundWindow() == m_host->rootHwnd() &&
+    (focus == m_dsktWnd.getHWnd() || IsChild(m_dsktWnd.getHWnd(), focus));
   // A windowed viewer that cannot type into the server leaves the shortcuts
   // (Alt+Tab, Win...) to the local desktop.
   if (!m_isFullScr && (!m_isConnected || m_conConf->isViewOnly())) {
-    return false;
+    ownsKeyboard = false;
   }
   KBDLLHOOKSTRUCT *str = (KBDLLHOOKSTRUCT*) lParam;
-  if (WinHooks::decideKeyAction(str->vkCode, str->flags) == WinHooks::HOOK_KEY_PASS) {
+  // The key-up of a key follows its key-down: a Ctrl pressed in another
+  // window and released in the viewer reaches Windows, a Ctrl pressed in the
+  // viewer and released elsewhere does not.
+  if (WinHooks::routeKey(str->vkCode, str->flags, ownsKeyboard) == WinHooks::HOOK_KEY_PASS) {
     return false;
   }
+  // Without the keyboard only the release is delivered: the focus loss already
+  // released the key on the server, the message keeps the thread key state.
+  bool isUp = (str->flags & LLKHF_UP) != 0;
   LPARAM newLParam = WinHooks::makeKeyMessageLParam(str->scanCode, str->flags);
-  if (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN ||
-      wParam == WM_KEYUP || wParam == WM_SYSKEYUP) {
+  if ((ownsKeyboard || isUp) &&
+      (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN ||
+       wParam == WM_KEYUP || wParam == WM_SYSKEYUP)) {
     PostMessage(m_dsktWnd.getHWnd(), wParam, str->vkCode, newLParam);
   }
   return true;

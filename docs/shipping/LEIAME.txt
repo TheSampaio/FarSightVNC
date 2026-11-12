@@ -1,12 +1,16 @@
-FarSightVNC Viewer v1.0.0a (alpha)
+FarSightVNC Viewer v1.0.1a (alpha)
 ==================================
 
 Cliente VNC para Windows baseado no TightVNC Viewer 2.8.90.
 Licença: GNU GPL versão 2 ou posterior (ver LICENSE.txt).
-Data: 2026-11-10 - branch feature/updater.
+Data: 2026-11-11 - branch fix/keyboard-ctrl-shortcuts.
 
 
-*** MUDANÇA INCOMPATÍVEL na v1.0.0a ***
+Versão de correção do teclado (v1.0.1a): Ctrl e Alt deixam de ficar "presos"
+e Ctrl+C / Ctrl+V voltam a funcionar. Ver O QUE MUDOU NA v1.0.1a abaixo.
+
+
+*** MUDANÇA INCOMPATÍVEL na v1.0.0a (continua valendo) ***
 O programa agora é o fsvncviewer.exe, na raiz da pasta. Ele é apenas de
 64 bits (Windows 10/11 de 64 bits): a versão de 32 bits não é mais
 fornecida. Atualize atalhos e scripts que apontavam para o FarSightVNC.exe ou
@@ -81,6 +85,19 @@ pode ignorá-lo e manter os arquivos onde estão.
   como está.
 
 
+O QUE MUDOU NA v1.0.1a (correções do teclado)
+---------------------------------------------
+- Corrigido: Ctrl, Alt e Win pressionados em outra janela e soltos no viewer
+  ficavam "presos" (no Windows local e no servidor), e Ctrl+C / Ctrl+V (por
+  exemplo em teclado ABNT2) saíam como Ctrl+Alt+C. Agora uma tecla é solta
+  pelo mesmo caminho que a pressionou.
+- Corrigido: a tecla Print Screen (também Alt+Print Screen) agora fica no
+  computador local, então capturas de tela e a Ferramenta de Captura do
+  Windows funcionam com o viewer em foco. Ela não é mais enviada ao servidor.
+- Nada mais mudou: protocolo, servidor, atualizador e configurações salvas
+  são os mesmos da v1.0.0a.
+
+
 O QUE MUDOU NA v1.0.0a (primeira versão pública com o atualizador)
 -------------------------------------------------------------------
 - INCOMPATÍVEL: o executável agora é fsvncviewer.exe (era tvnviewer.exe), na
@@ -124,9 +141,11 @@ Base técnica (sem mudança visível para quem usa):
 
 VERIFICADO NESTA VERSÃO
 -----------------------
-- Testes automáticos: atualizador 2103/0 (x64, Release e Debug), teclado
-  227/0, fila de entrada 39/0, favoritos 88/0.
-- Instalação da versão assinada sobre uma cópia do executável x64 da v0.2.1a
+- Testes automáticos (x64, Release): teclado 480/0, fila de entrada 39/0,
+  favoritos 88/0, atualizador 2103/0. Os testes de teclado cobrem Ctrl+C/V/X/Z/A
+  com os dois Ctrl, a soltura de teclas pelo mesmo caminho e o Print Screen.
+- (Verificado na v1.0.0a, sem mudança de código do atualizador na v1.0.1a)
+  Instalação da versão assinada sobre uma cópia do executável x64 da v0.2.1a
   colocado na nova estrutura plana, com o viewer antigo aberto (o atualizador
   espera), arquivos do usuário preservados, atualização adulterada rejeitada
   e downgrade recusado. Também o caso de um executável sozinho em uma pasta
