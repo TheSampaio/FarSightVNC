@@ -80,6 +80,10 @@ public:
   void drawText(const wchar_t *text, const D2D1_RECT_F &rect, ThemeColor color,
                 float fontSize, DWRITE_FONT_WEIGHT weight = DWRITE_FONT_WEIGHT_NORMAL,
                 DWRITE_TEXT_ALIGNMENT alignment = DWRITE_TEXT_ALIGNMENT_LEADING);
+  // Text wrapped on as many lines as needed inside rect, from its top, not
+  // trimmed (notes and descriptions of the pages).
+  void drawParagraph(const wchar_t *text, const D2D1_RECT_F &rect, ThemeColor color,
+                     float fontSize, DWRITE_FONT_WEIGHT weight = DWRITE_FONT_WEIGHT_NORMAL);
   // Draws an icon centered in box. For now the glyph is a short text
   // placeholder; the icon phase draws Lucide SVG documents here when
   // supportsSvgGlyphs() is true and keeps the text as the fallback.
@@ -100,6 +104,11 @@ public:
   float measureText(const wchar_t *text, float fontSize,
                     DWRITE_FONT_WEIGHT weight = DWRITE_FONT_WEIGHT_NORMAL);
 
+  // Height in DIPs of text wrapped at width (drawParagraph()), or 0 without
+  // DirectWrite.
+  float measureParagraph(const wchar_t *text, float width, float fontSize,
+                         DWRITE_FONT_WEIGHT weight = DWRITE_FONT_WEIGHT_NORMAL);
+
   // Factories shared by every renderer of the process, created on first use
   // and kept until exit. 0 when Direct2D or DirectWrite is unavailable.
   static ID2D1Factory *getD2DFactory();
@@ -110,6 +119,9 @@ private:
   ChromeRenderer &operator=(const ChromeRenderer &);
 
   IDWriteTextFormat *getFormat(const wchar_t *family, float fontSize, DWRITE_FONT_WEIGHT weight);
+  // Layout of text wrapped at width, top aligned; the caller releases it.
+  IDWriteTextLayout *createParagraphLayout(const wchar_t *text, float width, float height,
+                                           float fontSize, DWRITE_FONT_WEIGHT weight);
   bool createTarget();
   void discardTarget();
   ID2D1SolidColorBrush *brush(ThemeColor color, float opacity = 1.0f);

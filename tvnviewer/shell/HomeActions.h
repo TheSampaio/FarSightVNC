@@ -44,8 +44,6 @@ public:
 
   // Opens a new shell window on the Home page (posted).
   virtual void openHome() = 0;
-  // Opens the configuration dialog of the viewer (posted).
-  virtual void openConfiguration() = 0;
 };
 
 #endif

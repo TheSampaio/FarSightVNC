@@ -38,6 +38,10 @@ add_executable(tvnviewer WIN32
   shell/ShellWindow.cpp
   shell/TitleBar.cpp
   ConnectionOptionsForm.cpp
+  shell/SettingsForm.cpp
+  shell/SettingsNav.cpp
+  shell/SettingsPage.cpp
+  shell/SettingsSections.cpp
   tvnviewer.rc
   dpi-aware.manifest)
 

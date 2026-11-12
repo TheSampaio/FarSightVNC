@@ -24,9 +24,9 @@
 #include "HomePage.h"
 #include "../resource.h"
 
-// Start tab of a shell: owns the Home page. The commands of the title bar
-// and of the menus that make sense without a session (settings, new
-// connection) go to the application.
+// Start tab of a shell: owns the Home page. The commands of the menus that
+// make sense without a session (new connection) go to the application; the
+// shell handles the settings button itself.
 class HomeTab : public ShellTab
 {
 public:
@@ -41,11 +41,7 @@ public:
 
   virtual bool onCommand(WPARAM wParam, LPARAM lParam)
   {
-    switch (LOWORD(wParam)) {
-    case IDS_TB_CONFIGURATION:
-      m_actions->openConfiguration();
-      return true;
-    case IDS_TB_NEWCONNECTION:
+    if (LOWORD(wParam) == IDS_TB_NEWCONNECTION) {
       m_actions->openHome();
       return true;
     }
@@ -63,6 +59,8 @@ public:
   virtual void onDisplayChange() {}
   virtual void onDpiChanged(UINT dpi, bool) { m_page.setDpi(dpi); }
   virtual void onAppStateChanged() { m_page.refresh(); }
+  // The settings may have changed the history (its size).
+  virtual void onUncovered() { m_page.refresh(); }
 
 private:
   HomeActions *m_actions;

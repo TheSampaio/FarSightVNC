@@ -23,6 +23,7 @@
 #include "client-config-lib/ViewerConfig.h"
 #include "gui/DpiUtils.h"
 #include "../ConnectionData.h"
+#include "../DefaultConnectionConfig.h"
 #include "../NamingDefs.h"
 #include "../OptionsDialog.h"
 
@@ -127,10 +128,12 @@ StringStorage toStorage(const std::wstring &text)
 #endif
 }
 
-// Options saved for host (by the history), over the defaults.
+// Options saved for host (by the history), over the options of new
+// connections (Settings).
 ConnectionConfig savedConfig(const std::wstring &host)
 {
   ConnectionConfig config;
+  DefaultConnectionConfig::load(&config);
   if (!host.empty()) {
     StringStorage key = toStorage(host);
     ConnectionConfigSM ccsm(RegistryPaths::VIEWER_PATH, key.getString());

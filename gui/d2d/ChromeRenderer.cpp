@@ -459,6 +459,55 @@ void ChromeRenderer::drawText(const wchar_t *text, const D2D1_RECT_F &rect, Them
                      D2D1_DRAW_TEXT_OPTIONS_CLIP);
 }
 
+IDWriteTextLayout *ChromeRenderer::createParagraphLayout(const wchar_t *text, float width,
+                                                         float height, float fontSize,
+                                                         DWRITE_FONT_WEIGHT weight)
+{
+  IDWriteTextFormat *format = getTextFormat(fontSize, weight);
+  IDWriteFactory *factory = getDWriteFactory();
+  if (format == 0 || factory == 0 || text == 0 || width <= 0.0f) {
+    return 0;
+  }
+  IDWriteTextLayout *layout = 0;
+  if (FAILED(factory->CreateTextLayout(text, static_cast<UINT32>(wcslen(text)), format,
+                                       width, height > 0.0f ? height : 100000.0f, &layout))) {
+    return 0;
+  }
+  // The shared format is a single trimmed line: the layout overrides it.
+  layout->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+  layout->SetWordWrapping(DWRITE_WORD_WRAPPING_WRAP);
+  layout->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
+  DWRITE_TRIMMING trimming = { DWRITE_TRIMMING_GRANULARITY_NONE, 0, 0 };
+  layout->SetTrimming(&trimming, 0);
+  return layout;
+}
+
+void ChromeRenderer::drawParagraph(const wchar_t *text, const D2D1_RECT_F &rect, ThemeColor color,
+                                   float fontSize, DWRITE_FONT_WEIGHT weight)
+{
+  IDWriteTextLayout *layout = createParagraphLayout(text, rect.right - rect.left,
+                                                    rect.bottom - rect.top, fontSize, weight);
+  if (layout == 0) {
+    return;
+  }
+  m_target->DrawTextLayout(D2D1::Point2F(rect.left, rect.top), layout, brush(color),
+                           D2D1_DRAW_TEXT_OPTIONS_CLIP);
+  layout->Release();
+}
+
+float ChromeRenderer::measureParagraph(const wchar_t *text, float width, float fontSize,
+                                       DWRITE_FONT_WEIGHT weight)
+{
+  IDWriteTextLayout *layout = createParagraphLayout(text, width, 0.0f, fontSize, weight);
+  if (layout == 0) {
+    return 0.0f;
+  }
+  DWRITE_TEXT_METRICS metrics;
+  float height = SUCCEEDED(layout->GetMetrics(&metrics)) ? metrics.height : 0.0f;
+  layout->Release();
+  return height;
+}
+
 void ChromeRenderer::drawGlyph(const wchar_t *glyph, const D2D1_RECT_F &box, ThemeColor color)
 {
   // Icon phase: when supportsSvgGlyphs(), look up the SVG document of the

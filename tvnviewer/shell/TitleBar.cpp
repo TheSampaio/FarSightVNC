@@ -92,7 +92,8 @@ TitleBar::TitleBar()
   m_close(D2D1::RectF()),
   m_empty(D2D1::RectF()),
   m_hover(TITLE_BAR_NONE),
-  m_pressed(TITLE_BAR_NONE)
+  m_pressed(TITLE_BAR_NONE),
+  m_settingsActive(false)
 {
 }
 
@@ -216,7 +217,11 @@ bool TitleBar::buttonBackground(TitleBarPart part, ThemeColor *color) const
     return true;
   }
   if (hover) {
-    *color = theme.hover;
+    *color = part == TITLE_BAR_SETTINGS && m_settingsActive ? theme.selectedHover : theme.hover;
+    return true;
+  }
+  if (part == TITLE_BAR_SETTINGS && m_settingsActive) {
+    *color = theme.selected;
     return true;
   }
   return false;
@@ -239,6 +244,8 @@ void TitleBar::paintCaptionButton(ChromeRenderer *renderer, TitleBarPart part, w
     }
     if (part == TITLE_BAR_CLOSE) {
       glyph = theme.closeHoverText;
+    } else if (part == TITLE_BAR_SETTINGS && m_settingsActive) {
+      glyph = theme.selectedText;
     }
   }
   float size = part == TITLE_BAR_SETTINGS ? kSettingsGlyphSize : kCaptionGlyphSize;

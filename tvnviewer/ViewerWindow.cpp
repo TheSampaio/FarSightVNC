@@ -35,6 +35,7 @@
 // Modified for FarSightVNC on 2026-11-11: the full screen toolbar is a floating pill with the session actions and state.
 // Modified for FarSightVNC on 2026-11-11: the remote screen always fits the window (no scale modes, no scroll bars).
 // Modified for FarSightVNC on 2026-11-11: New connection opens a shell window on the Home page.
+// Modified for FarSightVNC on 2026-11-11: the Settings page of the shell covers the running session (no full screen, no keyboard hook).
 //
 
 #include "config-lib/IniFileSettingsManager.h"
@@ -61,6 +62,7 @@ ViewerWindow::ViewerWindow(WindowsApplication *application,
   m_logWriter(logger),
   m_conConf(conConf),
   m_isFullScr(false),
+  m_covered(false),
   m_ftDialog(0),
   m_viewerCore(0),
   m_fileTransfer(0),
@@ -300,8 +302,9 @@ bool ViewerWindow::onFrameCommand(WPARAM wParam, LPARAM lParam)
 void ViewerWindow::onFrameActivate(WPARAM wParam)
 {
   // The keyboard hook sends system shortcuts (Win, Alt+Tab, Ctrl+Esc...)
-  // to the server while the viewer is the active window, windowed or not.
-  if (LOWORD(wParam) == WA_ACTIVE || LOWORD(wParam) == WA_CLICKACTIVE) {
+  // to the server while the viewer is the active window, windowed or not,
+  // and not covered by the Settings page.
+  if ((LOWORD(wParam) == WA_ACTIVE || LOWORD(wParam) == WA_CLICKACTIVE) && !m_covered) {
     // full screen viewer can be minimized from other screen
     if (IsIconic(m_host->rootHwnd())) {
       return;
@@ -320,6 +323,26 @@ void ViewerWindow::onFrameActivate(WPARAM wParam)
     // Switching on ignoring win key.
     m_dsktWnd.setWinKeyIgnore(true);
   }
+}
+
+void ViewerWindow::onFrameCovered()
+{
+  // The Settings page covers the session, which keeps running hidden: the
+  // keys go to the page, never to the server. Full screen ends first (the
+  // page is shown in the windowed frame); the keyboard hook is released and
+  // the Win key is left to the local desktop.
+  if (m_isFullScr) {
+    doUnFullScr();
+  }
+  m_covered = true;
+  m_winHooks.unregisterKeyboardHook(this);
+  m_dsktWnd.setWinKeyIgnore(true);
+}
+
+void ViewerWindow::onFrameUncovered()
+{
+  // The shell sends WM_ACTIVATE again if it is active (onFrameActivate()).
+  m_covered = false;
 }
 
 void ViewerWindow::onFrameSizing()
@@ -438,7 +461,8 @@ void ViewerWindow::switchFullScreenMode()
 
 void ViewerWindow::dialogConfiguration()
 {
-  m_application->postMessage(TvnViewer::WM_USER_CONFIGURATION);
+  // The Settings page of the shell, over this session.
+  m_host->openSettings(SETTINGS_GENERAL);
 }
 
 void ViewerWindow::desktopStateUpdate()
@@ -765,7 +789,9 @@ void ViewerWindow::setSizeFullScreenWindow()
 
 void ViewerWindow::doFullScr()
 {
-  if (m_isFullScr) {
+  // Covered by the Settings page, the session stays windowed (full screen
+  // would take the focus to the hidden remote desktop).
+  if (m_isFullScr || m_covered) {
     return;
   }
 
@@ -1077,7 +1103,9 @@ bool ViewerWindow::onFsWarning()
 
 bool ViewerWindow::onFocus(WPARAM wParam)
 {
-  SetFocus(m_dsktWnd.getHWnd());
+  if (!m_covered) {
+    SetFocus(m_dsktWnd.getHWnd());
+  }
   return true;
 }
 
@@ -1216,7 +1244,7 @@ void ViewerWindow::adjustWindowSize()
     // This is done for keyboard hooks to work.
     // If m_conConf->isFullscreenEnabled() is true,
     // hooks don't work at the first start of the viewer.
-    if (m_hooksEnabledFirstTime && GetForegroundWindow() == m_host->rootHwnd()) {
+    if (m_hooksEnabledFirstTime && !m_covered && GetForegroundWindow() == m_host->rootHwnd()) {
       try {
         // Registration of keyboard hook.
         m_winHooks.registerKeyboardHook(this);

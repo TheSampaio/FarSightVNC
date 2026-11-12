@@ -41,6 +41,8 @@ public:
   virtual void onFrameSizing() { m_window->onFrameSizing(); }
   virtual void onDisplayChange() { m_window->onFrameDisplayChange(); }
   virtual void onDpiChanged(UINT dpi, bool frameMoved) { m_window->onFrameDpiChanged(dpi, frameMoved); }
+  virtual void onCovered() { m_window->onFrameCovered(); }
+  virtual void onUncovered() { m_window->onFrameUncovered(); }
   virtual bool requestClose()
   {
     // The session ends the shell (onSessionEnded()) unless it refuses to

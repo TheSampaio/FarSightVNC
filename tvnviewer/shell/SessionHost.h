@@ -20,6 +20,7 @@
 #ifndef _SESSION_HOST_H_
 #define _SESSION_HOST_H_
 
+#include "SettingsSection.h"
 #include "util/winhdr.h"
 
 class StringStorage;
@@ -66,6 +67,9 @@ public:
   // The view is destroyed; the frame is destroyed too unless the session is
   // reconnecting, in which case the next session is shown in the same frame.
   virtual void onSessionEnded(bool reconnecting) = 0;
+
+  // Shows the Settings page of the frame on section, over the session.
+  virtual void openSettings(SettingsSectionId section) = 0;
 };
 
 #endif

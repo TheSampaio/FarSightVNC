@@ -40,6 +40,11 @@ const int kTopResizeEdge = 5;
 // Title of the Home tab and size of the content of a new Home window, in
 // DIPs.
 const TCHAR kHomeTitle[] = _T("Home");
+// Title of the tab while the Settings page covers it.
+const wchar_t kSettingsTitle[] = L"Settings";
+// Section of the Settings page shown last in this process: the settings
+// button opens it again.
+SettingsSectionId s_lastSection = SETTINGS_APPEARANCE;
 const float kHomeWidth = 900.0f;
 const float kHomeHeight = 640.0f;
 
@@ -111,9 +116,11 @@ ShellTab *TabModel::active() const
   return m_active < m_tabs.size() ? m_tabs[m_active].get() : 0;
 }
 
-ShellWindow::ShellWindow(const TCHAR *windowClassName, Logger *logger, HomeActions *home)
+ShellWindow::ShellWindow(const TCHAR *windowClassName, Logger *logger, HomeActions *home,
+                         SettingsActions *settings)
 : m_logWriter(logger),
   m_home(home),
+  m_settingsActions(settings),
   m_showsHome(false),
   m_closeRequested(false),
   m_lastFocus(0),
@@ -149,6 +156,7 @@ ShellWindow::ShellWindow(const TCHAR *windowClassName, Logger *logger, HomeActio
 ShellWindow::~ShellWindow()
 {
   // The tabs reference sessions owned elsewhere: never call them from here.
+  m_settings.reset();
   m_tabs.clear();
   // ~BaseWindow destroys a window that still exists: its messages must not
   // reach this object any more.
@@ -190,6 +198,12 @@ LRESULT ShellWindow::callBaseProc(UINT message, WPARAM wParam, LPARAM lParam)
 
 bool ShellWindow::onFrameMessage(UINT message, WPARAM wParam, LPARAM lParam, LRESULT *result)
 {
+  if (message == SettingsPage::closeMessage()) {
+    // Back or Esc on the Settings page (posted by the page).
+    closeSettings();
+    *result = 0;
+    return true;
+  }
   switch (message) {
   case WM_NCCALCSIZE:
     if (wParam == TRUE && !m_isFullscreen) {
@@ -461,7 +475,7 @@ void ShellWindow::executeTitleBarPart(TitleBarPart part)
     SendMessage(m_hWnd, WM_SYSCOMMAND, SC_CLOSE, 0);
     break;
   case TITLE_BAR_SETTINGS:
-    // The configuration dialog, through the session (onCommand()).
+    // Opens or closes the Settings page (onCommand()).
     PostMessage(m_hWnd, WM_COMMAND, IDS_TB_CONFIGURATION, 0);
     break;
   default:
@@ -493,7 +507,7 @@ void ShellWindow::paint()
   PAINTSTRUCT ps;
   HDC dc = BeginPaint(m_hWnd, &ps);
   if (dc != 0 && !m_isFullscreen) {
-    ShellTab *tab = m_tabs.active();
+    ShellTab *tab = visibleTab();
     bool hasView = tab != 0 && tab->viewHwnd() != 0;
     if (m_chrome.beginDraw()) {
       // The session view (WS_CLIPCHILDREN) covers the rest of the client
@@ -529,7 +543,9 @@ void ShellWindow::updateDwmFrame()
 
 void ShellWindow::attachTab(std::unique_ptr<ShellTab> tab)
 {
-  // The tab that is replaced (the Home page) destroys its view.
+  // The tab that is replaced (the Home page) destroys its view; a new tab
+  // is shown, not the Settings page.
+  dropSettings();
   m_tabs.clear();
   m_showsHome = false;
   m_tabs.add(std::move(tab));
@@ -574,6 +590,98 @@ void ShellWindow::onAppStateChanged()
   }
 }
 
+ShellTab *ShellWindow::visibleTab() const
+{
+  if (m_settings) {
+    return m_settings.get();
+  }
+  return m_tabs.active();
+}
+
+bool ShellWindow::isShowingSettings() const
+{
+  return !!m_settings;
+}
+
+void ShellWindow::openSettings(SettingsSectionId section)
+{
+  if (m_hWnd == 0) {
+    return;
+  }
+  s_lastSection = section;
+  if (m_settings) {
+    m_settings->showSection(section);
+    return;
+  }
+  ShellTab *covered = m_tabs.active();
+  m_settings.reset(new SettingsTab(m_hWnd, m_settingsActions, section));
+  // The focus leaves the covered view before it is hidden: a hidden remote
+  // desktop must never keep the keyboard (its keys would reach the server).
+  m_lastFocus = 0;
+  layoutActiveTab();
+  if (GetActiveWindow() == m_hWnd) {
+    focusActiveTab();
+  }
+  if (covered != 0) {
+    covered->onCovered();
+    if (covered->viewHwnd() != 0) {
+      ShowWindow(covered->viewHwnd(), SW_HIDE);
+    }
+  }
+  m_titleBar.setSettingsActive(true);
+  updateTabTitle();
+  InvalidateRect(m_hWnd, 0, FALSE);
+}
+
+void ShellWindow::closeSettings()
+{
+  if (!m_settings) {
+    return;
+  }
+  s_lastSection = m_settings->section();
+  ShellTab *covered = m_tabs.active();
+  if (covered != 0 && covered->viewHwnd() != 0) {
+    ShowWindow(covered->viewHwnd(), SW_SHOW);
+  }
+  m_lastFocus = 0;
+  // The covered tab takes the focus before the page goes away.
+  bool active = GetActiveWindow() == m_hWnd;
+  if (active && covered != 0 && covered->focusHwnd() != 0) {
+    SetFocus(covered->focusHwnd());
+  }
+  m_settings.reset();
+  m_titleBar.setSettingsActive(false);
+  updateTabTitle();
+  layoutActiveTab();
+  if (covered != 0) {
+    covered->onUncovered();
+    // The keyboard hook of a session follows the activation of the frame.
+    if (active) {
+      covered->onActivate(MAKEWPARAM(WA_ACTIVE, 0));
+      focusActiveTab();
+    }
+  }
+  InvalidateRect(m_hWnd, 0, FALSE);
+}
+
+void ShellWindow::dropSettings()
+{
+  if (!m_settings) {
+    return;
+  }
+  s_lastSection = m_settings->section();
+  m_settings.reset();
+  m_lastFocus = 0;
+  m_titleBar.setSettingsActive(false);
+  updateTabTitle();
+}
+
+void ShellWindow::updateTabTitle()
+{
+  m_titleBar.setTitle(m_settings ? std::wstring(kSettingsTitle) : m_tabTitle);
+  invalidateTitleBar();
+}
+
 bool ShellWindow::isDestroyed() const
 {
   return m_destroyed;
@@ -600,8 +708,8 @@ void ShellWindow::setTitle(const StringStorage *windowTitle, const StringStorage
   // the session name (the window title while there is none).
   setWindowText(windowTitle);
   const StringStorage *tab = tabTitle->isEmpty() ? windowTitle : tabTitle;
-  m_titleBar.setTitle(toWide(tab->getString()));
-  invalidateTitleBar();
+  m_tabTitle = toWide(tab->getString());
+  updateTabTitle();
 }
 
 void ShellWindow::enterFullscreen(const RECT &monitorRect)
@@ -732,6 +840,8 @@ void ShellWindow::onSessionEnded(bool reconnecting)
   if (m_tabs.active() != 0) {
     view = m_tabs.active()->viewHwnd();
   }
+  // The page goes with the session it covered.
+  dropSettings();
   m_tabs.clear();
   m_lastFocus = 0;
   if (!reconnecting && m_closeRequested) {
@@ -757,6 +867,23 @@ void ShellWindow::onSessionEnded(bool reconnecting)
 
 bool ShellWindow::onCommand(WPARAM wParam, LPARAM lParam)
 {
+  if (LOWORD(wParam) == IDS_TB_CONFIGURATION) {
+    // The settings button (or a menu): the page, or back from it.
+    if (m_settings) {
+      closeSettings();
+    } else {
+      openSettings(s_lastSection);
+    }
+    return true;
+  }
+  if (m_settings) {
+    // The keyboard belongs to the page: the session accelerators are off.
+    if (HIWORD(wParam) == 1) {
+      return true;
+    }
+    // Another command of the covered tab: the tab is shown for it.
+    closeSettings();
+  }
   ShellTab *tab = m_tabs.active();
   return tab != 0 && tab->onCommand(wParam, lParam);
 }
@@ -765,6 +892,11 @@ bool ShellWindow::onSysCommand(WPARAM wParam, LPARAM lParam)
 {
   // The session menu lives in the system menu of the shell. Commands the tab
   // does not know (move, size, close...) go to DefWindowProc.
+  if ((wParam & 0xFFF0) < 0xF000 && (m_settings || LOWORD(wParam) == IDS_TB_CONFIGURATION)) {
+    // The settings entry, or a session command of the system menu (the
+    // session is shown for it).
+    return onCommand(wParam, lParam);
+  }
   ShellTab *tab = m_tabs.active();
   return tab != 0 && tab->onCommand(wParam, lParam);
 }
@@ -781,6 +913,9 @@ bool ShellWindow::onMessage(UINT message, WPARAM wParam, LPARAM lParam)
   case WM_SIZING:
     if (tab != 0) {
       tab->onFrameSizing();
+    }
+    if (m_settings) {
+      m_settings->onFrameSizing();
     }
     return false;
   case WM_ACTIVATE:
@@ -810,6 +945,7 @@ bool ShellWindow::onMessage(UINT message, WPARAM wParam, LPARAM lParam)
     return false;
   case WM_NCDESTROY:
     m_destroyed = true;
+    m_settings.reset();
     m_tabs.clear();
     // The handle is no longer valid (~BaseWindow must not destroy it).
     m_hWnd = 0;
@@ -820,7 +956,8 @@ bool ShellWindow::onMessage(UINT message, WPARAM wParam, LPARAM lParam)
 
 void ShellWindow::onActivate(WPARAM wParam)
 {
-  ShellTab *tab = m_tabs.active();
+  // A tab covered by the Settings page stays inactive (no keyboard hook).
+  ShellTab *tab = visibleTab();
   bool active = LOWORD(wParam) != WA_INACTIVE;
   if (!active) {
     HWND focus = GetFocus();
@@ -847,6 +984,9 @@ void ShellWindow::onDpiChanged(WPARAM wParam, LPARAM lParam)
   if (tab != 0) {
     tab->onDpiChanged(LOWORD(wParam), frameMoved);
   }
+  if (m_settings) {
+    m_settings->onDpiChanged(LOWORD(wParam), frameMoved);
+  }
   if (frameMoved) {
     SetWindowPos(m_hWnd, 0, suggested->left, suggested->top,
                  suggested->right - suggested->left,
@@ -859,26 +999,30 @@ void ShellWindow::onDpiChanged(WPARAM wParam, LPARAM lParam)
 
 void ShellWindow::layoutActiveTab()
 {
-  ShellTab *tab = m_tabs.active();
-  if (tab == 0 || tab->viewHwnd() == 0) {
-    return;
-  }
-  // Below the title bar (none in full screen).
+  // Below the title bar (none in full screen). A tab covered by the
+  // Settings page keeps the size of the content area too.
   RECT rc;
   GetClientRect(m_hWnd, &rc);
   int top = titleBarHeight();
   int height = rc.bottom - rc.top - top;
-  SetWindowPos(tab->viewHwnd(), 0, 0, top, rc.right - rc.left, height > 0 ? height : 0,
-               SWP_NOZORDER | SWP_NOACTIVATE);
+  ShellTab *tabs[] = { m_tabs.active(), m_settings.get() };
+  for (size_t i = 0; i < sizeof(tabs) / sizeof(tabs[0]); i++) {
+    if (tabs[i] != 0 && tabs[i]->viewHwnd() != 0) {
+      SetWindowPos(tabs[i]->viewHwnd(), 0, 0, top, rc.right - rc.left,
+                   height > 0 ? height : 0, SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+  }
 }
 
 void ShellWindow::focusActiveTab()
 {
-  if (m_lastFocus != 0 && IsWindow(m_lastFocus) && IsChild(m_hWnd, m_lastFocus)) {
+  // Never a window hidden under the Settings page.
+  if (m_lastFocus != 0 && IsWindow(m_lastFocus) && IsChild(m_hWnd, m_lastFocus) &&
+      IsWindowVisible(m_lastFocus)) {
     SetFocus(m_lastFocus);
     return;
   }
-  ShellTab *tab = m_tabs.active();
+  ShellTab *tab = visibleTab();
   if (tab != 0 && tab->focusHwnd() != 0) {
     SetFocus(tab->focusHwnd());
   }

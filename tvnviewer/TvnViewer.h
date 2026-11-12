@@ -24,6 +24,7 @@
 // Modified for FarSightVNC on 2026-11-11: every session is shown in its own shell window, owned by the application.
 // Modified for FarSightVNC on 2026-11-11: a reconnection reuses the shell window of the session.
 // Modified for FarSightVNC on 2026-11-11: the Home page of a shell window replaces the login dialog.
+// Modified for FarSightVNC on 2026-11-11: the Settings page of a shell window (SettingsActions).
 //
 
 #ifndef _TVN_VIEWER_H_
@@ -51,7 +52,8 @@ class ControlTrayIcon;
 class UpdateController;
 
 class TvnViewer : public WindowsApplication,
-                  public HomeActions
+                  public HomeActions,
+                  public SettingsActions
 {
 public:
   TvnViewer(HINSTANCE appInstance,
@@ -93,7 +95,12 @@ public:
   virtual bool isListening() const;
   virtual void toggleListening();
   virtual void openHome();
-  virtual void openConfiguration();
+
+  // SettingsActions implementation.
+  virtual void addDialogWindow(HWND window);
+  virtual void removeDialogWindow(HWND window);
+  virtual void openConfigurationDialog();
+  virtual void checkForUpdates();
 
   // Inherited from WindowsApplication
   void registerWindowClass(WNDCLASS *wndClass);

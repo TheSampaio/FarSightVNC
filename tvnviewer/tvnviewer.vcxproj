@@ -344,6 +344,10 @@
     <ClCompile Include="shell\ShellWindow.cpp" />
     <ClCompile Include="shell\TitleBar.cpp" />
     <ClCompile Include="ConnectionOptionsForm.cpp" />
+    <ClCompile Include="shell\SettingsForm.cpp" />
+    <ClCompile Include="shell\SettingsNav.cpp" />
+    <ClCompile Include="shell\SettingsPage.cpp" />
+    <ClCompile Include="shell\SettingsSections.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="AboutDialog.h" />
@@ -393,6 +397,14 @@
     <ClInclude Include="shell\ShellWindow.h" />
     <ClInclude Include="shell\TitleBar.h" />
     <ClInclude Include="ConnectionOptionsForm.h" />
+    <ClInclude Include="shell\SettingsForm.h" />
+    <ClInclude Include="shell\SettingsNav.h" />
+    <ClInclude Include="shell\SettingsPage.h" />
+    <ClInclude Include="shell\SettingsSections.h" />
+    <ClInclude Include="shell\SettingsSection.h" />
+    <ClInclude Include="shell\SettingsActions.h" />
+    <ClInclude Include="shell\SettingsTab.h" />
+    <ClInclude Include="DefaultConnectionConfig.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="res\appicon.ico" />

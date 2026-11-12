@@ -77,6 +77,8 @@ public:
   TitleBarPart hitTest(float x, float y) const;
 
   void setTitle(const std::wstring &title);
+  // The Settings page is shown: the settings button looks selected.
+  void setSettingsActive(bool active) { m_settingsActive = active; }
 
   // Hover and pressed parts; the setters return true when the state changed
   // (the bar must be repainted).
@@ -107,6 +109,7 @@ private:
   std::wstring m_title;
   TitleBarPart m_hover;
   TitleBarPart m_pressed;
+  bool m_settingsActive;
 };
 
 #endif

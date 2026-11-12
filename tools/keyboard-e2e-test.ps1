@@ -78,6 +78,15 @@ public static class E2eWin {
     return found;
   }
 
+  [StructLayout(LayoutKind.Sequential)] public struct GuiInfo {
+    public int cbSize; public int flags; public IntPtr active; public IntPtr focus; public IntPtr capture;
+    public IntPtr menuOwner; public IntPtr moveSize; public IntPtr caret; public int l, t, r, b; }
+  [DllImport("user32.dll")] public static extern bool GetGUIThreadInfo(uint thread, ref GuiInfo info);
+  public static IntPtr FocusOf(IntPtr h) {
+    GuiInfo info = new GuiInfo(); info.cbSize = Marshal.SizeOf(info);
+    GetGUIThreadInfo(OwnerThread(h), ref info); return info.focus;
+  }
+
   public static IntPtr[] LayoutList() {
     int n = GetKeyboardLayoutList(0, null);
     IntPtr[] l = new IntPtr[Math.Max(n, 1)];
@@ -214,6 +223,32 @@ try {
   Invoke-Case 'ABNT2 autorepeat a: same keysym, one release' $desk @($aD, $aR, $aR, $aU) @('+61', '+61', '+61', '-61')
   Invoke-Case 'ABNT2 dead acute then a gives a-acute' $desk `
     @(@('d', $VK.DeadAcute, $SC.DeadAcute), @('u', $VK.DeadAcute, $SC.DeadAcute), $aD, $aU) @('+e1', '-e1')
+
+  # The Settings page over the running session (settings button command,
+  # IDS_TB_CONFIGURATION = 216): the remote desktop is hidden and loses the
+  # keyboard, keys typed into the page never reach the server, Esc goes back
+  # and typing reaches the server again.
+  $WM_COMMAND = 0x111; $VK_ESCAPE = 0x1B
+  if ([E2eWin]::OwnerPid($top) -ne $state.Viewer.Id) { throw 'refusing to post to a window of another process' }
+  [void][E2eWin]::PostMessage($top, [uint32]$WM_COMMAND, [IntPtr]216, [IntPtr]::Zero)
+  Start-Sleep -Milliseconds 700
+  $focus = [E2eWin]::FocusOf($desk)
+  $hidden = -not [E2eWin]::IsWindowVisible($desk)
+  [void]$results.Add([pscustomobject]@{ Case = 'Settings shown: remote desktop hidden, focus on the page'
+      Passed = ($hidden -and $focus -ne [IntPtr]::Zero -and $focus -ne $desk); Balanced = $true
+      Expected = 'hidden, focus elsewhere'; Actual = "hidden=$hidden focus=$focus desk=$desk" })
+  if ($focus -ne [IntPtr]::Zero -and $focus -ne $desk) {
+    Invoke-Case 'Settings shown: keys typed into the page do not reach the server' $focus @($aD, $aU, $ls, $kd, $ku, $lsU) @()
+    # Key down only: the page is gone before a key up could be posted to it.
+    Send-Key $focus $VK_ESCAPE 0x01 $false $false $false
+  }
+  Start-Sleep -Milliseconds 700
+  $focus = [E2eWin]::FocusOf($desk)
+  $shown = [E2eWin]::IsWindowVisible($desk)
+  [void]$results.Add([pscustomobject]@{ Case = 'Esc closes Settings: remote desktop shown and focused'
+      Passed = ($shown -and $focus -eq $desk); Balanced = $true
+      Expected = "visible, focus=$desk"; Actual = "visible=$shown focus=$focus" })
+  Invoke-Case 'after Settings: typing reaches the server again' $desk @($aD, $aU) @('+61', '-61')
 } catch {
   [void]$results.Add([pscustomobject]@{ Case = 'harness'; Passed = $false; Balanced = $false; Expected = 'no error'; Actual = $_.Exception.Message })
 } finally {

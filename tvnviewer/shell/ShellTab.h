@@ -54,6 +54,12 @@ public:
   virtual bool requestClose() { return true; }
   // State of the application shown by the tab changed (listening mode).
   virtual void onAppStateChanged() {}
+
+  // The Settings page covers the tab, whose view the shell hides (a session
+  // keeps running), or the tab is shown again. The shell moves the focus
+  // away before covering and sends WM_ACTIVATE again after uncovering.
+  virtual void onCovered() {}
+  virtual void onUncovered() {}
 };
 
 #endif

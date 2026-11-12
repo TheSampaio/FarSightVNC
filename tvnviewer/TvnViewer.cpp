@@ -25,6 +25,7 @@
 // Modified for FarSightVNC on 2026-11-11: every session is shown in its own shell window, owned by the application.
 // Modified for FarSightVNC on 2026-11-11: a reconnection reuses the shell window of the session.
 // Modified for FarSightVNC on 2026-11-11: the Home page of a shell window replaces the login dialog; a shell returns to Home when its session ends.
+// Modified for FarSightVNC on 2026-11-11: the Settings page of a shell window (SettingsActions).
 //
 
 #include "TvnViewer.h"
@@ -181,9 +182,24 @@ void TvnViewer::openHome()
   postMessage(WM_USER_SHOW_HOME);
 }
 
-void TvnViewer::openConfiguration()
+void TvnViewer::addDialogWindow(HWND window)
+{
+  addModelessDialog(window);
+}
+
+void TvnViewer::removeDialogWindow(HWND window)
+{
+  removeModelessDialog(window);
+}
+
+void TvnViewer::openConfigurationDialog()
 {
   postMessage(WM_USER_CONFIGURATION);
+}
+
+void TvnViewer::checkForUpdates()
+{
+  postMessage(WM_USER_CHECK_UPDATES);
 }
 
 void TvnViewer::addInstance(ViewerInstance *viewerInstance)
@@ -220,7 +236,7 @@ ShellWindow *TvnViewer::createShell()
 {
   m_shells.push_back(std::unique_ptr<ShellWindow>(
     new ShellWindow(m_viewerWindowClassName.getString(),
-                    ViewerConfig::getInstance()->getLogger(), this)));
+                    ViewerConfig::getInstance()->getLogger(), this, this)));
   return m_shells.back().get();
 }
 

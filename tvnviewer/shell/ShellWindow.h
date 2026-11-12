@@ -22,6 +22,8 @@
 
 #include "HomeActions.h"
 #include "SessionHost.h"
+#include "SettingsActions.h"
+#include "SettingsTab.h"
 #include "ShellTab.h"
 #include "TitleBar.h"
 #include "gui/d2d/ChromeRenderer.h"
@@ -62,6 +64,11 @@ private:
 // bar to caption, window buttons (HTMAXBUTTON opens the Snap Layouts of
 // Windows 11) and the top resize edge. In full screen there is no title bar.
 //
+// The settings button (IDS_TB_CONFIGURATION) shows the Settings page over the
+// active tab, which the shell keeps: a session goes on running hidden, without
+// the focus and the keyboard hook. Back, Esc or the button again closes the
+// page and shows the tab as it was.
+//
 // The application owns the shells; a shell whose window is destroyed is
 // deleted by the application (see isDestroyed()). A shell outlives its
 // session: a reconnected session is shown in the same frame, and a session
@@ -73,7 +80,9 @@ class ShellWindow : public BaseWindow,
 {
 public:
   // home receives the actions of the Home page.
-  ShellWindow(const TCHAR *windowClassName, Logger *logger, HomeActions *home);
+  // settings receives the actions of the Settings page.
+  ShellWindow(const TCHAR *windowClassName, Logger *logger, HomeActions *home,
+              SettingsActions *settings);
   virtual ~ShellWindow();
 
   // Shows tab in the content area and makes it the active tab. There is one
@@ -101,6 +110,11 @@ public:
   virtual void requestClientSize(int width, int height);
   virtual void openMaximized();
   virtual void onSessionEnded(bool reconnecting);
+  virtual void openSettings(SettingsSectionId section);
+
+  // Closes the Settings page and shows the tab it covers again.
+  void closeSettings();
+  bool isShowingSettings() const;
 
 private:
   // Window procedure installed over the one of the window class: the title
@@ -118,6 +132,13 @@ private:
   void onActivate(WPARAM wParam);
   void onDpiChanged(WPARAM wParam, LPARAM lParam);
   void layoutActiveTab();
+  // The Settings page while it is shown, else the active tab.
+  ShellTab *visibleTab() const;
+  // Destroys the Settings page without showing the covered tab again (the
+  // tab goes away too).
+  void dropSettings();
+  // Shows the tab title in the bar: "Settings" over the page.
+  void updateTabTitle();
 
   // Title bar.
   LRESULT hitTest(WPARAM wParam, LPARAM lParam);
@@ -142,7 +163,12 @@ private:
   LogWriter m_logWriter;
   SystemInformation m_sysinf;
   HomeActions *m_home;
+  SettingsActions *m_settingsActions;
   TabModel m_tabs;
+  // The Settings page over the active tab, or none.
+  std::unique_ptr<SettingsTab> m_settings;
+  // Title of the active tab, kept while the page covers it.
+  std::wstring m_tabTitle;
   // The active tab is the Home page.
   bool m_showsHome;
   // The user closes the shell: the end of the session destroys it instead

@@ -33,6 +33,7 @@
 // Modified for FarSightVNC on 2026-11-11: SessionToolbar (Direct2D) replaces the comctl toolbar; the session state drives it.
 // Modified for FarSightVNC on 2026-11-11: the full screen toolbar is a floating pill with the session actions and state.
 // Modified for FarSightVNC on 2026-11-11: the remote screen always fits the window (no scale modes, no scroll bars).
+// Modified for FarSightVNC on 2026-11-11: the Settings page of the shell covers the running session.
 //
 
 #ifndef _VIEWER_WINDOW_H_
@@ -96,6 +97,10 @@ public:
   bool onFrameCommand(WPARAM wParam, LPARAM lParam);
   // WM_ACTIVATE: the keyboard hook follows the activation of the frame.
   void onFrameActivate(WPARAM wParam);
+  // The Settings page of the shell covers the session view (hidden, the
+  // session keeps running) or shows it again.
+  void onFrameCovered();
+  void onFrameUncovered();
   // WM_SIZING: the user sizes the frame, which keeps that size from now on.
   void onFrameSizing();
   void onFrameDisplayChange();
@@ -202,6 +207,8 @@ protected:
 
   // Flag is set, if now viewer is in full screen mode
   bool m_isFullScr;
+  // The Settings page of the shell covers the session view.
+  bool m_covered;
 
 
   // Flag is set after the first WM_SIZING of the frame.
