@@ -9,19 +9,28 @@
   SetCursorPos or mouse_event). The server's JSON log is then compared with
   what the viewer should have sent.
 
-  Checks per (framebuffer size, scale) case:
+  Contract (FarSightVNC 2026-11-11): the remote screen always fits the
+  window, aspect ratio kept and letterboxed, with no scroll bars ever. The
+  -scale= option is ignored, so every -Scales case (100, 50, auto...) must
+  show the fit model.
+
+  Checks per (framebuffer size, requested scale) case:
+    - No scroll bars: the remote desktop window has neither WS_HSCROLL nor
+      WS_VSCROLL.
+    - The image fits inside the client area on both axes with one ratio
+      (aspect ratio kept): disp <= client per axis and the limiting axis
+      fills the client (within 1 pixel).
     - Pointer mapping. Assumed model (taken from ScaleManager.cpp):
         disp  = ceil(fb * num / den)         scaled image size per axis
-                (num/den = scale/100, or for "auto" the fit ratio
-                 min(clientW/W, clientH/H))
+                (num/den = the fit ratio min(clientW/W, clientH/H))
         cent  = disp < client ? floor((client - disp) / 2) : 0
         srv   = floor((clientCoord - cent) * den / num)
       Expected: the first image pixel (cent) maps to 0 and the last image
       pixel maps to fb-1 (tolerance max(1, ceil(den/num)) when scaled, exact
       at 1:1). A mid point must be within the same tolerance of the formula.
-      When the image is larger than the window (disp > client, scrollbars)
-      the scroll offset is assumed to be 0 and the last visible client pixel
-      is checked against the formula instead of fb-1.
+    - Letterbox: a client pixel just outside the image (before the first or
+      after the last image pixel, when the band exists) sends no pointer
+      event.
     - Left/middle/right button down+up masks (1, 2, 4).
     - Vertical wheel -> buttons 4/5 (masks 8/16) press+release.
     - Horizontal wheel -> buttons 6/7 (masks 32/64) press+release.
@@ -33,10 +42,14 @@
   also drives the viewer's own "Display" system-menu commands with
   WM_SYSCOMMAND/WM_COMMAND posted to its windows and checks:
     - the initial window lies inside the monitor work area (tall desktops),
-    - Fit to window (0xA830) and Original (0xA820) change the pointer model,
+    - the former Fit to window (0xA830) and Original (0xA820) commands no
+      longer exist: after them the image still fits with no scroll bars,
     - "Fullscreen across all monitors" (0xA800) covers the virtual screen,
-      "Fullscreen on current monitor" (0xA810) covers the monitor while fullscreen,
-      and leaving fullscreen restores a captioned window.
+      "Fullscreen on current monitor" (0xA810) covers the monitor while
+      fullscreen, the image fits it with no scroll bars, and leaving
+      fullscreen restores a captioned window that still fits,
+    - a tiny window (resized with SetWindowPos) still fits with no scroll
+      bars.
   The fullscreen steps briefly show a topmost window of the viewer and install
   its keyboard hook for about a second.
 
@@ -96,6 +109,7 @@ public static class FsvNative
   [DllImport("user32.dll")] static extern bool GetClientRect(IntPtr h, out RECT r);
   [DllImport("user32.dll")] static extern bool ClientToScreen(IntPtr h, ref POINT p);
   [DllImport("user32.dll")] static extern bool PostMessage(IntPtr h, uint m, IntPtr w, IntPtr l);
+  [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags);
   [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h, out RECT r);
   [DllImport("user32.dll")] static extern int GetWindowLong(IntPtr h, int index);
   [DllImport("user32.dll")] static extern bool SystemParametersInfo(uint action, uint param, out RECT r, uint flags);
@@ -177,6 +191,9 @@ public static class FsvNative
   }
 
   public static long Style(IntPtr h, int index) { return (uint)GetWindowLong(h, index); }
+
+  // Resizes a top-level window of the viewer (SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE).
+  public static bool Resize(IntPtr h, int cx, int cy) { return SetWindowPos(h, IntPtr.Zero, 0, 0, cx, cy, 0x2 | 0x4 | 0x10); }
 
   public static bool Post(IntPtr h, uint msg, long w, long l)
   {
@@ -296,23 +313,62 @@ function Test-Sequence([string]$size, [string]$scale, [string]$name, [int[]]$exp
   Add-Result $size $scale $name ($expectedMasks -join ',') $(if ($actual.Count) { $actual -join ',' } else { 'no events' }) $(if ($ok) { 'PASS' } else { 'FAIL' })
 }
 
-# Pointer corners for the current window state. $mode is '100' or 'auto'.
-function Test-Corners([string]$size, [string]$label, $child, [int]$w, [int]$h, [string]$mode) {
+# Fit ratio num/den of the remote screen in a client area (the only mode).
+function Get-FitRatio([int[]]$cs, [int]$w, [int]$h) {
+  if ($cs[0] * $h -le $cs[1] * $w) { return @([long]$cs[0], [long]$w) }
+  return @([long]$cs[1], [long]$h)
+}
+
+# The remote desktop window never has scroll bars.
+function Test-NoScrollBars([string]$size, [string]$label, $child) {
+  $style = [FsvNative]::Style($child, -16)
+  $bars = @()
+  if ($style -band 0x200000) { $bars += 'WS_VSCROLL' }
+  if ($style -band 0x100000) { $bars += 'WS_HSCROLL' }
+  Add-Result $size $label "$label no scroll bars" 'no WS_HSCROLL/WS_VSCROLL' $(if ($bars.Count) { $bars -join '+' } else { 'none' }) $(if ($bars.Count -eq 0) { 'PASS' } else { 'FAIL' })
+}
+
+# The image fits inside the client area with one ratio for both axes: the
+# limiting axis fills the client, the other one is letterboxed.
+function Test-FitGeometry([string]$size, [string]$label, $ax, $ay, [int[]]$cs) {
+  $fits = $ax.Fits -and $ay.Fits
+  $fills = ([math]::Abs($ax.Disp - $cs[0]) -le 1) -or ([math]::Abs($ay.Disp - $cs[1]) -le 1)
+  Add-Result $size $label "$label image fits, aspect kept" "disp <= client $($cs[0])x$($cs[1]), one axis filled" "disp=$($ax.Disp)x$($ay.Disp) cent=($($ax.Cent),$($ay.Cent))" $(if ($fits -and $fills) { 'PASS' } else { 'FAIL' })
+}
+
+# A client pixel just outside the image (letterbox band) sends no pointer event.
+function Test-Letterbox([string]$size, [string]$label, $child, $ax, $ay, [int[]]$cs) {
+  $probes = @()
+  $my = $ay.First + [int][math]::Floor(($ay.Last - $ay.First) / 2)
+  $mx = $ax.First + [int][math]::Floor(($ax.Last - $ax.First) / 2)
+  if ($ax.First -gt 0) { $probes += , @('left band', ($ax.First - 1), $my) }
+  if ($ax.Last + 1 -lt $cs[0]) { $probes += , @('right band', ($ax.Last + 1), $my) }
+  if ($ay.First -gt 0) { $probes += , @('top band', $mx, ($ay.First - 1)) }
+  if ($ay.Last + 1 -lt $cs[1]) { $probes += , @('bottom band', $mx, ($ay.Last + 1)) }
+  foreach ($pr in $probes) {
+    $ev = Invoke-Probe { [void][FsvNative]::Post($child, 0x200, 0, [FsvNative]::Pos($pr[1], $pr[2])) }
+    Add-Result $size $label "$label letterbox $($pr[0]) ($($pr[1]),$($pr[2]))" 'no PointerEvent' $(if ($ev.Count) { "($($ev[-1].x),$($ev[-1].y))" } else { 'none' }) $(if ($ev.Count -eq 0) { 'PASS' } else { 'FAIL' })
+  }
+}
+
+# Pointer corners, fit geometry, letterbox and scroll bars for the current
+# window state (the remote screen always fits).
+function Test-Corners([string]$size, [string]$label, $child, [int]$w, [int]$h) {
   Start-Sleep -Milliseconds 1500
   $cs = [FsvNative]::ClientSize($child)
-  if ($mode -eq 'auto') {
-    if ($cs[0] * $h -le $cs[1] * $w) { $num = $cs[0]; $den = $w } else { $num = $cs[1]; $den = $h }
-  } else { $num = 100; $den = 100 }
+  $ratio = Get-FitRatio $cs $w $h
+  $num = $ratio[0]; $den = $ratio[1]
   $ax = Get-Axis $cs[0] $w $num $den
   $ay = Get-Axis $cs[1] $h $num $den
   $tol = if ($num -eq $den) { 0 } else { [int][math]::Max(1, [math]::Ceiling($den / [double]$num)) }
+  Test-NoScrollBars $size $label $child
+  Test-FitGeometry $size $label $ax $ay $cs
   $mx = $ax.First + [int][math]::Floor(($ax.Last - $ax.First) / 2)
   $my = $ay.First + [int][math]::Floor(($ay.Last - $ay.First) / 2)
   Test-Point $size $label "$label mid" $child $ax $ay $mx $my (Get-Expected $ax $mx) (Get-Expected $ay $my) ([math]::Max($tol, 1))
   Test-Point $size $label "$label top-left" $child $ax $ay $ax.First $ay.First 0 0 $tol
-  $elx = if ($ax.Fits) { $w - 1 } else { Get-Expected $ax $ax.Last }
-  $ely = if ($ay.Fits) { $h - 1 } else { Get-Expected $ay $ay.Last }
-  Test-Point $size $label "$label bottom-right" $child $ax $ay $ax.Last $ay.Last $elx $ely $tol
+  Test-Point $size $label "$label bottom-right" $child $ax $ay $ax.Last $ay.Last ($w - 1) ($h - 1) $tol
+  Test-Letterbox $size $label $child $ax $ay $cs
 }
 
 # Waits until the window caption state is the expected one (the viewer changes the
@@ -335,10 +391,17 @@ function Test-DisplayModes([string]$size, $mainWnd, $child, [int]$w, [int]$h) {
   $inside = ($wr[0] -ge $wa[0] - 16) -and ($wr[1] -ge $wa[1] - 16) -and ($wr[2] -le $wa[2] + 16) -and ($wr[3] -le $wa[3] + 16)
   Add-Result $size $tag 'initial window inside work area' "work=$($wa -join ',') (+/-16)" "window=$($wr -join ',')" $(if ($inside) { 'PASS' } else { 'FAIL' })
 
-  [void][FsvNative]::Post($mainWnd, 0x112, 0xA830, 0)       # WM_SYSCOMMAND: Fit to window
-  Test-Corners $size 'Fit to window' $child $w $h 'auto'
-  [void][FsvNative]::Post($mainWnd, 0x112, 0xA820, 0)       # Original (100%)
-  Test-Corners $size 'Original' $child $w $h '100'
+  # The former scale commands are gone: the image keeps fitting.
+  [void][FsvNative]::Post($mainWnd, 0x112, 0xA820, 0)       # WM_SYSCOMMAND: former Original (100%)
+  Test-Corners $size 'former Original command' $child $w $h
+  [void][FsvNative]::Post($mainWnd, 0x112, 0xA830, 0)       # former Fit to window
+  Test-Corners $size 'former Fit command' $child $w $h
+
+  # A tiny window still fits, without scroll bars; then back to the start size.
+  $before = [FsvNative]::WindowRect($mainWnd)
+  [void][FsvNative]::Resize($mainWnd, 320, 240)
+  Test-Corners $size 'tiny window' $child $w $h
+  [void][FsvNative]::Resize($mainWnd, $before[2] - $before[0], $before[3] - $before[1])
 
   $vs = [FsvNative]::VirtualScreen($mainWnd)
   foreach ($fs in @(@('Fullscreen across all monitors', 0xA800), @('Fullscreen on current monitor', 0xA810))) {
@@ -356,13 +419,14 @@ function Test-DisplayModes([string]$size, $mainWnd, $child, [int]$w, [int]$h) {
       $mon = ($wr[2] - $wr[0] -le $vs[2] - $vs[0]) -and ($wr[0] -ge $vs[0]) -and ($wr[2] -le $vs[2])
       Add-Result $size $tag $fs[0] "window inside virtual screen, no caption" "window=$($wr -join ',') caption=$caption" $(if ($mon -and -not $caption) { 'PASS' } else { 'FAIL' })
     }
-    Test-Corners $size $fs[0] $child $w $h '100'
+    Test-Corners $size $fs[0] $child $w $h
     [void][FsvNative]::Post($mainWnd, 0x111, 215, 0)         # WM_COMMAND IDS_TB_FULLSCREEN: leave fullscreen
     Wait-Caption $mainWnd $true
     $style = [FsvNative]::Style($mainWnd, -16)
     $caption = ($style -band 0xC00000) -eq 0xC00000
     $wr = [FsvNative]::WindowRect($mainWnd)
     Add-Result $size $tag "leave $($fs[0])" 'captioned window restored' "style caption=$caption window=$($wr -join ',')" $(if ($caption) { 'PASS' } else { 'FAIL' })
+    Test-Corners $size "after $($fs[0])" $child $w $h
   }
 }
 
@@ -399,10 +463,13 @@ try {
         foreach ($t in $top) {
           $classes += [FsvNative]::ClassName($t)
           foreach ($c in [FsvNative]::Descendants($t)) {
+            # The remote desktop is a TvnWindowClass descendant; the session view
+            # around it (FsvSessionView, toolbar included) is larger.
             if (-not [FsvNative]::Visible($c)) { continue }
+            $classes += "  child:" + [FsvNative]::ClassName($c)
+            if ([FsvNative]::ClassName($c) -ne 'TvnWindowClass') { continue }
             $sz = [FsvNative]::ClientSize($c)
             if ($sz[0] * $sz[1] -gt $area) { $area = $sz[0] * $sz[1]; $child = $c }
-            $classes += "  child:" + [FsvNative]::ClassName($c)
           }
         }
         if ($child -eq [IntPtr]::Zero) {
@@ -421,24 +488,23 @@ try {
         $extMouse = $encList -contains -316
         Add-Result $size $scale 'SetEncodings' 'info' "negative pseudo-encodings: $($negative -join ',') ; extended mouse buttons (-316): $extMouse" 'INFO'
 
-        # Scale ratio num/den
-        if ($scale -eq 'auto') {
-          if ($cs[0] * $h -le $cs[1] * $w) { $num = $cs[0]; $den = $w } else { $num = $cs[1]; $den = $h }
-        } else { $num = [long]$scale; $den = 100 }
+        # The requested -scale is ignored: always the fit ratio num/den.
+        $ratio = Get-FitRatio $cs $w $h
+        $num = $ratio[0]; $den = $ratio[1]
         $ax = Get-Axis $cs[0] $w $num $den
         $ay = Get-Axis $cs[1] $h $num $den
         $tol = if ($num -eq $den) { 0 } else { [int][math]::Max(1, [math]::Ceiling($den / [double]$num)) }
-        Add-Result $size $scale 'model' 'info' "disp=$($ax.Disp)x$($ay.Disp) cent=($($ax.Cent),$($ay.Cent)) fits=$($ax.Fits)/$($ay.Fits) ratio=$num/$den tol=$tol" 'INFO'
+        Add-Result $size $scale 'model' 'info' "fit (requested -scale=$scale) disp=$($ax.Disp)x$($ay.Disp) cent=($($ax.Cent),$($ay.Cent)) ratio=$num/$den tol=$tol" 'INFO'
+        Test-NoScrollBars $size $scale $child
+        Test-FitGeometry $size $scale $ax $ay $cs
 
         # Mid point first so that the following move to the corner is not deduplicated.
         $mx = $ax.First + [int][math]::Floor(($ax.Last - $ax.First) / 2)
         $my = $ay.First + [int][math]::Floor(($ay.Last - $ay.First) / 2)
         Test-Point $size $scale 'pointer mid' $child $ax $ay $mx $my (Get-Expected $ax $mx) (Get-Expected $ay $my) ([math]::Max($tol, 1))
         Test-Point $size $scale 'pointer top-left' $child $ax $ay $ax.First $ay.First 0 0 $tol
-        $elx = if ($ax.Fits) { $w - 1 } else { Get-Expected $ax $ax.Last }
-        $ely = if ($ay.Fits) { $h - 1 } else { Get-Expected $ay $ay.Last }
-        $lbl = if ($ax.Fits -and $ay.Fits) { 'pointer bottom-right' } else { 'pointer bottom-right (viewport)' }
-        Test-Point $size $scale $lbl $child $ax $ay $ax.Last $ay.Last $elx $ely $tol
+        Test-Point $size $scale 'pointer bottom-right' $child $ax $ay $ax.Last $ay.Last ($w - 1) ($h - 1) $tol
+        Test-Letterbox $size $scale $child $ax $ay $cs
 
         # Buttons (message, wParam flags)
         $px = $mx; $py = $my

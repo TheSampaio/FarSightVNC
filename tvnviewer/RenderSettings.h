@@ -17,6 +17,7 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //
 // Modified for FarSightVNC on 2026-11-02: optional GPU presentation with safe GDI fallback.
+// Modified for FarSightVNC on 2026-11-11: the Settings page reads and writes the stored renderer.
 //
 
 #ifndef _RENDER_SETTINGS_H_
@@ -39,6 +40,10 @@
 //   3. the string value "Renderer" of
 //      HKEY_CURRENT_USER\Software\TightVNC\Viewer\Settings;
 //   4. the built-in default (RenderSettings::DEFAULT_MODE).
+//
+// The Settings page writes the stored value (store()); it applies to the
+// remote desktops created afterwards unless the command line or the
+// environment chose the renderer of this run (isOverridden()).
 class RenderSettings
 {
 public:
@@ -71,6 +76,60 @@ public:
   {
     instance().mode = mode;
     instance().resolved = true;
+    instance().overridden = true;
+  }
+
+  // The renderer of this run comes from the command line or the
+  // environment, not from the stored value.
+  static bool isOverridden()
+  {
+    getMode();
+    return instance().overridden;
+  }
+
+  // The stored value (HKCU ...\Settings\Renderer), or false when there is
+  // none or it is invalid.
+  static bool readStored(Mode *mode)
+  {
+    HKEY settings = 0;
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, SETTINGS_KEY, 0, KEY_QUERY_VALUE, &settings) != ERROR_SUCCESS) {
+      return false;
+    }
+    TCHAR buffer[32];
+    DWORD size = sizeof(buffer);
+    DWORD type = 0;
+    LONG result = RegQueryValueEx(settings, _T("Renderer"), 0, &type,
+                                  reinterpret_cast<BYTE *>(buffer), &size);
+    RegCloseKey(settings);
+    // RegQueryValueEx does not guarantee a terminating null. Reject
+    // malformed or truncated strings before handing them to parse().
+    return result == ERROR_SUCCESS && type == REG_SZ &&
+           size >= sizeof(TCHAR) && size <= sizeof(buffer) &&
+           size % sizeof(TCHAR) == 0 && buffer[size / sizeof(TCHAR) - 1] == 0 &&
+           parse(buffer, mode);
+  }
+
+  // Writes the stored value; without an override it becomes the renderer of
+  // the next remote desktops of this run too.
+  static bool store(Mode mode)
+  {
+    const TCHAR *name = mode == GDI ? _T("gdi") : (mode == AUTO ? _T("auto") : _T("gpu"));
+    HKEY settings = 0;
+    if (RegCreateKeyEx(HKEY_CURRENT_USER, SETTINGS_KEY, 0, 0, 0, KEY_SET_VALUE, 0,
+                       &settings, 0) != ERROR_SUCCESS) {
+      return false;
+    }
+    LONG result = RegSetValueEx(settings, _T("Renderer"), 0, REG_SZ,
+                                reinterpret_cast<const BYTE *>(name),
+                                static_cast<DWORD>((_tcslen(name) + 1) * sizeof(TCHAR)));
+    RegCloseKey(settings);
+    if (result != ERROR_SUCCESS) {
+      return false;
+    }
+    if (!isOverridden()) {
+      instance().mode = mode;
+    }
+    return true;
   }
 
   static Mode getMode()
@@ -84,24 +143,9 @@ public:
                                          sizeof(buffer) / sizeof(buffer[0]));
       if (len > 0 && len < sizeof(buffer) / sizeof(buffer[0]) && parse(buffer, &fromSource)) {
         d.mode = fromSource;
-      } else {
-        HKEY settings = 0;
-        if (RegOpenKeyEx(HKEY_CURRENT_USER, _T("Software\\TightVNC\\Viewer\\Settings"),
-                         0, KEY_QUERY_VALUE, &settings) == ERROR_SUCCESS) {
-          DWORD size = sizeof(buffer);
-          DWORD type = 0;
-          LONG result = RegQueryValueEx(settings, _T("Renderer"), 0, &type,
-                                        reinterpret_cast<BYTE *>(buffer), &size);
-          RegCloseKey(settings);
-          // RegQueryValueEx does not guarantee a terminating null. Reject
-          // malformed or truncated strings before handing them to parse().
-          if (result == ERROR_SUCCESS && type == REG_SZ &&
-              size >= sizeof(TCHAR) && size <= sizeof(buffer) &&
-              size % sizeof(TCHAR) == 0 && buffer[size / sizeof(TCHAR) - 1] == 0 &&
-              parse(buffer, &fromSource)) {
-            d.mode = fromSource;
-          }
-        }
+        d.overridden = true;
+      } else if (readStored(&fromSource)) {
+        d.mode = fromSource;
       }
       d.resolved = true;
     }
@@ -113,10 +157,13 @@ public:
 private:
   struct Data
   {
-    Data() : mode(DEFAULT_MODE), resolved(false) {}
+    Data() : mode(DEFAULT_MODE), resolved(false), overridden(false) {}
     Mode mode;
     bool resolved;
+    bool overridden;
   };
+
+  static constexpr const TCHAR *SETTINGS_KEY = _T("Software\\TightVNC\\Viewer\\Settings");
 
   static Data &instance()
   {

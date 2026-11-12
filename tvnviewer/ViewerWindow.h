@@ -26,6 +26,14 @@
 // Modified for FarSightVNC on 2026-11-03: connection state in the title and assisted reconnect.
 // Modified for FarSightVNC on 2026-11-03: first connection opens maximized and fitted to the window.
 // Modified for FarSightVNC on 2026-11-07: the connected session is shown by the window thread (WM_USER_CONNECTED).
+// Modified for FarSightVNC on 2026-11-11: frame operations (title, full screen, size, DPI, end of session) go through SessionHost.
+// Modified for FarSightVNC on 2026-11-11: child window (FsvSessionView) of the shell window, which forwards the frame events.
+// Modified for FarSightVNC on 2026-11-11: the shell handles DPI changes and full screen state; a reconnection reuses the shell.
+// Modified for FarSightVNC on 2026-11-11: the tab of the shell shows only the session name.
+// Modified for FarSightVNC on 2026-11-11: SessionToolbar (Direct2D) replaces the comctl toolbar; the session state drives it.
+// Modified for FarSightVNC on 2026-11-11: the full screen toolbar is a floating pill with the session actions and state.
+// Modified for FarSightVNC on 2026-11-11: the remote screen always fits the window (no scale modes, no scroll bars).
+// Modified for FarSightVNC on 2026-11-11: the Settings page of the shell covers the running session.
 //
 
 #ifndef _VIEWER_WINDOW_H_
@@ -39,25 +47,27 @@
 #include "OptionsDialog.h"
 #include "ScaleManager.h"
 #include "ViewerMenu.h"
-#include "gui/ToolBar.h"
+#include "shell/SessionHost.h"
+#include "shell/SessionToolbar.h"
 #include "log-writer/LogWriter.h"
 #include "viewer-core/FileTransferCapability.h"
 #include "viewer-core/RemoteViewerCore.h"
 #include "viewer-core/CoreEventsAdapter.h"
 #include "viewer-core/VncAuthentication.h"
-#include "win-system/SystemInformation.h"
 #include "win-system/WindowsApplication.h"
 #include "win-system/WinHooks.h"
 
 class ViewerWindow : public BaseWindow,
                      public CoreEventsAdapter,
                      private HookEventListener,
-                     private DesktopPointerListener
+                     private DesktopPointerListener,
+                     private SessionToolbarListener
 {
 public:
+  // Creates the session view as a child of host->hostHwnd().
   ViewerWindow(WindowsApplication *application,
                ConnectionData *conData, ConnectionConfig *conConf,
-               Logger *logger = 0);
+               SessionHost *host, Logger *logger = 0);
   virtual ~ViewerWindow();
 
   void setFileTransfer(FileTransferCapability *ft);
@@ -78,6 +88,29 @@ public:
   // "connecting" state in its title. Used by reconnection attempts.
   //
   void showConnecting();
+
+  //
+  // Events of the top-level frame (the shell), which only a top-level
+  // window receives.
+  //
+  // WM_COMMAND or WM_SYSCOMMAND; returns true when the command is handled.
+  bool onFrameCommand(WPARAM wParam, LPARAM lParam);
+  // WM_ACTIVATE: the keyboard hook follows the activation of the frame.
+  void onFrameActivate(WPARAM wParam);
+  // The Settings page of the shell covers the session view (hidden, the
+  // session keeps running) or shows it again.
+  void onFrameCovered();
+  void onFrameUncovered();
+  // WM_SIZING: the user sizes the frame, which keeps that size from now on.
+  void onFrameSizing();
+  void onFrameDisplayChange();
+  // WM_DPICHANGED; frameMoved when the windowed frame takes the rectangle
+  // suggested by the system.
+  void onFrameDpiChanged(UINT dpi, bool frameMoved);
+  // Window that takes the keyboard focus (the remote desktop).
+  HWND getFocusHwnd() const;
+  // True when the frame is visible (a reconnection reuses a shown frame).
+  bool isFrameShown() const;
 
   static const int WM_USER_ERROR = WM_USER + 1;
   static const int WM_USER_STOP = WM_USER + 2;
@@ -105,14 +138,17 @@ protected:
   // false, without any window, when reconnecting is not offered.
   bool offerReconnect(bool sessionWasEstablished, const StringStorage *reason);
   bool onSize(WPARAM wParam, LPARAM lParam);
-  bool onDpiChanged(WPARAM wParam, LPARAM lParam);
   void onDisplayChange();
   bool onCreate(LPCREATESTRUCT lps);
   bool onCommand(WPARAM wParam, LPARAM lParam);
-  bool onNotify(int idCtrl, LPNMHDR pnmh);
   bool onSysCommand(WPARAM wParam, LPARAM lParam);
   bool onClose();
   bool onDestroy();
+  // Tears the session view down and tells the frame (reconnecting or not).
+  void endSession();
+  // Asks the application for a new session with conData and the current
+  // options, shown in the same frame.
+  void postReconnect(const ConnectionData &conData);
   bool onFocus(WPARAM wParam);
   bool onKillFocus(WPARAM wParam);
   bool onTimer(WPARAM idTimer);
@@ -123,15 +159,12 @@ protected:
   void commandCtrl();
   void commandAlt();
   void commandToolBar();
+  void commandWinKey();
   void commandPause();
   void onAbout();
   void onCheckForUpdates();
   void commandNewConnection();
   void commandSaveSession();
-  void commandScaleIn();
-  void commandScaleOut();
-  void commandScale100();
-  void commandScaleAuto();
 
   //
   // It is implementation of CoreEventsAdapter functions.
@@ -148,10 +181,6 @@ protected:
   int translateAccelToTB(int val);
   void applyScreenChanges(bool isFullScreen);
   
-  // function return default rect of viewer window:
-  // if size of remote screen is more local desktop, then return rect of desktop
-  // else return rect of remote screen + border
-  Rect calculateDefaultSize();
 
   LogWriter m_logWriter;
 
@@ -164,11 +193,12 @@ protected:
   FileTransferCapability *m_fileTransfer;
   FileTransferMainDialog *m_ftDialog;
   DesktopWindow m_dsktWnd;
-  StringStorage m_strToolTip;
-  ToolBar m_toolbar;
+  SessionToolbar m_toolbar;
   ViewerMenu m_menu;
   ConnectionData *m_conData;
-  SystemInformation m_sysinf;
+
+  // The top-level frame (shell) that hosts the session view.
+  SessionHost *m_host;
 
   // This variable save Exception after call onError().
   Exception m_error;
@@ -177,20 +207,18 @@ protected:
 
   // Flag is set, if now viewer is in full screen mode
   bool m_isFullScr;
-  // It's size of work-area in windowed mode. It is necessary for restore size of window.
-  WINDOWPLACEMENT m_workArea;
-  // It's size of optimal size of work-area in windowed mode.
-  Rect m_rcNormal;
+  // The Settings page of the shell covers the session view.
+  bool m_covered;
 
 
-  // Flag is set after recv first message WM_SIZING.
+  // Flag is set after the first WM_SIZING of the frame.
   bool m_sizeIsChanged;
   // The first connection of the window opens it maximized and fitted.
   bool m_isFirstConnection;
-  // Flag is set, if toolbar is visible.
+  // The user wants the toolbar (hidden anyway in full screen).
   bool m_bToolBar;
-  // It is scale of viewer window in percent.
-  int m_scale;
+  // Screen updates are paused (Pause command).
+  bool m_isPaused;
 
   // Flag is set after onConnected().
   bool m_isConnected;
@@ -205,6 +233,8 @@ protected:
   ConnectionState m_connectionState;
   void setConnectionState(ConnectionState state);
   const TCHAR *connectionStateLabel() const;
+  // Text of the full screen pill: session name and connection state.
+  StringStorage fullScreenToolbarLabel() const;
 
   // Flag is set, if instance is requires to reconnect.
   bool m_requiresReconnect;
@@ -213,7 +243,6 @@ protected:
   // Destructor of ViewerWindow may be called, if this flag is true.
   bool m_stopped;
 private:
-  vector<int> m_standardScale;
   vector<HMONITOR> m_fullscreenMonitors;
   HMONITOR m_fullscreenMonitor;
   bool m_spanMonitors;
@@ -239,10 +268,22 @@ private:
   void switchFullScreenMode();
   void dialogConfiguration();
   void adjustWindowSize();
+  // Remote desktop name, or the host while it is unknown (tab title).
+  StringStorage formatSessionName() const;
   StringStorage formatWindowName() const;
   // formatWindowName() with the connection state when it is not "connected".
   StringStorage formatWindowTitle() const;
   void updateKeyState();
+
+  // The toolbar shows the session state: what can be used, which toggles
+  // are on.
+  SessionToolbarState toolbarState() const;
+  void updateToolbar();
+  // Implementation of SessionToolbarListener: the drop-down menus.
+  virtual void onToolbarMenu(SessionAction action, const RECT &anchor);
+  HMENU createMonitorMenu();
+  HMENU createSpecialKeysMenu();
+  HMENU createMoreMenu();
 
   // onHookProc function implementation of HookEventListener base abstract class.
   virtual LRESULT onHookProc(int code, WPARAM wParam, LPARAM lParam);

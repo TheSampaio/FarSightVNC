@@ -11,7 +11,9 @@
 
 #include "util/winhdr.h"
 
+#include <cstdint>
 #include <memory>
+#include <string>
 
 class UpdateController
 {
@@ -29,6 +31,20 @@ public:
   void onStartupTimer();
   // "Check for Updates..." menu entries. Runs unless disabled by policy.
   void requestManualCheck();
+
+  // Update settings shown by the Settings page.
+  struct Preferences
+  {
+    bool available;          // false: this build cannot be updated
+    bool disabledByPolicy;   // the administrator disabled the checks
+    bool autoCheck;
+    bool includePrereleases; // effective value (default: channel of this build)
+    std::uint64_t lastCheckUnix; // 0: never
+    std::wstring currentVersion;
+  };
+  Preferences preferences();
+  void setAutoCheck(bool enabled);
+  void setIncludePrereleases(bool enabled);
 
   // Messages posted by the worker thread.
   void onCheckDone();

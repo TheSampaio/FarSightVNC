@@ -21,6 +21,9 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-11: without a host the viewer starts on the Home page instead of the login dialog.
+// Modified for FarSightVNC on 2026-11-11: command line connections start from the options of new connections.
+//
 
 #include "client-config-lib/ViewerConfig.h"
 #include "log-writer/LogWriter.h"
@@ -28,6 +31,7 @@
 #include "ConnectionData.h"
 #include "ConnectionListener.h"
 #include "ViewerCmdLine.h"
+#include "DefaultConnectionConfig.h"
 #include "util/ResourceLoader.h"
 #include "UpdateController.h"
 
@@ -40,7 +44,10 @@ int APIENTRY _tWinMain(HINSTANCE hInstance, HINSTANCE,
   ViewerConfig config(RegistryPaths::VIEWER_PATH);
   config.loadFromStorage(sm);
 
+  // A connection from the command line starts from the options of new
+  // connections (Settings); the command line options apply over them.
   ConnectionConfig conConf;
+  DefaultConnectionConfig::load(&conConf);
   ConnectionData condata;
   bool isListening = false;
   ViewerCmdLine cmd(&condata, &conConf, &config, &isListening);
@@ -85,7 +92,8 @@ int APIENTRY _tWinMain(HINSTANCE hInstance, HINSTANCE,
     } else if (!condata.isEmpty()) {
       tvnViewer.newConnection(&condata, &conConf);
     } else {
-      tvnViewer.showLoginDialog();
+      // The start screen: a shell window on the Home page.
+      tvnViewer.showHome();
     }
     result = tvnViewer.run();
   } catch (const Exception &ex) {

@@ -287,11 +287,12 @@
     <ClCompile Include="TextBox.cpp" />
     <ClCompile Include="ThemeLib.cpp" />
     <ClCompile Include="DpiUtils.cpp" />
-    <ClCompile Include="ToolBar.cpp" />
     <ClCompile Include="Tooltip.cpp" />
     <ClCompile Include="Trackbar.cpp" />
     <ClCompile Include="WindowFinder.cpp" />
     <ClCompile Include="WindowProcHolder.cpp" />
+    <ClCompile Include="d2d\ChromeRenderer.cpp" />
+    <ClCompile Include="d2d\SvgIcons.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="BalloonTip.h" />
@@ -329,11 +330,13 @@
     <ClInclude Include="TextBox.h" />
     <ClInclude Include="ThemeLib.h" />
     <ClInclude Include="DpiUtils.h" />
-    <ClInclude Include="ToolBar.h" />
     <ClInclude Include="Tooltip.h" />
     <ClInclude Include="Trackbar.h" />
     <ClInclude Include="WindowFinder.h" />
     <ClInclude Include="WindowProcHolder.h" />
+    <ClInclude Include="d2d\ChromeRenderer.h" />
+    <ClInclude Include="d2d\SvgIcons.h" />
+    <ClInclude Include="d2d\ThemeTokens.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

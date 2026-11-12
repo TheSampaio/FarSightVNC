@@ -23,6 +23,7 @@
 //
 // Modified for FarSightVNC on 2026-11-03: user-visible product and window title
 // name is FarSightVNC (registry, log and window class names unchanged).
+// Modified for FarSightVNC on 2026-11-11: window class of the session view hosted by the shell window.
 //
 
 #include "NamingDefs.h"
@@ -41,4 +42,5 @@ const TCHAR ApplicationNames::WINDOW_CLASS_NAME[] =
 const TCHAR WindowNames::TVN_WINDOW_CLASS_NAME[] = _T("TvnWindowClass");
 const TCHAR WindowNames::TVN_WINDOW_TITLE_NAME[] = _T("FarSightVNC");
 const TCHAR WindowNames::TVN_SUB_WINDOW_TITLE_NAME[] = _T("Viewer");
+const TCHAR WindowNames::FSV_SESSION_VIEW_CLASS_NAME[] = _T("FsvSessionView");
 

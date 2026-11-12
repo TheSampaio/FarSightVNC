@@ -134,7 +134,7 @@
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>comctl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>comctl32.lib;d2d1.lib;dwrite.lib;dwmapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalManifestDependencies>type=%27win32%27 name=%27Microsoft.Windows.Common-Controls%27 version=%276.0.0.0%27 processorArchitecture=%27X86%27 publicKeyToken=%276595b64144ccf1df%27 language=%27*%27;%(AdditionalManifestDependencies)</AdditionalManifestDependencies>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>
@@ -157,7 +157,7 @@
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>comctl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>comctl32.lib;d2d1.lib;dwrite.lib;dwmapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalManifestDependencies>type=%27win32%27 name=%27Microsoft.Windows.Common-Controls%27 version=%276.0.0.0%27 processorArchitecture=%27X86%27 publicKeyToken=%276595b64144ccf1df%27 language=%27*%27;%(AdditionalManifestDependencies)</AdditionalManifestDependencies>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>NotSet</SubSystem>
@@ -179,7 +179,7 @@
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>comctl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>comctl32.lib;d2d1.lib;dwrite.lib;dwmapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalManifestDependencies>type=%27win32%27 name=%27Microsoft.Windows.Common-Controls%27 version=%276.0.0.0%27 processorArchitecture=%27amd64%27 publicKeyToken=%276595b64144ccf1df%27 language=%27*%27;%(AdditionalManifestDependencies)</AdditionalManifestDependencies>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>
@@ -200,7 +200,7 @@
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>comctl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>comctl32.lib;d2d1.lib;dwrite.lib;dwmapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalManifestDependencies>type=%27win32%27 name=%27Microsoft.Windows.Common-Controls%27 version=%276.0.0.0%27 processorArchitecture=%27amd64%27 publicKeyToken=%276595b64144ccf1df%27 language=%27*%27;%(AdditionalManifestDependencies)</AdditionalManifestDependencies>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>NotSet</SubSystem>
@@ -222,7 +222,7 @@
       <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>comctl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>comctl32.lib;d2d1.lib;dwrite.lib;dwmapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalManifestDependencies>type=%27win32%27 name=%27Microsoft.Windows.Common-Controls%27 version=%276.0.0.0%27 processorArchitecture=%27X86%27 publicKeyToken=%276595b64144ccf1df%27 language=%27*%27;%(AdditionalManifestDependencies)</AdditionalManifestDependencies>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <OptimizeReferences>true</OptimizeReferences>
@@ -247,7 +247,7 @@
       <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>comctl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>comctl32.lib;d2d1.lib;dwrite.lib;dwmapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalManifestDependencies>type=%27win32%27 name=%27Microsoft.Windows.Common-Controls%27 version=%276.0.0.0%27 processorArchitecture=%27X86%27 publicKeyToken=%276595b64144ccf1df%27 language=%27*%27;%(AdditionalManifestDependencies)</AdditionalManifestDependencies>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <OptimizeReferences>true</OptimizeReferences>
@@ -271,7 +271,7 @@
       <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>comctl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>comctl32.lib;d2d1.lib;dwrite.lib;dwmapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalManifestDependencies>type=%27win32%27 name=%27Microsoft.Windows.Common-Controls%27 version=%276.0.0.0%27 processorArchitecture=%27amd64%27 publicKeyToken=%276595b64144ccf1df%27 language=%27*%27;%(AdditionalManifestDependencies)</AdditionalManifestDependencies>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <OptimizeReferences>true</OptimizeReferences>
@@ -295,7 +295,7 @@
       <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>comctl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>comctl32.lib;d2d1.lib;dwrite.lib;dwmapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalManifestDependencies>type=%27win32%27 name=%27Microsoft.Windows.Common-Controls%27 version=%276.0.0.0%27 processorArchitecture=%27amd64%27 publicKeyToken=%276595b64144ccf1df%27 language=%27*%27;%(AdditionalManifestDependencies)</AdditionalManifestDependencies>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <OptimizeReferences>true</OptimizeReferences>
@@ -306,10 +306,8 @@
     </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="AboutDialog.cpp" />
     <ClCompile Include="AuthenticationDialog.cpp" />
     <ClCompile Include="BuildTime.cpp" />
-    <ClCompile Include="ConfigurationDialog.cpp" />
     <ClCompile Include="ConnectionData.cpp" />
     <ClCompile Include="ConnectionListener.cpp" />
     <ClCompile Include="ControlTrayIcon.cpp" />
@@ -323,7 +321,6 @@
     <ClCompile Include="FullScreenToolbar.cpp" />
     <ClCompile Include="ReconnectDialog.cpp" />
     <ClCompile Include="HelpDialog.cpp" />
-    <ClCompile Include="LoginDialog.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="NamingDefs.cpp" />
     <ClCompile Include="NewFolderDialog.cpp" />
@@ -339,12 +336,20 @@
     <ClCompile Include="UpdateController.cpp" />
     <ClCompile Include="UpdateDialog.cpp" />
     <ClCompile Include="ViewerWindow.cpp" />
+    <ClCompile Include="shell\HomePage.cpp" />
+    <ClCompile Include="shell\SessionActionStrip.cpp" />
+    <ClCompile Include="shell\SessionToolbar.cpp" />
+    <ClCompile Include="shell\ShellWindow.cpp" />
+    <ClCompile Include="shell\TitleBar.cpp" />
+    <ClCompile Include="ConnectionOptionsForm.cpp" />
+    <ClCompile Include="shell\SettingsForm.cpp" />
+    <ClCompile Include="shell\SettingsNav.cpp" />
+    <ClCompile Include="shell\SettingsPage.cpp" />
+    <ClCompile Include="shell\SettingsSections.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="AboutDialog.h" />
     <ClInclude Include="AuthenticationDialog.h" />
     <ClInclude Include="BuildTime.h" />
-    <ClInclude Include="ConfigurationDialog.h" />
     <ClInclude Include="ConnectionData.h" />
     <ClInclude Include="ConnectionListener.h" />
     <ClInclude Include="ControlTrayIcon.h" />
@@ -362,7 +367,6 @@
     <ClInclude Include="ReconnectPolicy.h" />
     <ClInclude Include="HelpDialog.h" />
     <ClInclude Include="KeyMap.h" />
-    <ClInclude Include="LoginDialog.h" />
     <ClInclude Include="NamingDefs.h" />
     <ClInclude Include="NewFolderDialog.h" />
     <ClInclude Include="OptionsDialog.h" />
@@ -378,6 +382,25 @@
     <ClInclude Include="ViewerMenu.h" />
     <ClInclude Include="ViewerVncAuthHandler.h" />
     <ClInclude Include="ViewerWindow.h" />
+    <ClInclude Include="shell\HomeActions.h" />
+    <ClInclude Include="shell\HomePage.h" />
+    <ClInclude Include="shell\HomeTab.h" />
+    <ClInclude Include="shell\SessionHost.h" />
+    <ClInclude Include="shell\SessionTab.h" />
+    <ClInclude Include="shell\SessionActionStrip.h" />
+    <ClInclude Include="shell\SessionToolbar.h" />
+    <ClInclude Include="shell\ShellTab.h" />
+    <ClInclude Include="shell\ShellWindow.h" />
+    <ClInclude Include="shell\TitleBar.h" />
+    <ClInclude Include="ConnectionOptionsForm.h" />
+    <ClInclude Include="shell\SettingsForm.h" />
+    <ClInclude Include="shell\SettingsNav.h" />
+    <ClInclude Include="shell\SettingsPage.h" />
+    <ClInclude Include="shell\SettingsSections.h" />
+    <ClInclude Include="shell\SettingsSection.h" />
+    <ClInclude Include="shell\SettingsActions.h" />
+    <ClInclude Include="shell\SettingsTab.h" />
+    <ClInclude Include="DefaultConnectionConfig.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="res\appicon.ico" />
@@ -389,7 +412,6 @@
     <None Include="res\smalldot.cur" />
     <None Include="res\tightvnc.bmp" />
     <None Include="res\tightvnc48.bmp" />
-    <None Include="res\toolbar.bmp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="tvnviewer.rc" />

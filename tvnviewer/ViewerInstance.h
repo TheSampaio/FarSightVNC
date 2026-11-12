@@ -21,6 +21,8 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-11: the session window is a child of the given frame (SessionHost).
+//
 
 #ifndef __VIEWER_INSTANCE_H__
 #define __VIEWER_INSTANCE_H__
@@ -34,16 +36,21 @@
 class ViewerInstance
 {
 public:
-  // creates the viewer instance by using host:port from condata
+  // creates the viewer instance by using host:port from condata; its
+  // session window is shown in host
   ViewerInstance(WindowsApplication *application,
                  ConnectionData *condata,
-                 const ConnectionConfig *conConf);
+                 const ConnectionConfig *conConf,
+                 SessionHost *host);
 
   // creates the viewer instance if we have the socket
   ViewerInstance(WindowsApplication *application,
                  ConnectionData *condata,
                  const ConnectionConfig *conConf,
+                 SessionHost *host,
                  SocketIPv4 *socket);
+
+  ViewerWindow *getViewerWindow();
 
   virtual ~ViewerInstance();
 

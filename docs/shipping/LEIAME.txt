@@ -1,12 +1,18 @@
-FarSightVNC Viewer v1.0.0a (alpha)
+FarSightVNC Viewer v1.1.0a (alpha)
 ==================================
 
 Cliente VNC para Windows baseado no TightVNC Viewer 2.8.90.
 Licença: GNU GPL versão 2 ou posterior (ver LICENSE.txt).
-Data: 2026-11-10 - branch feature/updater.
+Data: 2026-11-12 - branch feature/ui-layout.
 
 
-*** MUDANÇA INCOMPATÍVEL na v1.0.0a ***
+Versão com a nova interface (v1.1.0a): janela redesenhada com barra de título
+própria, tela inicial (Home), página de Configurações e botão "+" para novas
+conexões. Inclui também as correções de teclado da v1.0.1a. Ver O QUE MUDOU
+NA v1.1.0a abaixo.
+
+
+*** MUDANÇA INCOMPATÍVEL na v1.0.0a (continua valendo) ***
 O programa agora é o fsvncviewer.exe, na raiz da pasta. Ele é apenas de
 64 bits (Windows 10/11 de 64 bits): a versão de 32 bits não é mais
 fornecida. Atualize atalhos e scripts que apontavam para o FarSightVNC.exe ou
@@ -81,6 +87,39 @@ pode ignorá-lo e manter os arquivos onde estão.
   como está.
 
 
+O QUE MUDOU NA v1.1.0a (nova interface, fase 1: layout)
+-------------------------------------------------------
+- Janela nova: barra de título própria com a aba da sessão, botão de
+  Configurações e o Snap Layouts do Windows 11 no botão de maximizar.
+- Tela inicial (Home) ao abrir o viewer (endereço, computadores recentes e
+  favoritos, modo escuta); ela substitui o antigo diálogo de login.
+- Botão "+" depois da aba (ou Ctrl+N): abre uma nova janela na Home.
+- Página de Configurações dentro da janela (Aparência, Conexão, Entrada,
+  Exibição, Geral, Atualizações, Sobre); ela substitui os antigos diálogos de
+  configuração e sobre.
+- Nova barra de ferramentas da sessão e barra flutuante da tela cheia. A tela
+  cheia agora fica acima da barra de tarefas e de outras janelas.
+- A tela remota sempre cabe na janela (proporção mantida), sem barras de
+  rolagem. A opção -scale= é ignorada.
+- Primeiro ícone Lucide (ver AVISOS DE TERCEIROS). A opção Aparência
+  (Auto/Claro/Escuro) é salva, mas os temas chegam em uma versão futura.
+- Inclui as correções de teclado da v1.0.1a. Protocolo, servidor,
+  atualizador e configurações salvas não mudaram.
+
+
+O QUE MUDOU NA v1.0.1a (correções do teclado)
+---------------------------------------------
+- Corrigido: Ctrl, Alt e Win pressionados em outra janela e soltos no viewer
+  ficavam "presos" (no Windows local e no servidor), e Ctrl+C / Ctrl+V (por
+  exemplo em teclado ABNT2) saíam como Ctrl+Alt+C. Agora uma tecla é solta
+  pelo mesmo caminho que a pressionou.
+- Corrigido: a tecla Print Screen (também Alt+Print Screen) agora fica no
+  computador local, então capturas de tela e a Ferramenta de Captura do
+  Windows funcionam com o viewer em foco. Ela não é mais enviada ao servidor.
+- Nada mais mudou: protocolo, servidor, atualizador e configurações salvas
+  são os mesmos da v1.0.0a.
+
+
 O QUE MUDOU NA v1.0.0a (primeira versão pública com o atualizador)
 -------------------------------------------------------------------
 - INCOMPATÍVEL: o executável agora é fsvncviewer.exe (era tvnviewer.exe), na
@@ -124,9 +163,16 @@ Base técnica (sem mudança visível para quem usa):
 
 VERIFICADO NESTA VERSÃO
 -----------------------
-- Testes automáticos: atualizador 2103/0 (x64, Release e Debug), teclado
-  227/0, fila de entrada 39/0, favoritos 88/0.
-- Instalação da versão assinada sobre uma cópia do executável x64 da v0.2.1a
+- Testes automáticos (x64, Release): teclado 480/0, fila de entrada 39/0,
+  favoritos 88/0, atualizador 2103/0. Os testes de teclado cobrem Ctrl+C/V/X/Z/A
+  com os dois Ctrl, a soltura de teclas pelo mesmo caminho e o Print Screen.
+- Contra um servidor falso em 127.0.0.1, com os renderizadores GDI e GPU: o
+  teste de conexão (4 codificações), o teste de exibição e ponteiro (194/0,
+  com os modos de ajuste à janela e tela cheia) e o teste de teclado de ponta
+  a ponta (39 casos). O botão "+" foi conferido na janela (hit test, estados
+  hover e pressionado, abertura de uma nova janela).
+- (Verificado na v1.0.0a, sem mudança de código do atualizador desde então)
+  Instalação da versão assinada sobre uma cópia do executável x64 da v0.2.1a
   colocado na nova estrutura plana, com o viewer antigo aberto (o atualizador
   espera), arquivos do usuário preservados, atualização adulterada rejeitada
   e downgrade recusado. Também o caso de um executável sozinho em uma pasta
@@ -144,10 +190,34 @@ AINDA NÃO VERIFICADO
   127.0.0.1).
 - Uso em rede real (fora de 127.0.0.1) e com outros servidores além do
   TightVNC.
-- Digitação real com teclado nesta versão (os testes de teclado são
+- Digitação real com teclado e uso real do mouse nesta versão (os testes são
   automáticos).
+- Windows 10 (a interface foi testada no Windows 11), mudança real de DPI com
+  a janela aberta, vários monitores e leitores de tela.
 
 Esta é uma versão alpha: recomenda-se testar primeiro em uma máquina antes
 de usar em larga escala.
+
+AVISOS DE TERCEIROS
+-------------------
+Ícones: Lucide (https://lucide.dev), lucide-static 0.468.0, usados sob a
+Licença ISC, que inclui partes do Feather (MIT). Aviso do arquivo LICENSE do
+Lucide, mantido como está (também em Configurações > Sobre / Settings > About):
+
+ISC License
+
+Copyright (c) for portions of Lucide are held by Cole Bemis 2013-2022 as part of Feather (MIT). All other copyright (c) for Lucide are held by Lucide Contributors 2022.
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 Histórico completo: MODIFICATIONS.md no repositório.

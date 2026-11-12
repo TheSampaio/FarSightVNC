@@ -1,9 +1,7 @@
 # tvnviewer: the FarSightVNC viewer (Windows subsystem), mirrors tvnviewer.vcxproj.
 add_executable(tvnviewer WIN32
-  AboutDialog.cpp
   AuthenticationDialog.cpp
   BuildTime.cpp
-  ConfigurationDialog.cpp
   ConnectionData.cpp
   ConnectionListener.cpp
   ControlTrayIcon.cpp
@@ -17,7 +15,6 @@ add_executable(tvnviewer WIN32
   FullScreenToolbar.cpp
   ReconnectDialog.cpp
   HelpDialog.cpp
-  LoginDialog.cpp
   main.cpp
   NamingDefs.cpp
   NewFolderDialog.cpp
@@ -33,6 +30,16 @@ add_executable(tvnviewer WIN32
   ViewerMenu.cpp
   ViewerVncAuthHandler.cpp
   ViewerWindow.cpp
+  shell/HomePage.cpp
+  shell/SessionActionStrip.cpp
+  shell/SessionToolbar.cpp
+  shell/ShellWindow.cpp
+  shell/TitleBar.cpp
+  ConnectionOptionsForm.cpp
+  shell/SettingsForm.cpp
+  shell/SettingsNav.cpp
+  shell/SettingsPage.cpp
+  shell/SettingsSections.cpp
   tvnviewer.rc
   dpi-aware.manifest)
 
@@ -40,7 +47,9 @@ fsv_configure_executable(tvnviewer)
 set_target_properties(tvnviewer PROPERTIES OUTPUT_NAME fsvncviewer)
 target_include_directories(tvnviewer PRIVATE ${FSV_ROOT})
 
-# The libraries of the ProjectReference items; comctl32 comes from AdditionalDependencies.
+# The libraries of the ProjectReference items; comctl32 and the Direct2D,
+# DirectWrite and DWM system libraries of the window chrome come from
+# AdditionalDependencies.
 target_link_libraries(tvnviewer PRIVATE
   client-config-lib
   config-lib
@@ -60,7 +69,10 @@ target_link_libraries(tvnviewer PRIVATE
   viewer-core
   win-system
   zlib
-  comctl32)
+  comctl32
+  d2d1
+  dwrite
+  dwmapi)
 
 # Common Controls 6 dependency (AdditionalManifestDependencies); dpi-aware.manifest
 # above is merged into the embedded manifest by mt.exe (AdditionalManifestFiles).

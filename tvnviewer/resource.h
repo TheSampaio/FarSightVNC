@@ -4,8 +4,10 @@
 // Modified for FarSightVNC on 2026-11-03: IDs of the Options dialog tab pages.
 // Modified for FarSightVNC on 2026-11-03: IDs of the login dialog favorite and recent controls.
 // Modified for FarSightVNC on 2026-11-09: IDs of the update dialog and IDS_CHECK_FOR_UPDATES.
+// Modified for FarSightVNC on 2026-11-11: IDB_TOOLBAR removed (no toolbar bitmap any more).
+// Modified for FarSightVNC on 2026-11-11: IDs of the removed login dialog, its logo bitmap and licensing URL removed.
+// Modified for FarSightVNC on 2026-11-12: IDR_LUCIDE_PLUS, the Lucide "plus" icon (RCDATA).
 //
-#define IDB_TOOLBAR                     101
 #define IDI_CNOCURSOR                   102
 #define IDI_CSMALLDOT                   103
 #define IDI_APPICON                     104
@@ -15,7 +17,6 @@
 #define IDI_FOLDER_ICON                 108
 #define IDI_CDOT                        109
 #define IDS_NEW_CONN                    120
-#define IDD_ABOUT_DIALOG                121
 #define ftclient_createFolderDialog     122
 #define IDS_LISTENING_OPTIONS           122
 #define ftclient_mainDialog             123
@@ -26,36 +27,23 @@
 #define IDS_URL_PRODUCT_FVA             126
 #define IDD_CMDLINE                     127
 #define IDS_CMDLINE_HELP                127
-#define IDS_FAILED_TO_OPEN_URL_FORMAT   128
-#define IDD_CONFIGURATION               129
 #define IDS_TB_TOOLBAR                  129
 #define IDS_MBC_TVNVIEWER               130
 #define IDD_DAUTH                       131
 #define IDS_ERROR_IN_PROTOCOL           131
 #define IDS_DISCONNECT                  132
-#define IDS_PRODUCT_VERSION_FORMAT      133
-#define IDD_LOGINDIALOG                 134
 #define IDS_SAVE_SESSION_FILTER_VNC_FILES 134
 #define IDS_SAVE_SESSION_FILTER_ALL_FILES 135
 #define IDD_OPTIONS                     136
 #define IDS_SECURITY_WARNING_CAPTION    136
 #define IDR_ACCEL_APP_KEYS              137
-#define IDS_LICENSING_INFO              137
 #define IDS_QUESTION_SAVE_PASSWORD      138
-#define IDB_LOGO_BIG                    139
 #define IDS_CONNECTION_INFO_CAPTION     139
 #define IDS_ABOUT_VIEWER                140
-#define IDB_LOGO_48                     141
 #define IDS_CONNECTION_INFO_FORMAT      141
-#define IDS_URL_LICENSING_FVC           142
 #define IDS_UNKNOWN_ERROR_IN_VIEWER     143
-#define IDS_CONFIGURATION_LISTEN_PORT   144
-#define IDS_CONFIGURATION_LOG_LEVEL     145
-#define IDS_CONFIGURATION_HISTORY_LIMIT 146
 #define IDS_OPTIONS_SCALE               147
-#define IDS_CONFIGURATION_CAPTION       148
 #define IDS_OPTIONS_CAPTION             149
-#define IDS_ERROR_VALUE_FIELD_ONLY_NUMERIC 150
 #define IDS_ERROR_VALUE_FIELD_ONLY_POSITIVE_NUMERIC 151
 #define IDS_ERROR_START_LISTENING       152
 #define IDS_ERROR_COMMAND_LINE          153
@@ -86,6 +74,7 @@
 #define IDD_OPTIONS_INPUT               233
 #define IDD_OPTIONS_NETWORK             234
 #define IDD_UPDATE_DIALOG               235
+#define IDR_LUCIDE_PLUS                 236
 #define IDC_LABEL                       1001
 #define IDC_FILENAME_EDIT               1002
 #define IDC_FILENAME_LABEL              1004
@@ -116,22 +105,8 @@
 #define IDC_TOTAL_PROGRESS              1030
 #define IDC_CANCEL_BUTTON               1031
 #define IDC_SHELP                       1032
-#define IDC_CSHOWTOOLBARS               1033
-#define IDC_CWARNATSW                   1034
-#define IDC_BCLEAR_LIST                 1035
-#define IDC_EREVCON                     1036
-#define IDC_SREVCON                     1037
-#define IDC_EVERBLVL                    1038
-#define IDC_SVERBLVL                    1039
-#define IDC_ELOGGING                    1040
-#define IDC_ENUMCON                     1041
-#define IDC_SNUMCON                     1042
 #define IDC_EPASSW                      1043
 #define IDC_EHOST                       1044
-#define IDC_SSERVER                     1045
-#define IDC_BOPTIONS                    1046
-#define IDC_BCONFIGURATION              1047
-#define IDC_CSERVER                     1048
 #define IDC_CUSEENC                     1049
 #define IDC_CEIGHTBIT                   1050
 #define IDC_CCOMPRLVL                   1051
@@ -162,19 +137,10 @@
 #define IDC_SQUALITY2                   1076
 #define IDC_STQUALITY                   1077
 #define IDC_STQUALITY2                  1078
-#define IDC_VISIT_WEB_SITE_BUTTON       1079
-#define IDC_ORDER_SUPPORT_BUTTON        1080
-#define IDC_STATIC_VERSION              1081
-#define IDC_STATIC_LICENSING            1082
-#define IDC_LISTENING                   1083
-#define IDC_BABOUT                      1084
-#define IDC_OPEN_LOG_FOLDER_BUTTON      1087
 #define IDC_CWARN_FS                    1088
 #define IDC_ID_EDIT                     1089
 #define IDC_LABEL_ID                    1090
 #define IDC_OPTIONS_TAB                 1093
-#define IDC_FAVORITE                    1094
-#define IDC_REMOVE_RECENT               1095
 #define IDC_UPDATE_STATUS               1100
 #define IDC_UPDATE_CAP_CURRENT          1101
 #define IDC_UPDATE_CURRENT              1102
@@ -198,7 +164,6 @@
 #define IDC_UPDATE_RELEASES             1120
 #define IDC_UPDATE_CANCEL_DOWNLOAD      1121
 #define IDC_UPDATE_CANCEL_STAGED        1122
-#define IDC_ABOUT_CHECK_UPDATES         1123
 #define ID_CONN_OPTIONS                 40001
 #define ID_CONN_INFO                    40002
 #define ID_SHOW_TOOLBAR                 40004
@@ -211,7 +176,7 @@
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        236
+#define _APS_NEXT_RESOURCE_VALUE        237
 #define _APS_NEXT_COMMAND_VALUE         40010
 #define _APS_NEXT_CONTROL_VALUE         1124
 #define _APS_NEXT_SYMED_VALUE           101

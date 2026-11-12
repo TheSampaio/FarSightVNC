@@ -78,6 +78,15 @@ public static class E2eWin {
     return found;
   }
 
+  [StructLayout(LayoutKind.Sequential)] public struct GuiInfo {
+    public int cbSize; public int flags; public IntPtr active; public IntPtr focus; public IntPtr capture;
+    public IntPtr menuOwner; public IntPtr moveSize; public IntPtr caret; public int l, t, r, b; }
+  [DllImport("user32.dll")] public static extern bool GetGUIThreadInfo(uint thread, ref GuiInfo info);
+  public static IntPtr FocusOf(IntPtr h) {
+    GuiInfo info = new GuiInfo(); info.cbSize = Marshal.SizeOf(info);
+    GetGUIThreadInfo(OwnerThread(h), ref info); return info.focus;
+  }
+
   public static IntPtr[] LayoutList() {
     int n = GetKeyboardLayoutList(0, null);
     IntPtr[] l = new IntPtr[Math.Max(n, 1)];
@@ -90,8 +99,10 @@ public static class E2eWin {
 
 $WM_KEYDOWN = 0x100; $WM_KEYUP = 0x101; $WM_INPUTLANGCHANGEREQUEST = 0x50
 $ABNT2_LANGID = 0x0416
-$VK = @{ LShift = 0xA0; RShift = 0xA1; Shift = 0x10; A = 0x41; AbntC1 = 0xC1; DeadAcute = 0xDB }
-$SC = @{ LShift = 0x2A; RShift = 0x36; A = 0x1E; AbntC1 = 0x73; DeadAcute = 0x1A }
+$VK = @{ LShift = 0xA0; RShift = 0xA1; Shift = 0x10; A = 0x41; AbntC1 = 0xC1; DeadAcute = 0xDB
+         LCtrl = 0xA2; RCtrl = 0xA3; LAlt = 0xA4; Snapshot = 0x2C }
+$SC = @{ LShift = 0x2A; RShift = 0x36; A = 0x1E; AbntC1 = 0x73; DeadAcute = 0x1A
+         Ctrl = 0x1D; Alt = 0x38; Snapshot = 0x37; C = 0x2E; V = 0x2F; X = 0x2D; Z = 0x2C }
 
 $state = @{ Server = $null; Viewer = $null; LoadedLayout = [IntPtr]::Zero }
 $historyKey = "HKCU:\Software\TightVNC\Viewer\History\127.0.0.1::$Port"
@@ -133,11 +144,12 @@ function Send-Key([IntPtr]$target, [int]$vk, [int]$scan, [bool]$up, [bool]$exten
   Start-Sleep -Milliseconds $StepDelayMs
 }
 
-# step = @(kind, vk, scan): kind d (down), u (up), r (autorepeat down)
+# step = @(kind, vk, scan[, extended]): kind d (down), u (up), r (autorepeat down)
 function Invoke-Case([string]$name, [IntPtr]$target, [object[]]$steps, [object[]]$expected) {
   $before = (Get-KeyEvents).Count
   foreach ($s in $steps) {
-    Send-Key $target $s[1] $s[2] ($s[0] -eq 'u') $false ($s[0] -eq 'r')
+    $ext = ($s.Count -gt 3) -and [bool]$s[3]
+    Send-Key $target $s[1] $s[2] ($s[0] -eq 'u') $ext ($s[0] -eq 'r')
   }
   Start-Sleep -Milliseconds 300
   $events = @(Get-KeyEvents | Select-Object -Skip $before)
@@ -214,6 +226,55 @@ try {
   Invoke-Case 'ABNT2 autorepeat a: same keysym, one release' $desk @($aD, $aR, $aR, $aU) @('+61', '+61', '+61', '-61')
   Invoke-Case 'ABNT2 dead acute then a gives a-acute' $desk `
     @(@('d', $VK.DeadAcute, $SC.DeadAcute), @('u', $VK.DeadAcute, $SC.DeadAcute), $aD, $aU) @('+e1', '-e1')
+
+  # Ctrl shortcuts as the low level hook posts them (VK_LCONTROL/VK_RCONTROL,
+  # Right Ctrl extended): no Alt keysym, every key released, also when Ctrl is
+  # released before the letter.
+  $ctrls = @(@{ Name = 'Left Ctrl'; Vk = $VK.LCtrl; Ext = $false; Sym = 'ffe3' },
+             @{ Name = 'Right Ctrl'; Vk = $VK.RCtrl; Ext = $true; Sym = 'ffe4' })
+  foreach ($c in $ctrls) {
+    foreach ($letter in 'C', 'V', 'X', 'Z', 'A') {
+      $letterVk = [int][char]$letter   # not $vk: variable names ignore case ($VK)
+      $sym = '{0:x}' -f [int][char]$letter.ToLower()
+      $cD = @('d', $c.Vk, $SC.Ctrl, $c.Ext); $cU = @('u', $c.Vk, $SC.Ctrl, $c.Ext)
+      $lD = @('d', $letterVk, $SC[$letter]); $lU = @('u', $letterVk, $SC[$letter])
+      Invoke-Case "ABNT2 $($c.Name)+$letter" $desk @($cD, $lD, $lU, $cU) @("+$($c.Sym)", "+$sym", "-$sym", "-$($c.Sym)")
+      Invoke-Case "ABNT2 $($c.Name)+$letter, Ctrl released first" $desk @($cD, $lD, $cU, $lU) @("+$($c.Sym)", "+$sym", "-$($c.Sym)", "-$sym")
+    }
+  }
+
+  # Print Screen stays local: nothing is sent, also with Alt held.
+  $psD = @('d', $VK.Snapshot, $SC.Snapshot, $true); $psU = @('u', $VK.Snapshot, $SC.Snapshot, $true)
+  Invoke-Case 'Print Screen is not sent' $desk @($psD, $psU) @()
+  Invoke-Case 'Print Screen key-up alone is not sent' $desk @(,$psU) @()
+  Invoke-Case 'Alt+Print Screen sends only Alt' $desk `
+    @(@('d', $VK.LAlt, $SC.Alt), $psD, $psU, @('u', $VK.LAlt, $SC.Alt)) @('+ffe9', '-ffe9')
+
+  # The Settings page over the running session (settings button command,
+  # IDS_TB_CONFIGURATION = 216): the remote desktop is hidden and loses the
+  # keyboard, keys typed into the page never reach the server, Esc goes back
+  # and typing reaches the server again.
+  $WM_COMMAND = 0x111; $VK_ESCAPE = 0x1B
+  if ([E2eWin]::OwnerPid($top) -ne $state.Viewer.Id) { throw 'refusing to post to a window of another process' }
+  [void][E2eWin]::PostMessage($top, [uint32]$WM_COMMAND, [IntPtr]216, [IntPtr]::Zero)
+  Start-Sleep -Milliseconds 700
+  $focus = [E2eWin]::FocusOf($desk)
+  $hidden = -not [E2eWin]::IsWindowVisible($desk)
+  [void]$results.Add([pscustomobject]@{ Case = 'Settings shown: remote desktop hidden, focus on the page'
+      Passed = ($hidden -and $focus -ne [IntPtr]::Zero -and $focus -ne $desk); Balanced = $true
+      Expected = 'hidden, focus elsewhere'; Actual = "hidden=$hidden focus=$focus desk=$desk" })
+  if ($focus -ne [IntPtr]::Zero -and $focus -ne $desk) {
+    Invoke-Case 'Settings shown: keys typed into the page do not reach the server' $focus @($aD, $aU, $ls, $kd, $ku, $lsU) @()
+    # Key down only: the page is gone before a key up could be posted to it.
+    Send-Key $focus $VK_ESCAPE 0x01 $false $false $false
+  }
+  Start-Sleep -Milliseconds 700
+  $focus = [E2eWin]::FocusOf($desk)
+  $shown = [E2eWin]::IsWindowVisible($desk)
+  [void]$results.Add([pscustomobject]@{ Case = 'Esc closes Settings: remote desktop shown and focused'
+      Passed = ($shown -and $focus -eq $desk); Balanced = $true
+      Expected = "visible, focus=$desk"; Actual = "visible=$shown focus=$focus" })
+  Invoke-Case 'after Settings: typing reaches the server again' $desk @($aD, $aU) @('+61', '-61')
 } catch {
   [void]$results.Add([pscustomobject]@{ Case = 'harness'; Passed = $false; Balanced = $false; Expected = 'no error'; Actual = $_.Exception.Message })
 } finally {

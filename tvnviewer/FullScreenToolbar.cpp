@@ -17,34 +17,61 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //
 // Modified for FarSightVNC on 2026-11-03: connection state label.
+// Modified for FarSightVNC on 2026-11-11: rewritten as a floating pill drawn
+// with ChromeRenderer; the buttons are the SessionActionStrip of the session
+// toolbar.
+// Modified for FarSightVNC on 2026-11-11: Disconnect ends the session (back to
+// the Home page) instead of closing the shell.
 //
 
 #include "FullScreenToolbar.h"
 #include "gui/DpiUtils.h"
-#include "resource.h"
-
-#include <CommCtrl.h>
-
-const TCHAR FullScreenToolbar::WINDOW_CLASS_NAME[] = _T("FarSightVncFullScreenToolbar");
 
 namespace {
-// Sizes for 96 DPI.
-const int HOT_STRIP_HEIGHT = 3;
-const int NEAR_MARGIN = 24;
-const int FONT_POINTS = 9;
 
-const int TOOLBAR_CONTROL_ID = 1;
+const wchar_t kWindowClassName[] = L"FarSightVncFullScreenToolbar";
+
+const DWORD kStyle = WS_POPUP;
+const DWORD kExStyle = WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
+
+// Sizes in DIPs.
+const int HOT_STRIP_HEIGHT = 3;      // Pixels at 96 DPI.
+const int NEAR_MARGIN = 24;          // Pixels at 96 DPI.
+const float kPillHeight = 40.0f;
+const float kPillPadding = 10.0f;    // Inside the rounded ends.
+const float kTopGap = 8.0f;          // Between the monitor edge and the pill.
+const float kShadow = 12.0f;         // Room for the shadow on the sides and below.
+const float kScreenMargin = 16.0f;   // Minimum room on each side of the monitor.
+const float kLabelMaxWidth = 200.0f;
+const float kLabelMinWidth = 40.0f;
+const float kLabelGap = 8.0f;
+const float kDividerHeight = 16.0f;
+const float kHandleWidth = 64.0f;
+const float kHandleHeight = 8.0f;
+const float kHandleMargin = 4.0f;    // Room for the shadow of the handle.
+const ThemeColor kShadowColor = 0x000000;
+
+D2D1_RECT_F inflate(const D2D1_RECT_F &rect, float dx, float dy)
+{
+  return D2D1::RectF(rect.left - dx, rect.top - dy, rect.right + dx, rect.bottom + dy);
+}
+
 }
 
 FullScreenToolbar::FullScreenToolbar()
 : m_hwnd(0),
   m_owner(0),
+  m_commandTarget(0),
+  m_listener(0),
   m_monitor(0),
-  m_dpi(0),
-  m_font(0),
-  m_inLayout(false)
+  m_inLayout(false),
+  m_expanded(false),
+  m_strip(SESSION_PLACEMENT_PILL),
+  m_pill(D2D1::RectF()),
+  m_labelRect(D2D1::RectF()),
+  m_labelDivider(D2D1::RectF())
 {
-  m_stateText[0] = 0;
+  m_sessionState.enabled.set();
 }
 
 FullScreenToolbar::~FullScreenToolbar()
@@ -54,39 +81,43 @@ FullScreenToolbar::~FullScreenToolbar()
 
 bool FullScreenToolbar::registerClass()
 {
-  WNDCLASSEX wc;
-  if (GetClassInfoEx(GetModuleHandle(0), WINDOW_CLASS_NAME, &wc)) {
+  WNDCLASSEXW wc;
+  if (GetClassInfoExW(GetModuleHandle(0), kWindowClassName, &wc)) {
     return true;
   }
   ZeroMemory(&wc, sizeof(wc));
   wc.cbSize = sizeof(wc);
+  wc.style = CS_DBLCLKS;
   wc.lpfnWndProc = windowProc;
   wc.hInstance = GetModuleHandle(0);
   wc.hCursor = LoadCursor(0, IDC_ARROW);
-  wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_BTNFACE + 1);
-  wc.lpszClassName = WINDOW_CLASS_NAME;
-  return RegisterClassEx(&wc) != 0;
+  wc.lpszClassName = kWindowClassName;
+  return RegisterClassExW(&wc) != 0;
 }
 
-void FullScreenToolbar::create(HWND owner, HMONITOR monitor)
+void FullScreenToolbar::create(HWND owner, HWND commandTarget, SessionToolbarListener *listener,
+                               HWND focusTarget, HMONITOR monitor)
 {
   if (m_hwnd != 0 || !registerClass()) {
     return;
   }
   m_owner = owner;
+  m_commandTarget = commandTarget;
+  m_listener = listener;
   m_monitor = 0;
-  m_dpi = 0;
+  m_expanded = false;
   m_logic = FullScreenToolbarLogic();
-  // Owned (not child) popup: it stays above the topmost full screen viewer
+  // Owned (not child) popup: it stays above the topmost full screen shell
   // and is hidden and destroyed together with it.
-  CreateWindowEx(WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
-                 WINDOW_CLASS_NAME, _T("FarSightVNC full screen toolbar"),
-                 WS_POPUP | WS_BORDER | WS_CLIPCHILDREN,
-                 0, 0, 1, 1, owner, 0, GetModuleHandle(0), this);
+  CreateWindowExW(kExStyle, kWindowClassName, L"FarSightVNC full screen toolbar", kStyle,
+                  0, 0, 1, 1, owner, 0, GetModuleHandle(0), this);
   if (m_hwnd == 0) {
     return;
   }
-  createButtons();
+  m_chrome.attachLayered(m_hwnd, DpiUtils::getDpiForWindow(m_hwnd));
+  m_strip.attach(m_hwnd, &m_chrome, m_hwnd, this, [this]() { render(); });
+  m_strip.setFocusTarget(focusTarget);
+  applyState();
   showOn(monitor);
 }
 
@@ -97,80 +128,34 @@ void FullScreenToolbar::destroy()
   }
 }
 
-void FullScreenToolbar::createButtons()
+void FullScreenToolbar::setState(const SessionToolbarState &state)
 {
-  m_toolbar.reset(new ToolBar());
-  m_toolbar->loadToolBarfromRes(IDB_TOOLBAR);
-  m_toolbar->create(TOOLBAR_CONTROL_ID, m_hwnd,
-                    WS_VISIBLE | WS_CLIPSIBLINGS | TBSTYLE_FLAT | TBSTYLE_LIST |
-                    TBSTYLE_TOOLTIPS | CCS_NODIVIDER | CCS_NORESIZE |
-                    CCS_NOPARENTALIGN);
-  HWND bar = toolbarControl();
-  SendMessage(bar, TB_SETEXTENDEDSTYLE, 0, TBSTYLE_EX_MIXEDBUTTONS);
-
-  // Images come from the main toolbar bitmap (one image per IDS_TB_* id).
-  struct ButtonInfo { int id; bool image; BYTE style; };
-  const ButtonInfo buttons[] = {
-    { IDS_TB_FULLSCREEN, true, BTNS_BUTTON },
-    { 0, false, BTNS_SEP },
-    { IDS_TB_CTRLALTDEL, true, BTNS_BUTTON },
-    { IDS_TB_CONNOPTIONS, true, BTNS_BUTTON },
-    { 0, false, BTNS_SEP },
-    { ID_PIN, false, BTNS_CHECK | BTNS_SHOWTEXT },
-    { ID_DISCONNECT, false, BTNS_BUTTON | BTNS_SHOWTEXT },
-    { 0, false, BTNS_SEP },
-    { ID_STATE, false, BTNS_BUTTON | BTNS_SHOWTEXT | BTNS_NOPREFIX },
-  };
-  for (size_t i = 0; i < sizeof(buttons) / sizeof(buttons[0]); i++) {
-    TBBUTTON tbb;
-    ZeroMemory(&tbb, sizeof(tbb));
-    tbb.idCommand = buttons[i].id;
-    tbb.fsStyle = buttons[i].style;
-    if (buttons[i].style != BTNS_SEP) {
-      tbb.fsStyle |= BTNS_AUTOSIZE;
-      tbb.fsState = TBSTATE_ENABLED;
-      tbb.iBitmap = buttons[i].image ? buttons[i].id - IDS_TB_NEWCONNECTION : I_IMAGENONE;
-      // With TBSTYLE_EX_MIXEDBUTTONS the text of image buttons is their tooltip.
-      tbb.iString = reinterpret_cast<INT_PTR>(tooltipText(buttons[i].id));
-    }
-    SendMessage(bar, TB_ADDBUTTONS, 1, reinterpret_cast<LPARAM>(&tbb));
-  }
+  m_sessionState = state;
+  applyState();
 }
 
-const TCHAR *FullScreenToolbar::tooltipText(int id) const
+void FullScreenToolbar::applyState()
 {
-  switch (id) {
-  case IDS_TB_FULLSCREEN: return _T("Leave full screen");
-  case IDS_TB_CTRLALTDEL: return _T("Send Ctrl+Alt+Del");
-  case IDS_TB_CONNOPTIONS: return _T("Connection options");
-  case ID_PIN: return _T("Pin");
-  case ID_DISCONNECT: return _T("Disconnect");
-  case ID_STATE: return m_stateText;
-  }
-  return _T("");
+  SessionToolbarState state = m_sessionState;
+  state.enabled[SESSION_ACTION_PIN] = true;
+  state.enabled[SESSION_ACTION_EXIT_FULL_SCREEN] = true;
+  state.enabled[SESSION_ACTION_DISCONNECT] = true;
+  state.checked[SESSION_ACTION_PIN] = m_logic.isPinned();
+  state.checked[SESSION_ACTION_EXIT_FULL_SCREEN] = false;
+  state.checked[SESSION_ACTION_DISCONNECT] = false;
+  m_strip.setState(state);
 }
 
-void FullScreenToolbar::applyDpi(UINT dpi)
+void FullScreenToolbar::setLabel(const TCHAR *text)
 {
-  if (dpi == m_dpi || !m_toolbar) {
+  std::wstring label = text != 0 ? text : L"";
+  if (label == m_label) {
     return;
   }
-  m_dpi = dpi;
-  m_toolbar->setDpi(dpi);
-
-  HFONT font = CreateFont(-MulDiv(FONT_POINTS, dpi, 72), 0, 0, 0, FW_NORMAL,
-                          FALSE, FALSE, FALSE, DEFAULT_CHARSET,
-                          OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                          DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
-                          _T("Segoe UI"));
-  if (font != 0) {
-    SendMessage(toolbarControl(), WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
-    if (m_font != 0) {
-      DeleteObject(m_font);
-    }
-    m_font = font;
+  m_label = label;
+  if (m_hwnd != 0 && m_expanded && m_monitor != 0) {
+    layout(m_monitor);
   }
-  SendMessage(toolbarControl(), TB_AUTOSIZE, 0, 0);
 }
 
 void FullScreenToolbar::layout(HMONITOR monitor)
@@ -181,36 +166,136 @@ void FullScreenToolbar::layout(HMONITOR monitor)
     return;
   }
   m_inLayout = true;
+  const ThemeTokens &theme = kLightTheme;
   const RECT &rcMon = mi.rcMonitor;
   int centerX = rcMon.left + (rcMon.right - rcMon.left) / 2;
   // Move onto the monitor first: the window takes the DPI of that monitor.
-  SetWindowPos(m_hwnd, HWND_TOPMOST, centerX, rcMon.top, 1, 1,
-               SWP_NOACTIVATE | SWP_NOSIZE);
-  applyDpi(DpiUtils::getDpiForWindow(m_hwnd));
+  SetWindowPos(m_hwnd, HWND_TOPMOST, centerX, rcMon.top, 0, 0, SWP_NOACTIVATE | SWP_NOSIZE);
+  m_chrome.setDpi(DpiUtils::getDpiForWindow(m_hwnd));
 
-  HWND bar = toolbarControl();
-  SIZE size = { 0, 0 };
-  SendMessage(bar, TB_GETMAXSIZE, 0, reinterpret_cast<LPARAM>(&size));
-  int pad = DpiUtils::scale(2, m_dpi);
-  SetWindowPos(bar, 0, pad, pad, size.cx, size.cy, SWP_NOZORDER | SWP_NOACTIVATE);
+  float width;
+  float height;
+  if (m_expanded) {
+    float monitorWidth = m_chrome.pixelsToDips(rcMon.right - rcMon.left);
+    float maxPill = monitorWidth - 2.0f * (kScreenMargin + kShadow);
+    float stripWidth = SessionActionStrip::fullWidth(SESSION_PLACEMENT_PILL);
+    float labelWidth = 0.0f;
+    if (!m_label.empty()) {
+      labelWidth = m_chrome.measureText(m_label.c_str(), theme.fontSizeSmall,
+                                        DWRITE_FONT_WEIGHT_SEMI_BOLD) + 4.0f;
+      if (labelWidth > kLabelMaxWidth) {
+        labelWidth = kLabelMaxWidth;
+      }
+    }
+    // The label gives way to the buttons on a narrow monitor.
+    float labelBlock = labelWidth > 0.0f ? labelWidth + 2.0f * kLabelGap + 1.0f : 0.0f;
+    float excess = 2.0f * kPillPadding + labelBlock + stripWidth - maxPill;
+    if (excess > 0.0f && labelWidth > 0.0f) {
+      labelWidth -= excess;
+      if (labelWidth < kLabelMinWidth) {
+        labelWidth = 0.0f;
+      }
+      labelBlock = labelWidth > 0.0f ? labelWidth + 2.0f * kLabelGap + 1.0f : 0.0f;
+    }
+    float pillWidth = 2.0f * kPillPadding + labelBlock + stripWidth;
+    if (pillWidth > maxPill) {
+      pillWidth = maxPill;
+    }
+    m_pill = D2D1::RectF(kShadow, kTopGap, kShadow + pillWidth, kTopGap + kPillHeight);
+    float x = m_pill.left + kPillPadding;
+    if (labelWidth > 0.0f) {
+      m_labelRect = D2D1::RectF(x, m_pill.top, x + labelWidth, m_pill.bottom);
+      x += labelWidth + kLabelGap;
+      float dividerTop = m_pill.top + (kPillHeight - kDividerHeight) / 2.0f;
+      m_labelDivider = D2D1::RectF(x, dividerTop, x + 1.0f, dividerTop + kDividerHeight);
+      x += 1.0f + kLabelGap;
+    } else {
+      m_labelRect = D2D1::RectF();
+      m_labelDivider = D2D1::RectF();
+    }
+    m_strip.layout(x, m_pill.right - kPillPadding, m_pill.top, m_pill.bottom);
+    width = pillWidth + 2.0f * kShadow;
+    height = kTopGap + kPillHeight + kShadow;
+  } else {
+    m_pill = D2D1::RectF(kHandleMargin, 0.0f, kHandleMargin + kHandleWidth, kHandleHeight);
+    width = kHandleWidth + 2.0f * kHandleMargin;
+    height = kHandleHeight + kHandleMargin;
+  }
 
-  RECT rc = { 0, 0, size.cx + 2 * pad, size.cy + 2 * pad };
-  DpiUtils::adjustWindowRect(&rc, WS_POPUP | WS_BORDER,
-                             WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, m_dpi);
-  int width = rc.right - rc.left;
-  int height = rc.bottom - rc.top;
-  SetWindowPos(m_hwnd, HWND_TOPMOST, centerX - width / 2, rcMon.top, width, height,
-               SWP_NOACTIVATE);
+  int pixelWidth = m_chrome.dipsToPixels(width);
+  int pixelHeight = m_chrome.dipsToPixels(height);
+  SetWindowPos(m_hwnd, HWND_TOPMOST, centerX - pixelWidth / 2, rcMon.top,
+               pixelWidth, pixelHeight, SWP_NOACTIVATE);
+  m_chrome.resize(pixelWidth, pixelHeight);
   m_monitor = monitor;
   m_inLayout = false;
+  render();
+}
+
+void FullScreenToolbar::render()
+{
+  if (m_hwnd == 0 || m_inLayout || m_monitor == 0 || !m_chrome.beginDraw()) {
+    return;
+  }
+  const ThemeTokens &theme = kLightTheme;
+  float line = m_chrome.pixelsToDips(1);
+  m_chrome.clearTransparent();
+  if (m_expanded) {
+    // Soft shadow: rings of low opacity below the pill.
+    const int rings = 8;
+    const float step = 1.25f;
+    float radius = kPillHeight / 2.0f;
+    for (int i = rings; i >= 1; i--) {
+      float grow = i * step;
+      D2D1_RECT_F ring = inflate(m_pill, grow, grow);
+      ring.top += 2.0f;
+      ring.bottom += 2.0f;
+      m_chrome.fillRoundRect(ring, radius + grow, kShadowColor, 0.022f);
+    }
+    m_chrome.fillRoundRect(m_pill, radius, theme.surface);
+    m_chrome.drawRoundRect(m_pill, radius, theme.border, line);
+    if (m_labelRect.right > m_labelRect.left) {
+      m_chrome.drawText(m_label.c_str(), m_labelRect, theme.text, theme.fontSizeSmall,
+                        DWRITE_FONT_WEIGHT_SEMI_BOLD);
+      D2D1_RECT_F divider = m_labelDivider;
+      divider.right = divider.left + line;
+      m_chrome.fillRect(divider, theme.border);
+    }
+    m_strip.paint();
+  } else {
+    // Grab handle: a small tab hanging from the top edge, with a grip line.
+    float radius = kHandleHeight / 2.0f;
+    for (int i = 3; i >= 1; i--) {
+      D2D1_RECT_F ring = inflate(m_pill, i * 1.0f, 0.0f);
+      ring.top -= kHandleHeight;
+      ring.bottom += i * 1.0f;
+      m_chrome.fillRoundRect(ring, radius + i, kShadowColor, 0.05f);
+    }
+    D2D1_RECT_F tab = m_pill;
+    tab.top -= kHandleHeight;
+    m_chrome.fillRoundRect(tab, radius, theme.surface);
+    m_chrome.drawRoundRect(tab, radius, theme.border, line);
+    float middle = (m_pill.left + m_pill.right) / 2.0f;
+    float gripY = m_pill.bottom / 2.0f;
+    m_chrome.fillRoundRect(D2D1::RectF(middle - 12.0f, gripY - 1.0f, middle + 12.0f, gripY + 1.0f),
+                           1.0f, theme.mutedText);
+  }
+  m_chrome.endDraw();
 }
 
 void FullScreenToolbar::showOn(HMONITOR monitor)
 {
+  expand(monitor);
+}
+
+void FullScreenToolbar::expand(HMONITOR monitor)
+{
   if (m_hwnd == 0 || monitor == 0) {
     return;
   }
-  if (monitor != m_monitor || !IsWindowVisible(m_hwnd)) {
+  bool wasExpanded = m_expanded;
+  m_expanded = true;
+  if (!wasExpanded || monitor != m_monitor || !IsWindowVisible(m_hwnd)) {
     layout(monitor);
   }
   m_logic.show(GetTickCount());
@@ -219,27 +304,25 @@ void FullScreenToolbar::showOn(HMONITOR monitor)
   SetTimer(m_hwnd, TIMER_AUTO_HIDE, TIMER_AUTO_HIDE_PERIOD, 0);
 }
 
-void FullScreenToolbar::hideNow()
+void FullScreenToolbar::collapse()
 {
   KillTimer(m_hwnd, TIMER_AUTO_HIDE);
   m_logic.hide();
-  ShowWindow(m_hwnd, SW_HIDE);
-}
-
-HWND FullScreenToolbar::toolbarControl() const
-{
-  return GetDlgItem(m_hwnd, TOOLBAR_CONTROL_ID);
+  m_expanded = false;
+  if (m_monitor != 0) {
+    layout(m_monitor);
+  }
 }
 
 int FullScreenToolbar::nearMargin() const
 {
-  return DpiUtils::scale(NEAR_MARGIN, m_dpi != 0 ? m_dpi : DpiUtils::DEFAULT_DPI);
+  return DpiUtils::scale(NEAR_MARGIN, m_chrome.getDpi());
 }
 
 FullScreenToolbarLogic::Box FullScreenToolbar::toolbarBox() const
 {
   RECT rc;
-  if (!IsWindowVisible(m_hwnd) || !GetWindowRect(m_hwnd, &rc)) {
+  if (!m_expanded || !IsWindowVisible(m_hwnd) || !GetWindowRect(m_hwnd, &rc)) {
     FullScreenToolbarLogic::Box empty = { 0, 0, 0, 0 };
     return empty;
   }
@@ -250,7 +333,7 @@ FullScreenToolbarLogic::Box FullScreenToolbar::toolbarBox() const
 bool FullScreenToolbar::isPointerNear() const
 {
   POINT pt;
-  if (!IsWindowVisible(m_hwnd) || !GetCursorPos(&pt)) {
+  if (!m_expanded || !IsWindowVisible(m_hwnd) || !GetCursorPos(&pt)) {
     return false;
   }
   return FullScreenToolbarLogic::isNear(toolbarBox(), nearMargin(), pt.x, pt.y);
@@ -277,53 +360,33 @@ void FullScreenToolbar::onPointerMove(POINT pt)
   }
 }
 
-void FullScreenToolbar::enableButton(int id, bool enable)
+void FullScreenToolbar::onToolbarMenu(SessionAction action, const RECT &anchor)
 {
-  if (m_toolbar) {
-    m_toolbar->enableButton(id, enable);
+  // The auto-hide keeps the pill while the menu is open (isMenuOpen()).
+  if (m_listener != 0) {
+    m_listener->onToolbarMenu(action, anchor);
   }
 }
 
-void FullScreenToolbar::setStateText(const TCHAR *text)
+void FullScreenToolbar::onCommand(WPARAM wParam, LPARAM lParam)
 {
-  _tcsncpy_s(m_stateText, sizeof(m_stateText) / sizeof(m_stateText[0]),
-             text != 0 ? text : _T(""), _TRUNCATE);
-  if (m_hwnd == 0 || !m_toolbar) {
+  int id = LOWORD(wParam);
+  if (id == ID_PILL_PIN) {
+    m_logic.setPinned(!m_logic.isPinned(), GetTickCount());
+    applyState();
     return;
   }
-  TBBUTTONINFO info;
-  ZeroMemory(&info, sizeof(info));
-  info.cbSize = sizeof(info);
-  info.dwMask = TBIF_TEXT;
-  info.pszText = m_stateText;
-  HWND bar = toolbarControl();
-  SendMessage(bar, TB_SETBUTTONINFO, ID_STATE, reinterpret_cast<LPARAM>(&info));
-  SendMessage(bar, TB_AUTOSIZE, 0, 0);
-  if (IsWindowVisible(m_hwnd) && m_monitor != 0) {
-    layout(m_monitor);
-  }
-}
-
-void FullScreenToolbar::onCommand(int id)
-{
   // A modal dialog of the viewer (options, warnings) disables the owner.
   if (!IsWindowEnabled(m_owner)) {
     return;
   }
-  switch (id) {
-  case ID_PIN:
-    m_logic.setPinned(m_toolbar->getState(ID_PIN) & TBSTATE_CHECKED ? true : false,
-                      GetTickCount());
-    break;
-  case ID_DISCONNECT:
-    PostMessage(m_owner, WM_CLOSE, 0, 0);
-    break;
-  case IDS_TB_FULLSCREEN:
-  case IDS_TB_CTRLALTDEL:
-  case IDS_TB_CONNOPTIONS:
-    // Posted: leaving full screen destroys this window.
-    PostMessage(m_owner, WM_COMMAND, id, 0);
-    break;
+  if (id == ID_PILL_DISCONNECT) {
+    // Ends the session; the shell goes back to its Home page.
+    PostMessage(m_commandTarget, WM_CLOSE, 0, 0);
+  } else {
+    // Leaving full screen destroys this window: the session handles the
+    // command later.
+    PostMessage(m_commandTarget, WM_COMMAND, wParam, lParam);
   }
 }
 
@@ -352,52 +415,44 @@ LRESULT FullScreenToolbar::onMessage(UINT message, WPARAM wParam, LPARAM lParam)
     // Clicks must leave the activation and the keyboard focus to the viewer.
     return MA_NOACTIVATE;
   case WM_COMMAND:
-    onCommand(LOWORD(wParam));
+    onCommand(wParam, lParam);
     return 0;
-  case WM_NOTIFY:
-    {
-      LPNMHDR hdr = reinterpret_cast<LPNMHDR>(lParam);
-      if (hdr->code == TTN_GETDISPINFO) {
-        LPNMTTDISPINFO info = reinterpret_cast<LPNMTTDISPINFO>(lParam);
-        // The text is copied: the control may modify it (it strips '&').
-        _tcsncpy_s(info->szText, sizeof(info->szText) / sizeof(info->szText[0]),
-                   tooltipText(static_cast<int>(hdr->idFrom)), _TRUNCATE);
-        info->lpszText = info->szText;
-        info->hinst = 0;
-        return 0;
-      }
-    }
-    break;
   case WM_TIMER:
     if (wParam == TIMER_AUTO_HIDE) {
-      if (m_logic.onTimer(isPointerNear(), GetTickCount())) {
-        hideNow();
+      if (m_logic.onTimer(isPointerNear() || m_strip.isMenuOpen(), GetTickCount())) {
+        collapse();
       }
+      return 0;
+    }
+    break;
+  case WM_MOUSEMOVE:
+  case WM_LBUTTONDOWN:
+    if (!m_expanded) {
+      // The handle brings the pill back.
+      expand(m_monitor);
       return 0;
     }
     break;
   case WM_DPICHANGED:
     // layout() moves the window and reads the DPI itself; outside of it (DPI
-    // setting changed) the toolbar is laid out again on the same monitor.
+    // setting changed) the pill is laid out again on the same monitor.
     if (!m_inLayout && m_monitor != 0) {
       layout(m_monitor);
     }
     return 0;
   case WM_DESTROY:
-    // The toolbar control is still alive here; destroy it through its owner object.
     KillTimer(hwnd, TIMER_AUTO_HIDE);
-    m_toolbar.reset();
-    if (m_font != 0) {
-      DeleteObject(m_font);
-      m_font = 0;
-    }
     return 0;
   case WM_NCDESTROY:
     SetWindowLongPtr(hwnd, GWLP_USERDATA, 0);
+    m_strip.detach();
     m_hwnd = 0;
     m_monitor = 0;
-    m_dpi = 0;
-    break;
+    m_expanded = false;
+    return DefWindowProc(hwnd, message, wParam, lParam);
+  }
+  if (m_expanded && m_strip.onMouseMessage(message, wParam, lParam)) {
+    return 0;
   }
   return DefWindowProc(hwnd, message, wParam, lParam);
 }

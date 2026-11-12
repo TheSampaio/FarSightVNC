@@ -19,9 +19,6 @@
     <ClCompile Include="AuthenticationDialog.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="ConfigurationDialog.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="ConnectionData.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -52,9 +49,6 @@
     <ClCompile Include="HelpDialog.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="LoginDialog.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -79,7 +73,19 @@
     <ClCompile Include="ViewerWindow.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="AboutDialog.cpp">
+    <ClCompile Include="shell\HomePage.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="shell\SessionActionStrip.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="shell\SessionToolbar.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="shell\ShellWindow.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="shell\TitleBar.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="UpdateController.cpp">
@@ -115,12 +121,24 @@
     <ClCompile Include="ViewerVncAuthHandler.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="ConnectionOptionsForm.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="shell\SettingsForm.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="shell\SettingsNav.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="shell\SettingsPage.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="shell\SettingsSections.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="AuthenticationDialog.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="ConfigurationDialog.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="ConnectionData.h">
@@ -171,9 +189,6 @@
     <ClInclude Include="KeyMap.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="LoginDialog.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="NamingDefs.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -198,7 +213,34 @@
     <ClInclude Include="ViewerWindow.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="AboutDialog.h">
+    <ClInclude Include="shell\HomeActions.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="shell\HomePage.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="shell\HomeTab.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="shell\SessionHost.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="shell\SessionTab.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="shell\SessionActionStrip.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="shell\SessionToolbar.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="shell\ShellTab.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="shell\ShellWindow.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="shell\TitleBar.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="BuildTime.h">
@@ -228,6 +270,33 @@
     <ClInclude Include="ViewerVncAuthHandler.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="ConnectionOptionsForm.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="shell\SettingsForm.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="shell\SettingsNav.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="shell\SettingsPage.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="shell\SettingsSections.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="shell\SettingsSection.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="shell\SettingsActions.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="shell\SettingsTab.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="DefaultConnectionConfig.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="res\appicon.ico">
@@ -249,9 +318,6 @@
       <Filter>Resource Files</Filter>
     </None>
     <None Include="res\smalldot.cur">
-      <Filter>Resource Files</Filter>
-    </None>
-    <None Include="res\toolbar.bmp">
       <Filter>Resource Files</Filter>
     </None>
     <None Include="res\tightvnc.bmp">

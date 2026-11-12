@@ -493,6 +493,38 @@ bool UpdateController::interruptedUpdateFound()
   return m_impl->available && hasPendingJournal(m_impl->target.root);
 }
 
+UpdateController::Preferences UpdateController::preferences()
+{
+  Impl &d = *m_impl;
+  d.ensureInitialized();
+  d.settings = d.store.load();
+  Preferences result;
+  result.available = d.available;
+  result.disabledByPolicy = updatesDisabledByPolicy();
+  result.autoCheck = d.settings.autoCheck;
+  result.includePrereleases = d.available ? effectiveIncludePrereleases(d.settings, d.current)
+                                          : d.settings.includePrereleases.value_or(false);
+  result.lastCheckUnix = d.settings.lastCheckUnix;
+  result.currentVersion = d.available ? versionText(d.current) : std::wstring();
+  return result;
+}
+
+void UpdateController::setAutoCheck(bool enabled)
+{
+  Impl &d = *m_impl;
+  d.ensureInitialized();
+  d.settings = d.store.load();
+  d.onUpdateAutoCheckToggled(enabled);
+}
+
+void UpdateController::setIncludePrereleases(bool enabled)
+{
+  Impl &d = *m_impl;
+  d.ensureInitialized();
+  d.settings = d.store.load();
+  d.onUpdatePrereleaseToggled(enabled);
+}
+
 void UpdateController::onStartupTimer()
 {
   Impl &d = *m_impl;

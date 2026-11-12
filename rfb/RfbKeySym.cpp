@@ -25,6 +25,7 @@
 // Modified for FarSightVNC on 2026-11-03: one Shift_L for both Shift keys; keypad digits when Shift+digit is a dead key.
 // Modified for FarSightVNC on 2026-11-04: release a Shift whose key-up Windows did not send; fake (E0) Shifts.; keyboard trace in the debug log
 // Modified for FarSightVNC on 2026-11-07: Shift released around characters a TightVNC server types with AltGr (ABNT2 Shift+'/?').
+// Modified for FarSightVNC on 2026-11-11: Print Screen is never sent to the server.
 //
 
 #include "RfbKeySym.h"
@@ -70,6 +71,8 @@ void RfbKeySym::processKeyEvent(unsigned short virtKey,
                                 unsigned int addKeyData)
 {
   m_log->debug(_T("Keyboard VK=%04x data=%08x LShift=%d RShift=%d"), virtKey, addKeyData, (int)isKeyHeld(VK_LSHIFT), (int)isKeyHeld(VK_RSHIFT));
+  // Print Screen stays local (screenshots, Snipping Tool), also with Alt.
+  if (virtKey == VK_SNAPSHOT) return;
   bool down = (addKeyData & 0x80000000) == 0;
   unsigned int scanCode = (addKeyData >> 16) & 0xff;
   bool extended = (addKeyData & 0x1000000) != 0; // 24 bit
