@@ -53,7 +53,9 @@ public:
   ~ChromeRenderer();
 
   // Binds the renderer to a window. dpi is the DPI of the window
-  // (DpiUtils::getDpiForWindow); fontFamily comes from ThemeTokens.
+  // (DpiUtils::getDpiForWindow); fontFamily comes from ThemeTokens. The
+  // default is the light family on purpose: the typography is the same in
+  // both palettes, so the renderer never has to follow the theme.
   void attach(HWND hwnd, UINT dpi, const wchar_t *fontFamily = kLightTheme.fontFamily);
   // Same for a layered popup window; resize() gives the size of the window.
   void attachLayered(HWND hwnd, UINT dpi, const wchar_t *fontFamily = kLightTheme.fontFamily);

@@ -19,6 +19,8 @@
 
 #include "SessionToolbar.h"
 
+#include "gui/d2d/Theme.h"
+
 #include "gui/DpiUtils.h"
 
 namespace {
@@ -134,7 +136,7 @@ LRESULT SessionToolbar::onMessage(UINT message, WPARAM wParam, LPARAM lParam)
 
 int SessionToolbar::getHeight() const
 {
-  return m_chrome.dipsToPixels(kLightTheme.toolbarHeight);
+  return m_chrome.dipsToPixels(currentTheme().toolbarHeight);
 }
 
 void SessionToolbar::setDpi(UINT dpi)
@@ -175,7 +177,7 @@ void SessionToolbar::layout()
   if (m_hwnd == 0) {
     return;
   }
-  const ThemeTokens &theme = kLightTheme;
+  const ThemeTokens &theme = currentTheme();
   RECT client;
   GetClientRect(m_hwnd, &client);
   float width = m_chrome.pixelsToDips(client.right - client.left);
@@ -205,7 +207,7 @@ void SessionToolbar::paint()
   PAINTSTRUCT ps;
   HDC dc = BeginPaint(m_hwnd, &ps);
   if (dc != 0) {
-    const ThemeTokens &theme = kLightTheme;
+    const ThemeTokens &theme = currentTheme();
     if (m_chrome.beginDraw()) {
       RECT client;
       GetClientRect(m_hwnd, &client);

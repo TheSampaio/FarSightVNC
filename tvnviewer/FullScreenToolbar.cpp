@@ -25,6 +25,8 @@
 //
 
 #include "FullScreenToolbar.h"
+
+#include "gui/d2d/Theme.h"
 #include "gui/DpiUtils.h"
 
 namespace {
@@ -166,7 +168,7 @@ void FullScreenToolbar::layout(HMONITOR monitor)
     return;
   }
   m_inLayout = true;
-  const ThemeTokens &theme = kLightTheme;
+  const ThemeTokens &theme = currentTheme();
   const RECT &rcMon = mi.rcMonitor;
   int centerX = rcMon.left + (rcMon.right - rcMon.left) / 2;
   // Move onto the monitor first: the window takes the DPI of that monitor.
@@ -237,7 +239,7 @@ void FullScreenToolbar::render()
   if (m_hwnd == 0 || m_inLayout || m_monitor == 0 || !m_chrome.beginDraw()) {
     return;
   }
-  const ThemeTokens &theme = kLightTheme;
+  const ThemeTokens &theme = currentTheme();
   float line = m_chrome.pixelsToDips(1);
   m_chrome.clearTransparent();
   if (m_expanded) {
@@ -410,6 +412,13 @@ LRESULT CALLBACK FullScreenToolbar::windowProc(HWND hwnd, UINT message, WPARAM w
 LRESULT FullScreenToolbar::onMessage(UINT message, WPARAM wParam, LPARAM lParam)
 {
   HWND hwnd = m_hwnd;
+  // Not a constant (RegisterWindowMessage), so it cannot be a case label. The
+  // pill is a layered window: it never gets a WM_PAINT, so it is drawn again
+  // here instead of being invalidated.
+  if (message == Theme::changedMessage()) {
+    render();
+    return 0;
+  }
   switch (message) {
   case WM_MOUSEACTIVATE:
     // Clicks must leave the activation and the keyboard focus to the viewer.

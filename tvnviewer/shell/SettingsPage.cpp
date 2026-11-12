@@ -19,6 +19,8 @@
 
 #include "SettingsPage.h"
 
+#include "gui/d2d/Theme.h"
+
 #include "SettingsSections.h"
 #include "gui/DpiUtils.h"
 #include "../DefaultConnectionConfig.h"
@@ -336,7 +338,7 @@ void SettingsPage::paint()
   if (dc == 0) {
     return;
   }
-  const ThemeTokens &theme = kLightTheme;
+  const ThemeTokens &theme = currentTheme();
   if (!m_chrome.beginDraw()) {
     FillRect(dc, &ps.rcPaint, GetSysColorBrush(COLOR_BTNFACE));
     EndPaint(m_hwnd, &ps);

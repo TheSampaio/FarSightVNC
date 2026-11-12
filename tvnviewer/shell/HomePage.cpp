@@ -19,6 +19,8 @@
 
 #include "HomePage.h"
 
+#include "gui/d2d/Theme.h"
+
 #include "client-config-lib/ConnectionConfigSM.h"
 #include "client-config-lib/ViewerConfig.h"
 #include "gui/DpiUtils.h"
@@ -161,7 +163,7 @@ HomePage::HomePage(HWND shell, HomeActions *actions)
   m_edit(0),
   m_editBaseProc(0),
   m_editFont(0),
-  m_fieldBrush(CreateSolidBrush(toColorRef(kLightTheme.background))),
+  m_fieldBrush(CreateSolidBrush(toColorRef(currentTheme().field))),
   m_actions(actions),
   m_favoriteCount(0),
   m_optionsEdited(false),
@@ -237,6 +239,7 @@ void HomePage::createEdit()
     SetWindowLongPtr(m_edit, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(editProc)));
   // Shown while the field is empty, focused or not (Common Controls 6).
   SendMessage(m_edit, EM_SETCUEBANNER, TRUE, reinterpret_cast<LPARAM>(kPlaceholder));
+  Theme::applyControlTheme(m_edit);
   updateEditFont();
 }
 
@@ -248,7 +251,7 @@ void HomePage::updateEditFont()
   HFONT font = CreateFontW(-m_chrome.dipsToPixels(kFieldFontSize), 0, 0, 0, FW_NORMAL,
                            FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
                            CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
-                           kLightTheme.fontFamily);
+                           currentTheme().fontFamily);
   SendMessage(m_edit, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
   SendMessage(m_edit, EM_SETMARGINS, EC_LEFTMARGIN | EC_RIGHTMARGIN, 0);
   if (m_editFont != 0) {
@@ -301,6 +304,11 @@ LRESULT CALLBACK HomePage::editProc(HWND hwnd, UINT message, WPARAM wParam, LPAR
 
 LRESULT HomePage::onMessage(UINT message, WPARAM wParam, LPARAM lParam)
 {
+  // Not a constant (RegisterWindowMessage), so it cannot be a case label.
+  if (message == Theme::changedMessage()) {
+    onThemeChanged();
+    return 0;
+  }
   switch (message) {
   case WM_SIZE:
     m_chrome.resize(LOWORD(lParam), HIWORD(lParam));
@@ -314,8 +322,8 @@ LRESULT HomePage::onMessage(UINT message, WPARAM wParam, LPARAM lParam)
   case WM_CTLCOLOREDIT:
   {
     HDC dc = reinterpret_cast<HDC>(wParam);
-    SetTextColor(dc, toColorRef(kLightTheme.text));
-    SetBkColor(dc, toColorRef(kLightTheme.background));
+    SetTextColor(dc, toColorRef(currentTheme().text));
+    SetBkColor(dc, toColorRef(currentTheme().field));
     return reinterpret_cast<LRESULT>(m_fieldBrush);
   }
   case WM_COMMAND:
@@ -598,7 +606,7 @@ void HomePage::layout()
   if (m_hwnd == 0) {
     return;
   }
-  const ThemeTokens &theme = kLightTheme;
+  const ThemeTokens &theme = currentTheme();
   RECT client;
   GetClientRect(m_hwnd, &client);
   float width = m_chrome.pixelsToDips(client.right - client.left);
@@ -828,7 +836,7 @@ void HomePage::ensureVisible(int item)
   RECT client;
   GetClientRect(m_hwnd, &client);
   float view = m_chrome.pixelsToDips(client.bottom - client.top);
-  float margin = kLightTheme.spacingLarge;
+  float margin = currentTheme().spacingLarge;
   if (rect.top - margin < m_scroll) {
     scrollTo(rect.top - margin);
   } else if (rect.bottom + margin > m_scroll + view) {
@@ -984,6 +992,17 @@ void HomePage::showHostMenu(size_t index, const POINT *screenPoint)
   }
 }
 
+void HomePage::onThemeChanged()
+{
+  // The brush of the field is a GDI object of the old palette.
+  if (m_fieldBrush != 0) {
+    DeleteObject(m_fieldBrush);
+  }
+  m_fieldBrush = CreateSolidBrush(toColorRef(currentTheme().field));
+  Theme::applyControlTheme(m_edit);
+  invalidate();
+}
+
 void HomePage::invalidate()
 {
   if (m_hwnd != 0) {
@@ -998,7 +1017,7 @@ void HomePage::paint()
   if (dc == 0) {
     return;
   }
-  const ThemeTokens &theme = kLightTheme;
+  const ThemeTokens &theme = currentTheme();
   if (!m_chrome.beginDraw()) {
     // No Direct2D: the background only; the field still works.
     HBRUSH brush = CreateSolidBrush(toColorRef(theme.background));
@@ -1020,7 +1039,7 @@ void HomePage::paint()
   // Address field: a rounded box around the borderless EDIT.
   bool fieldFocused = m_edit != 0 && GetFocus() == m_edit;
   D2D1_RECT_F field = shifted(m_field);
-  m_chrome.fillRoundRect(field, kFieldRadius, theme.background);
+  m_chrome.fillRoundRect(field, kFieldRadius, theme.field);
   if (fieldFocused) {
     m_chrome.drawRoundRect(inflate(field, -1.0f), kFieldRadius - 1.0f, theme.accent, 2.0f);
   } else {
@@ -1085,7 +1104,7 @@ void HomePage::paint()
 void HomePage::paintButton(int item, const wchar_t *label, wchar_t glyph)
 {
   // Secondary action: glyph and label, a background only on hover/press.
-  const ThemeTokens &theme = kLightTheme;
+  const ThemeTokens &theme = currentTheme();
   D2D1_RECT_F rect = itemRect(item);
   rect.top -= m_scroll;
   rect.bottom -= m_scroll;
@@ -1107,7 +1126,7 @@ void HomePage::paintButton(int item, const wchar_t *label, wchar_t glyph)
 
 void HomePage::paintHost(size_t index)
 {
-  const ThemeTokens &theme = kLightTheme;
+  const ThemeTokens &theme = currentTheme();
   const HostRow &row = m_hosts[index];
   int item = ITEM_FIRST_HOST + static_cast<int>(index);
   D2D1_RECT_F rect = D2D1::RectF(row.rect.left, row.rect.top - m_scroll,
@@ -1143,7 +1162,7 @@ void HomePage::paintHost(size_t index)
 
 void HomePage::paintEmptyState()
 {
-  const ThemeTokens &theme = kLightTheme;
+  const ThemeTokens &theme = currentTheme();
   D2D1_RECT_F area = D2D1::RectF(m_empty.left, m_empty.top - m_scroll,
                                  m_empty.right, m_empty.bottom - m_scroll);
   float centerX = (area.left + area.right) / 2.0f;

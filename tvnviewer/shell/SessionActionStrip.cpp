@@ -19,6 +19,8 @@
 
 #include "SessionActionStrip.h"
 
+#include "gui/d2d/Theme.h"
+
 #include "../resource.h"
 
 #include <CommCtrl.h>
@@ -127,7 +129,7 @@ bool isEmpty(const D2D1_RECT_F &rect)
 float placeButtons(int placement, float left, float right, float top, float bottom,
                    D2D1_RECT_F *buttons, std::vector<D2D1_RECT_F> *dividers)
 {
-  const ThemeTokens &theme = kLightTheme;
+  const ThemeTokens &theme = currentTheme();
   float buttonTop = top + (bottom - top - theme.buttonSize) / 2.0f;
   float buttonBottom = buttonTop + theme.buttonSize;
   float dividerTop = top + (bottom - top - kDividerHeight) / 2.0f;
@@ -245,7 +247,7 @@ float SessionActionStrip::layout(float left, float right, float top, float botto
 
 float SessionActionStrip::fullWidth(SessionActionPlacement placement)
 {
-  return placeButtons(placement, 0.0f, 1.0e6f, 0.0f, kLightTheme.toolbarHeight, 0, 0);
+  return placeButtons(placement, 0.0f, 1.0e6f, 0.0f, currentTheme().toolbarHeight, 0, 0);
 }
 
 void SessionActionStrip::invalidate()
@@ -257,7 +259,7 @@ void SessionActionStrip::invalidate()
 
 void SessionActionStrip::paint()
 {
-  const ThemeTokens &theme = kLightTheme;
+  const ThemeTokens &theme = currentTheme();
   float line = m_chrome->pixelsToDips(1);
   for (size_t i = 0; i < m_dividers.size(); i++) {
     D2D1_RECT_F divider = m_dividers[i];
@@ -271,7 +273,7 @@ void SessionActionStrip::paint()
 
 void SessionActionStrip::paintButton(int index)
 {
-  const ThemeTokens &theme = kLightTheme;
+  const ThemeTokens &theme = currentTheme();
   const ActionInfo &info = kActions[index];
   const D2D1_RECT_F &rect = m_buttons[index];
   if (!isPlaced(index) || isEmpty(rect)) {

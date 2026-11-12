@@ -19,6 +19,8 @@
 
 #include "SettingsNav.h"
 
+#include "gui/d2d/Theme.h"
+
 #include "gui/DpiUtils.h"
 
 namespace {
@@ -314,7 +316,7 @@ void SettingsNav::paint()
   if (dc == 0) {
     return;
   }
-  const ThemeTokens &theme = kLightTheme;
+  const ThemeTokens &theme = currentTheme();
   if (!m_chrome.beginDraw()) {
     HBRUSH brush = CreateSolidBrush(RGB((theme.surface >> 16) & 0xFF,
                                         (theme.surface >> 8) & 0xFF, theme.surface & 0xFF));

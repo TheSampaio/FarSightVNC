@@ -135,6 +135,9 @@ private:
   void scrollTo(float offset);
   void ensureVisible(HWND control);
   void paint();
+  // Theme::changedMessage(): the GDI brushes and the native controls follow
+  // the new palette, the drawn part is painted again.
+  void onThemeChanged();
   void invalidate();
 
   HWND m_hwnd;
@@ -142,6 +145,8 @@ private:
   ChromeRenderer m_chrome;
   HFONT m_font;
   HBRUSH m_background;
+  // Background of the fields and of the drop-down list of a combo box.
+  HBRUSH m_fieldBrush;
   std::wstring m_title;
   std::wstring m_subtitle;
   float m_subtitleHeight;

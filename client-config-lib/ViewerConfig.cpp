@@ -206,6 +206,7 @@ bool ViewerConfig::isPromptOnFullscreenEnabled() const
   return m_promptOnFullscreen;
 }
 
+// Only stores the choice: Theme::setMode() applies it to the windows.
 void ViewerConfig::setTheme(int theme)
 {
   AutoLock l(&m_cs);

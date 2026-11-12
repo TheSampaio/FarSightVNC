@@ -293,6 +293,7 @@
     <ClCompile Include="WindowProcHolder.cpp" />
     <ClCompile Include="d2d\ChromeRenderer.cpp" />
     <ClCompile Include="d2d\SvgIcons.cpp" />
+    <ClCompile Include="d2d\Theme.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="BalloonTip.h" />
@@ -336,6 +337,7 @@
     <ClInclude Include="WindowProcHolder.h" />
     <ClInclude Include="d2d\ChromeRenderer.h" />
     <ClInclude Include="d2d\SvgIcons.h" />
+    <ClInclude Include="d2d\Theme.h" />
     <ClInclude Include="d2d\ThemeTokens.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

@@ -155,6 +155,7 @@ ChromeRenderer::ChromeRenderer()
 : m_ellipsis(0),
   m_hwnd(0),
   m_dpi(96),
+  // Same family in the light and the dark palette: no theme to follow.
   m_fontFamily(kLightTheme.fontFamily),
   m_target(0),
   m_hwndTarget(0),

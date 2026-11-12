@@ -19,6 +19,8 @@
 
 #include "SettingsForm.h"
 
+#include "gui/d2d/Theme.h"
+
 #include "gui/DpiUtils.h"
 
 #include <commctrl.h>
@@ -74,7 +76,8 @@ SettingsForm::SettingsForm(HWND parent, SettingsFormListener *listener)
 : m_hwnd(0),
   m_listener(listener),
   m_font(0),
-  m_background(CreateSolidBrush(toColorRef(kLightTheme.background))),
+  m_background(CreateSolidBrush(toColorRef(currentTheme().background))),
+  m_fieldBrush(CreateSolidBrush(toColorRef(currentTheme().field))),
   m_subtitleHeight(0.0f),
   m_contentHeight(0.0f),
   m_scroll(0.0f)
@@ -104,6 +107,9 @@ SettingsForm::~SettingsForm()
   if (m_background != 0) {
     DeleteObject(m_background);
   }
+  if (m_fieldBrush != 0) {
+    DeleteObject(m_fieldBrush);
+  }
 }
 
 bool SettingsForm::registerClass()
@@ -126,7 +132,7 @@ void SettingsForm::updateFont()
   HFONT font = CreateFontW(-m_chrome.dipsToPixels(kControlFontSize), 0, 0, 0, FW_NORMAL,
                            FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
                            CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
-                           kLightTheme.fontFamily);
+                           currentTheme().fontFamily);
   for (HWND child = GetWindow(m_hwnd, GW_CHILD); child != 0; child = GetWindow(child, GW_HWNDNEXT)) {
     SendMessage(child, WM_SETFONT, reinterpret_cast<WPARAM>(font), FALSE);
   }
@@ -214,6 +220,11 @@ LRESULT CALLBACK SettingsForm::controlProc(HWND hwnd, UINT message, WPARAM wPara
 
 LRESULT SettingsForm::onMessage(UINT message, WPARAM wParam, LPARAM lParam)
 {
+  // Not a constant (RegisterWindowMessage), so it cannot be a case label.
+  if (message == Theme::changedMessage()) {
+    onThemeChanged();
+    return 0;
+  }
   switch (message) {
   case WM_SIZE:
     m_chrome.resize(LOWORD(lParam), HIWORD(lParam));
@@ -245,9 +256,30 @@ LRESULT SettingsForm::onMessage(UINT message, WPARAM wParam, LPARAM lParam)
   case WM_CTLCOLORBTN:
   {
     HDC dc = reinterpret_cast<HDC>(wParam);
-    SetTextColor(dc, toColorRef(kLightTheme.text));
-    SetBkColor(dc, toColorRef(kLightTheme.background));
+    SetTextColor(dc, toColorRef(currentTheme().text));
+    SetBkColor(dc, toColorRef(currentTheme().background));
     return reinterpret_cast<LRESULT>(m_background);
+  }
+  // The fields and the drop-down list of a combo box draw themselves: without
+  // these the dark theme would show black text on a white box.
+  case WM_CTLCOLOREDIT:
+  case WM_CTLCOLORLISTBOX:
+  {
+    HDC dc = reinterpret_cast<HDC>(wParam);
+    SetTextColor(dc, toColorRef(currentTheme().text));
+    SetBkColor(dc, toColorRef(currentTheme().field));
+    return reinterpret_cast<LRESULT>(m_fieldBrush);
+  }
+  case WM_NOTIFY:
+  {
+    // The check boxes and the radio buttons are drawn by Theme in the dark
+    // theme, which is the only way to give their label a readable color.
+    NMHDR *header = reinterpret_cast<NMHDR *>(lParam);
+    if (header != 0 && header->code == NM_CUSTOMDRAW &&
+        Theme::customDrawButton(header->hwndFrom, reinterpret_cast<void *>(lParam))) {
+      return CDRF_SKIPDEFAULT;
+    }
+    break;
   }
   case WM_COMMAND:
     if (lParam != 0 && m_listener != 0) {
@@ -282,6 +314,7 @@ HWND SettingsForm::createControl(const wchar_t *className, const wchar_t *text, 
     return 0;
   }
   SendMessage(hwnd, WM_SETFONT, reinterpret_cast<WPARAM>(m_font), FALSE);
+  Theme::applyControlTheme(hwnd);
   SetWindowSubclass(hwnd, controlProc, 1, reinterpret_cast<DWORD_PTR>(this));
   return hwnd;
 }
@@ -610,7 +643,7 @@ void SettingsForm::ensureVisible(HWND control)
     RECT client;
     GetClientRect(m_hwnd, &client);
     float view = m_chrome.pixelsToDips(client.bottom - client.top);
-    float margin = kLightTheme.spacingLarge;
+    float margin = currentTheme().spacingLarge;
     if (row.top - margin < m_scroll) {
       scrollTo(row.top - margin);
     } else if (row.top + row.height + margin > m_scroll + view) {
@@ -618,6 +651,21 @@ void SettingsForm::ensureVisible(HWND control)
     }
     return;
   }
+}
+
+void SettingsForm::onThemeChanged()
+{
+  // The brushes are GDI objects of the old palette.
+  if (m_background != 0) {
+    DeleteObject(m_background);
+  }
+  m_background = CreateSolidBrush(toColorRef(currentTheme().background));
+  if (m_fieldBrush != 0) {
+    DeleteObject(m_fieldBrush);
+  }
+  m_fieldBrush = CreateSolidBrush(toColorRef(currentTheme().field));
+  Theme::applyControlThemeTree(m_hwnd);
+  invalidate();
 }
 
 void SettingsForm::invalidate()
@@ -634,7 +682,7 @@ void SettingsForm::paint()
   if (dc == 0) {
     return;
   }
-  const ThemeTokens &theme = kLightTheme;
+  const ThemeTokens &theme = currentTheme();
   if (!m_chrome.beginDraw()) {
     FillRect(dc, &ps.rcPaint, m_background);
     EndPaint(m_hwnd, &ps);

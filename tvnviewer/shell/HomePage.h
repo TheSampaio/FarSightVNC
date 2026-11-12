@@ -114,6 +114,9 @@ private:
   void showOptions();
   void showHostMenu(size_t index, const POINT *screenPoint);
   std::wstring fieldText() const;
+  // Theme::changedMessage(): the GDI brush and the native field follow the
+  // new palette, the drawn part is painted again.
+  void onThemeChanged();
   void invalidate();
 
   HWND m_hwnd;

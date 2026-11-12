@@ -17,11 +17,13 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //
 // Modified for FarSightVNC on 2026-11-12: Third-party notices (Lucide) in About.
+// Modified for FarSightVNC on 2026-11-12: the Appearance theme is applied, not only stored.
 //
 
 #include "SettingsSections.h"
 
 #include "SettingsForm.h"
+#include "gui/d2d/Theme.h"
 #include "client-config-lib/ViewerConfig.h"
 #include "client-config-lib/ViewerSettingsManager.h"
 #include "file-lib/File.h"
@@ -42,7 +44,8 @@
 namespace {
 
 // Texts of the sections (the viewer UI is in English).
-const wchar_t kAppearanceSubtitle[] = L"Theme support arrives in a later build.";
+const wchar_t kAppearanceSubtitle[] =
+  L"Choose how FarSightVNC looks. Auto follows the Windows app theme.";
 const wchar_t kConnectionSubtitle[] =
   L"Options of new connections. A computer you connected to before keeps the "
   L"options it was last used with.";
@@ -229,8 +232,11 @@ public:
         !isChecked(m_form->control(controlId))) {
       return;
     }
-    ViewerConfig::getInstance()->setTheme(controlId - CTL_THEME_AUTO);
+    int theme = controlId - CTL_THEME_AUTO;
+    ViewerConfig::getInstance()->setTheme(theme);
     saveViewerConfig();
+    // Repaints every window of the viewer with the new palette.
+    Theme::setMode(theme);
   }
 
 private:

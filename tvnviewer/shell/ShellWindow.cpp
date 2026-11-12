@@ -20,6 +20,8 @@
 //
 
 #include "ShellWindow.h"
+
+#include "gui/d2d/Theme.h"
 #include "HomeTab.h"
 
 #include "gui/DpiUtils.h"
@@ -162,6 +164,8 @@ ShellWindow::ShellWindow(const TCHAR *windowClassName, Logger *logger, HomeActio
   m_baseProc = reinterpret_cast<WNDPROC>(
     SetWindowLongPtr(m_hWnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(frameProc)));
   m_chrome.attach(m_hWnd, DpiUtils::getDpiForWindow(m_hWnd));
+  // The border of the frame follows the theme (the caption is ours).
+  Theme::applyWindowDarkMode(m_hWnd);
   createTooltip();
   updateDwmFrame();
   // Recalculates the frame without the caption (WM_NCCALCSIZE).
@@ -217,6 +221,13 @@ bool ShellWindow::onFrameMessage(UINT message, WPARAM wParam, LPARAM lParam, LRE
   if (message == SettingsPage::closeMessage()) {
     // Back or Esc on the Settings page (posted by the page).
     closeSettings();
+    *result = 0;
+    return true;
+  }
+  // Not a constant (RegisterWindowMessage), so it cannot be a case label.
+  if (message == Theme::changedMessage()) {
+    Theme::applyWindowDarkMode(m_hWnd);
+    InvalidateRect(m_hWnd, 0, TRUE);
     *result = 0;
     return true;
   }
@@ -583,7 +594,7 @@ void ShellWindow::paint()
       // The session view (WS_CLIPCHILDREN) covers the rest of the client
       // area; between two sessions of a reconnection it is empty.
       if (!hasView) {
-        m_chrome.clear(kLightTheme.background);
+        m_chrome.clear(currentTheme().background);
       }
       m_titleBar.paint(&m_chrome, m_frameActive, !!IsZoomed(m_hWnd));
       m_chrome.endDraw();
@@ -1011,6 +1022,15 @@ bool ShellWindow::onMessage(UINT message, WPARAM wParam, LPARAM lParam)
   case WM_DISPLAYCHANGE:
     if (tab != 0) {
       tab->onDisplayChange();
+    }
+    return false;
+  case WM_SETTINGCHANGE:
+    // The user switched the Windows app theme: it only matters in Auto, and
+    // refreshSystem() says whether the effective theme really changed.
+    if (lParam != 0 &&
+        wcscmp(reinterpret_cast<const wchar_t *>(lParam), L"ImmersiveColorSet") == 0 &&
+        Theme::refreshSystem()) {
+      Theme::broadcast();
     }
     return false;
   case WM_NCDESTROY:

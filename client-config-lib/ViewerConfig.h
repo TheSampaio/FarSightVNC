@@ -88,8 +88,9 @@ public:
   // Returns "show toolbar" flag
   bool isToolbarShown() const;
 
-  // Theme of the window chrome (Settings, Appearance). Stored now; the
-  // light theme is the only one drawn until the theme phase.
+  // Theme of the window chrome (Settings, Appearance). The value is only
+  // stored here: Theme::setMode() (gui/d2d/Theme.h) applies it, with the same
+  // values.
   enum Theme { THEME_AUTO = 0, THEME_LIGHT = 1, THEME_DARK = 2 };
   void setTheme(int theme);
   int getTheme() const;

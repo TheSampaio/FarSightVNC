@@ -22,6 +22,8 @@
 
 #include "TitleBar.h"
 
+#include "gui/d2d/Theme.h"
+
 #include "../resource.h"
 
 namespace {
@@ -107,12 +109,12 @@ TitleBar::TitleBar()
 
 float TitleBar::height() const
 {
-  return kLightTheme.titleBarHeight;
+  return currentTheme().titleBarHeight;
 }
 
 void TitleBar::layout(float width)
 {
-  const ThemeTokens &theme = kLightTheme;
+  const ThemeTokens &theme = currentTheme();
   float h = height();
   m_width = width;
 
@@ -206,7 +208,7 @@ const D2D1_RECT_F &TitleBar::partRect(TitleBarPart part) const
 
 bool TitleBar::buttonBackground(TitleBarPart part, ThemeColor *color) const
 {
-  const ThemeTokens &theme = kLightTheme;
+  const ThemeTokens &theme = currentTheme();
   // A pressed button shows its pressed color only while the pointer is
   // still over it, like the native buttons.
   bool pressed = m_pressed == part && m_hover == part;
@@ -240,7 +242,7 @@ bool TitleBar::buttonBackground(TitleBarPart part, ThemeColor *color) const
 void TitleBar::paintCaptionButton(ChromeRenderer *renderer, TitleBarPart part, wchar_t icon,
                                   const wchar_t *placeholder, bool active) const
 {
-  const ThemeTokens &theme = kLightTheme;
+  const ThemeTokens &theme = currentTheme();
   const D2D1_RECT_F &rect = partRect(part);
   ThemeColor background;
   ThemeColor glyph = active ? theme.text : theme.mutedText;
@@ -267,7 +269,7 @@ void TitleBar::paintCaptionButton(ChromeRenderer *renderer, TitleBarPart part, w
 
 void TitleBar::paintNewTabButton(ChromeRenderer *renderer, bool active) const
 {
-  const ThemeTokens &theme = kLightTheme;
+  const ThemeTokens &theme = currentTheme();
   const D2D1_RECT_F &rect = m_tabs.newTabSlot();
   if (rect.right - rect.left <= 0.0f) {
     return;
@@ -290,7 +292,7 @@ void TitleBar::paintNewTabButton(ChromeRenderer *renderer, bool active) const
 
 void TitleBar::paint(ChromeRenderer *renderer, bool active, bool maximized) const
 {
-  const ThemeTokens &theme = kLightTheme;
+  const ThemeTokens &theme = currentTheme();
   float h = height();
   ThemeColor text = active ? theme.text : theme.mutedText;
 
