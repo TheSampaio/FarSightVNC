@@ -1,15 +1,15 @@
-FarSightVNC Viewer v1.1.0a (alpha)
+FarSightVNC Viewer v1.2.0a (alpha)
 ==================================
 
 Cliente VNC para Windows baseado no TightVNC Viewer 2.8.90.
 Licença: GNU GPL versão 2 ou posterior (ver LICENSE.txt).
-Data: 2026-11-12 - branch feature/ui-layout.
+Data: 2026-11-13 - branch develop.
 
 
-Versão com a nova interface (v1.1.0a): janela redesenhada com barra de título
-própria, tela inicial (Home), página de Configurações e botão "+" para novas
-conexões. Inclui também as correções de teclado da v1.0.1a. Ver O QUE MUDOU
-NA v1.1.0a abaixo.
+Segunda parte da nova interface (v1.2.0a): os temas Auto, Claro e Escuro
+funcionam, e o ícone do aplicativo aparece na barra de título. A janela
+redesenhada, a tela inicial (Home) e a página de Configurações vieram na
+v1.1.0a e continuam aqui. Ver O QUE MUDOU NA v1.2.0a abaixo.
 
 
 *** MUDANÇA INCOMPATÍVEL na v1.0.0a (continua valendo) ***
@@ -85,6 +85,21 @@ pode ignorá-lo e manter os arquivos onde estão.
   fsvncviewer.exe e o fsvncupdater.exe são trocados ou adicionados; nenhum
   documento (README.txt, ...) é gravado ali, então um README.txt seu continua
   como está.
+
+
+O QUE MUDOU NA v1.2.0a (nova interface, fase 2: temas e ícones)
+--------------------------------------------------------------
+- Os temas Auto, Claro e Escuro de Configurações > Aparência agora funcionam
+  de verdade. Auto segue o tema do Windows e muda junto com ele, na hora.
+- O tema escuro vale para a janela inteira: barra de título, tela inicial,
+  Configurações, barra da sessão, barra da tela cheia, campos, listas e a
+  borda da janela.
+- Trocar de tema repinta todas as janelas abertas do viewer na hora, sem
+  precisar fechar e abrir o programa.
+- O ícone no canto superior esquerdo da janela agora é o ícone do aplicativo,
+  no lugar do quadrado provisório.
+- Nada mais mudou: protocolo, servidor, atualizador, arquivos .vnc, opções de
+  linha de comando e configurações salvas continuam iguais aos da v1.1.0a.
 
 
 O QUE MUDOU NA v1.1.0a (nova interface, fase 1: layout)

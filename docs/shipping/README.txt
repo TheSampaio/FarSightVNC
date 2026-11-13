@@ -1,14 +1,15 @@
-FarSightVNC Viewer v1.1.0a (alpha)
+FarSightVNC Viewer v1.2.0a (alpha)
 ==================================
 
 VNC client for Windows based on TightVNC Viewer 2.8.90.
 License: GNU GPL version 2 or later (see LICENSE.txt).
-Date: 2026-11-12 - branch feature/ui-layout.
+Date: 2026-11-13 - branch develop.
 
 
-New interface release (v1.1.0a): a redesigned window with its own title bar,
-a Home screen, a Settings page and a "+" button for new connections. It also
-includes the keyboard fixes of v1.0.1a. See CHANGES IN v1.1.0a below.
+Second part of the new interface (v1.2.0a): the Auto, Light and Dark themes
+work, and the application icon is in the title bar. The redesigned window, the
+Home screen and the Settings page arrived in v1.1.0a and are still here. See
+CHANGES IN v1.2.0a below.
 
 
 *** BREAKING CHANGE in v1.0.0a (still applies) ***
@@ -79,6 +80,20 @@ can ignore it and keep the files where they are.
   fsvncviewer.exe and fsvncupdater.exe are replaced or added; no document
   (README.txt, ...) is ever written there, so a README.txt of your own stays
   as it is.
+
+
+CHANGES IN v1.2.0a (new interface, phase 2: themes and icons)
+------------------------------------------------------------
+- The Auto, Light and Dark themes of Settings > Appearance really work now.
+  Auto follows the Windows app theme and changes with it, right away.
+- The dark theme covers the whole window: title bar, Home screen, Settings,
+  session toolbar, full screen bar, fields, lists and the window border.
+- Switching the theme repaints every open viewer window at once, with no need
+  to close and reopen the program.
+- The icon in the top left corner of the window is now the application icon,
+  in place of the placeholder square.
+- Nothing else changed: protocol, server side, updater, .vnc files, command
+  line options and saved settings are the same as in v1.1.0a.
 
 
 CHANGES IN v1.1.0a (new interface, phase 1: layout)
