@@ -38,6 +38,7 @@
 // Modified for FarSightVNC on 2026-11-11: the Settings page of the shell covers the running session (no full screen, no keyboard hook).
 // Modified for FarSightVNC on 2026-11-11: About opens the About section of the Settings page.
 // Modified for FarSightVNC on 2026-11-11: the keyboard hook releases a key on the same path it pressed it (no Ctrl/Alt stuck locally or on the server).
+// Modified for FarSightVNC on 2026-11-14: a key Windows already has down when the hook sees it first stays with Windows until its key-up.
 //
 
 #include "config-lib/IniFileSettingsManager.h"
@@ -1457,7 +1458,11 @@ LRESULT ViewerWindow::onHookProc(int code, WPARAM wParam, LPARAM lParam)
   // The key-up of a key follows its key-down: a Ctrl pressed in another
   // window and released in the viewer reaches Windows, a Ctrl pressed in the
   // viewer and released elsewhere does not.
-  if (WinHooks::routeKey(str->vkCode, str->flags, ownsKeyboard) == WinHooks::HOOK_KEY_PASS) {
+  // Inside the hook GetAsyncKeyState reports the state before this event:
+  // a key Windows already has down stays with Windows until its key-up.
+  bool systemHasKeyDown = (GetAsyncKeyState(str->vkCode & 0xff) & 0x8000) != 0;
+  if (WinHooks::routeKey(str->vkCode, str->flags, ownsKeyboard, systemHasKeyDown) ==
+      WinHooks::HOOK_KEY_PASS) {
     return false;
   }
   // Without the keyboard only the release is delivered: the focus loss already
@@ -1467,7 +1472,7 @@ LRESULT ViewerWindow::onHookProc(int code, WPARAM wParam, LPARAM lParam)
   if ((ownsKeyboard || isUp) &&
       (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN ||
        wParam == WM_KEYUP || wParam == WM_SYSKEYUP)) {
-    PostMessage(m_dsktWnd.getHWnd(), wParam, str->vkCode, newLParam);
+    PostMessage(m_dsktWnd.getHWnd(), static_cast<UINT>(wParam), str->vkCode, newLParam);
   }
   return true;
 }

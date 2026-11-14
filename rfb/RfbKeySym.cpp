@@ -26,6 +26,7 @@
 // Modified for FarSightVNC on 2026-11-04: release a Shift whose key-up Windows did not send; fake (E0) Shifts.; keyboard trace in the debug log
 // Modified for FarSightVNC on 2026-11-07: Shift released around characters a TightVNC server types with AltGr (ABNT2 Shift+'/?').
 // Modified for FarSightVNC on 2026-11-11: Print Screen is never sent to the server.
+// Modified for FarSightVNC on 2026-11-14: focus restoration only releases modifiers that are no longer held (it never presses them).
 //
 
 #include "RfbKeySym.h"
@@ -48,6 +49,7 @@ RfbKeySym::RfbKeySym(RfbKeySymListener *extKeySymListener, LogWriter *log)
   m_capsLockOverride(false),
   m_scrollLockOverride(false),
   m_keyStateOverride(0),
+  m_asyncKeyStateOverride(0),
   m_shiftKeysDown(0)
 {
   clearKeyState();
@@ -220,6 +222,12 @@ bool RfbKeySym::isKeyHeld(unsigned char virtKey)
   return (GetKeyState(virtKey) & 0x8000) != 0;
 }
 
+bool RfbKeySym::isKeyPhysicallyHeld(unsigned char virtKey)
+{
+  if (m_asyncKeyStateOverride != 0) return (m_asyncKeyStateOverride[virtKey] & 0x80) != 0;
+  return (GetAsyncKeyState(virtKey) & 0x8000) != 0;
+}
+
 bool RfbKeySym::shiftVariantIsDeadKey(unsigned short virtKey, unsigned int scanCode)
 {
   unsigned char shiftState[256] = {0};
@@ -349,15 +357,36 @@ void RfbKeySym::processFocusRestoration()
 {
   m_log->info(_T("Process focus restoration in the RfbKeySym class"));
 
-  // Send a modifier key state based on physical keyboard state, not thread key message queue.
-  unsigned char keys[] = {VK_LCONTROL, VK_RCONTROL, VK_LMENU, VK_RMENU,
-                          VK_LSHIFT, VK_RSHIFT};
-  for (int i = 0; i < sizeof(keys); i++) {
-    unsigned char key = keys[i];
-    if ((GetAsyncKeyState(key) & 0x8000) && !isPressed(key)) {
-      sendModifier(key, true);
+  // TightVNC pressed here every modifier that GetAsyncKeyState reported down.
+  // That state can be stale: the keyboard hook may own (and swallow) the
+  // key-up of such a key, so the server kept Ctrl/Alt/Shift pressed until the
+  // reconnection. A modifier still held now is sent with its next key event;
+  // a modifier pressed on the server but released meanwhile is released.
+  std::map<unsigned int, std::vector<UINT32> >::iterator it = m_pressedKeys.begin();
+  while (it != m_pressedKeys.end()) {
+    unsigned char vk = 0;
+    if (it->second.size() == 1) {
+      switch (it->second[0]) {
+      case XK_Control_L: vk = VK_LCONTROL; break;
+      case XK_Control_R: vk = VK_RCONTROL; break;
+      case XK_Alt_L: vk = VK_LMENU; break;
+      case XK_Alt_R: vk = VK_RMENU; break;
+      case XK_Shift_L: vk = VK_LSHIFT; break;
+      case XK_Shift_R: vk = VK_RSHIFT; break;
+      }
     }
+    if (vk == 0 || isKeyPhysicallyHeld(vk)) {
+      ++it;
+      continue;
+    }
+    sendKeySymEvent(it->second[0], false);
+    m_viewerKeyState[vk] = 0;
+    m_serverKeyState[vk] = 0;
+    m_pressedKeys.erase(it++);
   }
+  m_viewerKeyState[VK_SHIFT] = m_viewerKeyState[VK_LSHIFT] | m_viewerKeyState[VK_RSHIFT];
+  m_viewerKeyState[VK_CONTROL] = m_viewerKeyState[VK_LCONTROL] | m_viewerKeyState[VK_RCONTROL];
+  m_viewerKeyState[VK_MENU] = m_viewerKeyState[VK_LMENU] | m_viewerKeyState[VK_RMENU];
 }
 
 void RfbKeySym::processFocusLoss()
@@ -552,6 +581,11 @@ void RfbKeySym::setKeyboardLayout(HKL layout)
 void RfbKeySym::setKeyStateOverride(const unsigned char *keys)
 {
   m_keyStateOverride = keys;
+}
+
+void RfbKeySym::setAsyncKeyStateOverride(const unsigned char *keys)
+{
+  m_asyncKeyStateOverride = keys;
 }
 
 void RfbKeySym::setToggleKeysOverride(bool capsLockOn, bool scrollLockOn)

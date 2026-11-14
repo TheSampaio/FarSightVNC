@@ -22,6 +22,7 @@
 //-------------------------------------------------------------------------
 //
 // Modified for FarSightVNC on 2026-10-29, 2026-11-01, 2026-11-03, 2026-11-04 and 2026-11-07: added <string>; keyboard test seams and physical key tracking; Shift and dead-key workarounds for TightVNC servers; lost Shift key-up; Shift released around AltGr characters.
+// Modified for FarSightVNC on 2026-11-14: focus restoration only releases modifiers that are no longer held (it never presses them).
 //
 
 #ifndef __RFBKEYSYM_H__
@@ -49,7 +50,10 @@ public:
   void processKeyEvent(unsigned short virtKey, unsigned int addKeyData);
   bool vkCodeToString(unsigned short virtKey, unsigned int scanCode, std::wstring *res);
   void processCharEvent(WCHAR charCode, unsigned int addKeyData);
-  // Checks a new modifiers state after focus restoration and sends difference
+  // After focus restoration: releases the Ctrl/Alt/Shift keys that are
+  // pressed on the server but no longer physically held. It never presses a
+  // modifier: a key down in GetAsyncKeyState may have no key-up to come
+  // (swallowed by a hook), and pressing it left it stuck on the server.
   void processFocusRestoration();
   // This function release all modifiers unconditionally.
   void processFocusLoss();
@@ -62,6 +66,9 @@ public:
   void setToggleKeysOverride(bool capsLockOn, bool scrollLockOn);
   // Key state table (GetKeyboardState() format) used instead of GetKeyState().
   void setKeyStateOverride(const unsigned char *keys);
+  // Physical key state table used instead of GetAsyncKeyState() (focus
+  // restoration).
+  void setAsyncKeyStateOverride(const unsigned char *keys);
 
   // Set function for m_winKeyIgnore.
   void setWinKeyIgnore(bool winIgnore);
@@ -114,6 +121,7 @@ private:
   // Releases the Shift keys that are pressed for the server but not held.
   void releaseShiftsNotHeld();
   bool isKeyHeld(unsigned char virtKey);
+  bool isKeyPhysicallyHeld(unsigned char virtKey);
 
   RfbKeySymListener *m_extKeySymListener;
 
@@ -144,6 +152,7 @@ private:
   bool m_capsLockOverride;
   bool m_scrollLockOverride;
   const unsigned char *m_keyStateOverride;
+  const unsigned char *m_asyncKeyStateOverride;
   std::map<unsigned int, std::vector<UINT32> > m_pressedKeys;
   // Bit 0: Left Shift, bit 1: Right Shift, as sent to sendKeySymEvent().
   unsigned char m_shiftKeysDown;

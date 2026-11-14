@@ -23,6 +23,7 @@
 //
 // Modified for FarSightVNC on 2026-11-01: pure helpers for the low level keyboard hook.
 // Modified for FarSightVNC on 2026-11-11: a key-up takes the same path (posted or passed to Windows) as its key-down; Print Screen stays local.
+// Modified for FarSightVNC on 2026-11-14: a key already held by Windows when the hook sees it first stays with Windows (no remote Ctrl stuck).
 //
 
 #include "util/CommonHeader.h"
@@ -64,7 +65,17 @@ public:
     void reset();
     // viewerOwnsKeyboard: the viewer is the foreground window, has the focus
     // and sends keys to the server (or is in full screen).
-    HookKeyAction route(DWORD vkCode, DWORD flags, bool viewerOwnsKeyboard);
+    // systemHasKeyDown: Windows already has this key down (GetAsyncKeyState
+    // inside the hook, which reports the state before the current event). A
+    // key-down of a key without an owner is then an autorepeat (or a late
+    // event) of a key Windows saw pressed, e.g. held across an activation or
+    // passed through while the hook timed out: Windows keeps it until its
+    // key-up. Posting it to the viewer instead swallowed that key-up and left
+    // the key down in Windows (and, at the next focus restoration, on the
+    // server). For the same reason a key-up of a key Windows has down always
+    // reaches Windows.
+    HookKeyAction route(DWORD vkCode, DWORD flags, bool viewerOwnsKeyboard,
+                        bool systemHasKeyDown);
   private:
     enum Owner { OWNER_NONE, OWNER_VIEWER, OWNER_SYSTEM };
     unsigned char m_owner[256];
@@ -72,7 +83,8 @@ public:
 
   // Routes a key event of the installed hook (see KeyRouter). The routing
   // state starts empty at every registration.
-  static HookKeyAction routeKey(DWORD vkCode, DWORD flags, bool viewerOwnsKeyboard);
+  static HookKeyAction routeKey(DWORD vkCode, DWORD flags, bool viewerOwnsKeyboard,
+                                bool systemHasKeyDown);
 
   // Builds the lParam of a WM_KEYDOWN/WM_KEYUP message from the
   // KBDLLHOOKSTRUCT scanCode and flags fields (unit-testable).
