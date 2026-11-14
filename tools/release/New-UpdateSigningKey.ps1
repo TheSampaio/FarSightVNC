@@ -8,6 +8,12 @@
   72 bytes) into -OutDirectory, then prints the public blob as a C++ byte
   array to paste into updater-lib/TrustedKeys.cpp.
 
+  When the script creates -OutDirectory, the directory is also restricted to
+  the current user (inheritance removed, full control for the user only). The
+  private key file never keeps an inherited ACE: the script checks the icacls
+  output after restricting it and fails if any "(I)" entry remains. An
+  existing directory is left as it is.
+
   The private key must never enter the repository: the script refuses an
   output directory inside the repository and refuses to overwrite files.
   Keep an offline backup of the private blob; losing it means users must
@@ -39,6 +45,16 @@ function Test-IsInside([string]$Path, [string]$Root) {
     $full.StartsWith($base + '\', [System.StringComparison]::OrdinalIgnoreCase))
 }
 
+# Fails if icacls lists an inherited ("(I)") entry for Path.
+function Assert-NoInheritedAce([string]$Path) {
+  $listing = & icacls.exe $Path
+  if ($LASTEXITCODE -ne 0) { throw "icacls could not read the ACL of $Path (exit $LASTEXITCODE)" }
+  $inherited = @($listing | Where-Object { $_ -match '\(I\)' })
+  if ($inherited.Count -gt 0) {
+    throw "The ACL of $Path still has inherited entries: $($inherited -join '; ')"
+  }
+}
+
 try {
   $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
   if (Test-IsInside $OutDirectory $repoRoot) {
@@ -50,7 +66,15 @@ try {
   foreach ($path in @($privatePath, $publicPath)) {
     if (Test-Path -LiteralPath $path) { throw "Refusing to overwrite existing file: $path" }
   }
+  $createdDirectory = -not (Test-Path -LiteralPath $outFull)
   New-Item -ItemType Directory -Force -Path $outFull | Out-Null
+  $sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+  if ($createdDirectory) {
+    # A new key directory: current user only, nothing inherited from the parent.
+    & icacls.exe $outFull /inheritance:r /grant:r "*${sid}:(OI)(CI)F" | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "icacls failed (exit $LASTEXITCODE); the key directory ACL was not restricted: $outFull" }
+    Assert-NoInheritedAce $outFull
+  }
 
   # ECDsaCng(256) creates an ECDSA P-256 key. (CngKey.Create with explicit
   # parameters fails with "Object already exists" on some systems.)
@@ -66,10 +90,10 @@ try {
   [System.IO.File]::WriteAllBytes($privatePath, $privateBlob)
   [System.IO.File]::WriteAllBytes($publicPath, $publicBlob)
 
-  # Private key: current user only.
-  $sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+  # Private key: current user only, no inherited entry.
   & icacls.exe $privatePath /inheritance:r /grant:r "*${sid}:(R,W)" | Out-Null
   if ($LASTEXITCODE -ne 0) { throw "icacls failed (exit $LASTEXITCODE); the private key ACL was not restricted: $privatePath" }
+  Assert-NoInheritedAce $privatePath
 
   Write-Host "Private key : $privatePath (keep offline, back it up, never commit it)"
   Write-Host "Public key  : $publicPath"

@@ -2,7 +2,11 @@
 
 Every release that the in-app updater can install is a GitHub release of
 `TheSampaio/FarSightVNC` with exactly three assets, one of them signed by the
-owner's offline key. The design and the threat model are in `DESIGN.md`; the
+owner's offline key. **Every shipped release must have all three.** A release
+with only the zip is not installable: the viewer says "This release cannot be
+installed automatically" and offers only the releases page. (v1.0.0a to
+v1.2.0a were published without the manifest and signature, so they had to be
+installed by hand.) The design and the threat model are in `DESIGN.md`; the
 manifest grammar is in `updater-lib/Manifest.h`; the scripts are described in
 `tools/release/README.md`.
 
@@ -125,6 +129,17 @@ viewer), a Standalone install (only the two executables are written; a user's
    dialog, so keep them readable as plain text.
 4. Do not edit or replace an asset after publishing; publish a new version
    instead (a replaced zip would no longer match the signed manifest).
+5. Check the published assets (read-only, needs the `gh` CLI):
+
+   ```powershell
+   .\tools\release\Test-ReleaseAssets.ps1 -Tag v<version> -DownloadZip
+   ```
+
+   It verifies that the three assets are attached, that the signature verifies
+   with a key compiled into the viewer (`updater-lib/TrustedKeys.cpp`), that
+   the manifest version equals the tag, and that the manifest's package size
+   (and, with `-DownloadZip`, its SHA-256) matches the uploaded zip. It must
+   pass; if it fails, fix the release before announcing it.
 
 ### Release notes template
 
@@ -152,7 +167,10 @@ as an exploit recipe.
   `%USERPROFILE%\.farsightvnc-signing\update-key-<id>.private.blob` (for example two
   encrypted USB drives kept in different places). Never store it in the repository,
   in cloud sync folders, in CI or in chat. The file is ACL-restricted to the owner
-  (`New-UpdateSigningKey.ps1` does this).
+  with no inherited entry, and a key directory created by the script is restricted
+  the same way (`New-UpdateSigningKey.ps1` does this and fails if an inherited ACE
+  remains). `.gitignore` ignores `*.private.blob` and `.farsightvnc-signing/` as a
+  second line of defence.
 - **Rotation.** Generate the next key with `tools\release\New-UpdateSigningKey.ps1
   -Id 2 -OutDirectory <outside the repository>`. Add the printed public key to
   `updater-lib/TrustedKeys.cpp` as id 2 next to key 1, and ship one release that
@@ -177,3 +195,4 @@ as an exploit recipe.
 - [ ] Manifest and signature created with the offline key, script reports verified
 - [ ] `--stage-local` (and, if possible, the end-to-end script) accepted the real assets
 - [ ] GitHub release (pre-release for a/b) with the three assets and the notes
+- [ ] `Test-ReleaseAssets.ps1 -Tag v<version> -DownloadZip` passes against the published release

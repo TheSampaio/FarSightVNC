@@ -67,6 +67,8 @@ try {
   $publicKey = Join-Path $keys 'update-key-test.public.blob'
   Assert-That ((Test-Path $privateKey) -and (Test-Path $publicKey)) 'key files exist'
   Assert-That ((Get-Item $publicKey).Length -eq 72) 'public blob is 72 bytes'
+  Assert-That (-not ((& icacls.exe $privateKey) -match '\(I\)')) 'private key has no inherited ACE'
+  Assert-That (-not ((& icacls.exe $keys) -match '\(I\)')) 'new key directory has no inherited ACE'
   Assert-That ((Invoke-Script $keyScript @('-OutDirectory', $keys, '-Id', 'test')) -ne 0) 'key script refuses to overwrite'
   $insideRepo = Join-Path $repoRoot 'tmp-must-not-be-created'
   Assert-That ((Invoke-Script $keyScript @('-OutDirectory', $insideRepo)) -ne 0) 'key script refuses a directory inside the repository'
@@ -121,6 +123,21 @@ try {
   Assert-That ($LASTEXITCODE -ne 0) 'updater-test.exe rejects a tampered manifest (non-zero exit)'
 
   Remove-Item Env:\FSV_PS_MANIFEST_DIR, Env:\FSV_PS_EXPECT_VERSION -ErrorAction SilentlyContinue
+
+  # --- Test-ReleaseAssets.ps1 (local test mode): accepts the good set, rejects tampering
+  $assetsScript = Join-Path $PSScriptRoot 'Test-ReleaseAssets.ps1'
+  $assetDir = Join-Path $work 'assets'
+  New-Item -ItemType Directory -Force -Path $assetDir | Out-Null
+  Copy-Item $manifestFile, $signatureFile, $zip -Destination $assetDir
+  $assetArgs = @('-Tag', "v$version", '-LocalDirectory', $assetDir, '-PublicKeyPath', $publicKey)
+  Assert-That ((Invoke-Script $assetsScript $assetArgs) -eq 0) 'Test-ReleaseAssets accepts the signed assets'
+  Copy-Item (Join-Path $bad 'farsightvnc-update.manifest') -Destination $assetDir -Force
+  Assert-That ((Invoke-Script $assetsScript $assetArgs) -ne 0) 'Test-ReleaseAssets rejects a tampered manifest'
+  Copy-Item $manifestFile -Destination $assetDir -Force
+  [System.IO.File]::AppendAllText((Join-Path $assetDir 'FarSightVNC-v1.0.0a.zip'), 'x')
+  Assert-That ((Invoke-Script $assetsScript $assetArgs) -ne 0) 'Test-ReleaseAssets rejects a zip of another size'
+  Remove-Item (Join-Path $assetDir 'farsightvnc-update.manifest.sig')
+  Assert-That ((Invoke-Script $assetsScript $assetArgs) -ne 0) 'Test-ReleaseAssets rejects a missing signature'
 
   # --- the manifest script fails loudly on bad input
   Assert-That ((Invoke-Script $manifestScript ($manifestArgs[0..4] + @('v1.0.0a') + $manifestArgs[6..9])) -ne 0) 'rejects a version with a leading v'
