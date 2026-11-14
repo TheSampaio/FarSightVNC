@@ -216,6 +216,9 @@
     <ClInclude Include="shell\HomeActions.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="shell\HomeLayout.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="shell\HomePage.h">
       <Filter>Header Files</Filter>
     </ClInclude>

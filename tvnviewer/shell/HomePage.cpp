@@ -18,6 +18,7 @@
 //
 
 #include "HomePage.h"
+#include "HomeLayout.h"
 
 #include "gui/d2d/Theme.h"
 
@@ -85,6 +86,14 @@ const float kHostIcon = 36.0f;
 const float kEmptyHeight = 150.0f;
 const float kBottomMargin = 32.0f;
 const float kWheelStep = 48.0f;
+// The host list keeps at least a header and two rows; a shorter window clips
+// it instead of moving the fixed part.
+const float kListMinHeight = kHeaderHeight + 2.0f * kRowHeight;
+// Room right of the rows for the scrollbar thumb.
+const float kScrollbarGutter = 10.0f;
+const float kScrollbarWidth = 4.0f;
+const float kScrollbarInset = 2.0f;
+const float kScrollbarMinThumb = 24.0f;
 
 enum MenuCommand
 {
@@ -155,6 +164,17 @@ bool contains(const D2D1_RECT_F &rect, float x, float y)
   return x >= rect.left && x < rect.right && y >= rect.top && y < rect.bottom;
 }
 
+D2D1_RECT_F offsetY(const D2D1_RECT_F &rect, float dy)
+{
+  return D2D1::RectF(rect.left, rect.top + dy, rect.right, rect.bottom + dy);
+}
+
+fsv::shell::HomeListGeometry listSpan(const D2D1_RECT_F &list)
+{
+  fsv::shell::HomeListGeometry span = { list.top, list.bottom };
+  return span;
+}
+
 }
 
 HomePage::HomePage(HWND shell, HomeActions *actions)
@@ -167,7 +187,7 @@ HomePage::HomePage(HWND shell, HomeActions *actions)
   m_actions(actions),
   m_favoriteCount(0),
   m_optionsEdited(false),
-  m_contentHeight(0.0f),
+  m_listContent(0.0f),
   m_scroll(0.0f),
   m_hover(ITEM_NONE),
   m_pressed(ITEM_NONE),
@@ -179,7 +199,7 @@ HomePage::HomePage(HWND shell, HomeActions *actions)
 {
   D2D1_RECT_F empty = D2D1::RectF();
   m_heading = m_subtitle = m_field = m_connect = m_options = m_listen = empty;
-  m_listenStatus = m_favoritesHeader = m_recentsHeader = m_empty = empty;
+  m_listenStatus = m_favoritesHeader = m_recentsHeader = m_empty = m_list = empty;
 
   if (!registerClass()) {
     return;
@@ -438,6 +458,12 @@ LRESULT HomePage::onMessage(UINT message, WPARAM wParam, LPARAM lParam)
     return 0;
   case WM_MOUSEWHEEL:
   {
+    // Only the host list scrolls, with the pointer over it (screen point).
+    POINT point = { static_cast<short>(LOWORD(lParam)), static_cast<short>(HIWORD(lParam)) };
+    ScreenToClient(m_hwnd, &point);
+    if (!contains(m_list, m_chrome.pixelsToDips(point.x), m_chrome.pixelsToDips(point.y))) {
+      return 0;
+    }
     float notches = static_cast<short>(HIWORD(wParam)) / static_cast<float>(WHEEL_DELTA);
     scrollTo(m_scroll - notches * kWheelStep);
     return 0;
@@ -518,6 +544,14 @@ bool HomePage::onKey(WPARAM key, bool fromEdit)
     }
     setFocusItem(key == VK_HOME ? static_cast<int>(ITEM_FIRST_HOST)
                                 : ITEM_FIRST_HOST + static_cast<int>(m_hosts.size()) - 1);
+    return true;
+  case VK_PRIOR:
+  case VK_NEXT:
+    // A page of the host list.
+    if (fromEdit) {
+      return false;
+    }
+    scrollTo(m_scroll + (key == VK_NEXT ? 1.0f : -1.0f) * (m_list.bottom - m_list.top));
     return true;
   case 'N':
     if (control && !shift && !alt) {
@@ -639,6 +673,13 @@ void HomePage::layout()
   m_listenStatus = D2D1::RectF(m_listen.right + theme.spacing, y, right, y + kLinkHeight);
   y += kLinkHeight + kSectionGap;
 
+  // The hosts scroll inside the list viewport below the fixed part; their
+  // layout is in list coordinates.
+  float clientHeight = m_chrome.pixelsToDips(client.bottom - client.top);
+  float viewport = fsv::shell::listHeight(clientHeight, y, kBottomMargin, kListMinHeight);
+  m_list = D2D1::RectF(left, y, (std::min)(right + kScrollbarGutter, width), y + viewport);
+  y = 0.0f;
+
   m_favoritesHeader = m_recentsHeader = m_empty = D2D1::RectF();
   if (m_hosts.empty()) {
     m_empty = D2D1::RectF(left, y, right, y + kEmptyHeight);
@@ -659,12 +700,12 @@ void HomePage::layout()
     m_hosts[i].rect = D2D1::RectF(left, y, right, y + kRowHeight);
     y += kRowHeight + kRowGap;
   }
-  m_contentHeight = y + kBottomMargin;
+  m_listContent = y;
 
+  placeEdit();
   // Keeps the scroll offset inside the new content.
-  float offset = m_scroll;
-  m_scroll = -1.0f;
-  scrollTo(offset);
+  m_scroll = fsv::shell::clampScroll(m_scroll, m_listContent, viewport);
+  invalidate();
 }
 
 void HomePage::placeEdit()
@@ -686,8 +727,8 @@ void HomePage::placeEdit()
   }
   int left = m_chrome.dipsToPixels(m_field.left + kFieldPadding);
   int right = m_chrome.dipsToPixels(m_field.right - kFieldPadding);
-  int top = m_chrome.dipsToPixels(m_field.top - m_scroll);
-  int bottom = m_chrome.dipsToPixels(m_field.bottom - m_scroll);
+  int top = m_chrome.dipsToPixels(m_field.top);
+  int bottom = m_chrome.dipsToPixels(m_field.bottom);
   int editHeight = lineHeight + 2;
   int editTop = top + (bottom - top - editHeight) / 2;
   SetWindowPos(m_edit, 0, left, editTop, (std::max)(right - left, 0), editHeight,
@@ -696,16 +737,11 @@ void HomePage::placeEdit()
 
 void HomePage::scrollTo(float offset)
 {
-  RECT client;
-  GetClientRect(m_hwnd, &client);
-  float view = m_chrome.pixelsToDips(client.bottom - client.top);
-  float maximum = (std::max)(0.0f, m_contentHeight - view);
-  offset = (std::max)(0.0f, (std::min)(offset, maximum));
+  offset = fsv::shell::clampScroll(offset, m_listContent, m_list.bottom - m_list.top);
   if (offset == m_scroll) {
     return;
   }
   m_scroll = offset;
-  placeEdit();
   invalidate();
 }
 
@@ -745,7 +781,7 @@ bool HomePage::isFocusable(int item) const
 int HomePage::hitTest(LPARAM lParam) const
 {
   float x = m_chrome.pixelsToDips(static_cast<short>(LOWORD(lParam)));
-  float y = m_chrome.pixelsToDips(static_cast<short>(HIWORD(lParam))) + m_scroll;
+  float y = m_chrome.pixelsToDips(static_cast<short>(HIWORD(lParam)));
   if (contains(m_field, x, y)) {
     return ITEM_ADDRESS;
   }
@@ -758,8 +794,14 @@ int HomePage::hitTest(LPARAM lParam) const
   if (contains(m_listen, x, y)) {
     return ITEM_LISTEN;
   }
+  // The hosts only inside the list viewport, in list coordinates.
+  float listY;
+  if (x < m_list.left || x >= m_list.right ||
+      !fsv::shell::listPoint(listSpan(m_list), m_scroll, y, &listY)) {
+    return ITEM_NONE;
+  }
   for (size_t i = 0; i < m_hosts.size(); i++) {
-    if (contains(m_hosts[i].rect, x, y)) {
+    if (contains(m_hosts[i].rect, x, listY)) {
       return ITEM_FIRST_HOST + static_cast<int>(i);
     }
   }
@@ -832,16 +874,22 @@ void HomePage::moveInHosts(int delta)
 
 void HomePage::ensureVisible(int item)
 {
-  D2D1_RECT_F rect = itemRect(item);
-  RECT client;
-  GetClientRect(m_hwnd, &client);
-  float view = m_chrome.pixelsToDips(client.bottom - client.top);
-  float margin = currentTheme().spacingLarge;
-  if (rect.top - margin < m_scroll) {
-    scrollTo(rect.top - margin);
-  } else if (rect.bottom + margin > m_scroll + view) {
-    scrollTo(rect.bottom + margin - view);
+  // The fixed part never scrolls; a host is shown inside the list viewport.
+  if (item < ITEM_FIRST_HOST || static_cast<size_t>(item - ITEM_FIRST_HOST) >= m_hosts.size()) {
+    return;
   }
+  size_t index = item - ITEM_FIRST_HOST;
+  D2D1_RECT_F rect = m_hosts[index].rect;
+  // The first host of a section brings its header along.
+  float top = rect.top;
+  if (index == 0) {
+    top = 0.0f;
+  } else if (index == m_favoriteCount) {
+    top = m_recentsHeader.top;
+  }
+  float margin = currentTheme().spacing;
+  float viewport = m_list.bottom - m_list.top;
+  scrollTo(fsv::shell::scrollToShow(m_scroll, top, rect.bottom, viewport, margin));
 }
 
 void HomePage::activate(int item)
@@ -940,7 +988,8 @@ void HomePage::showHostMenu(size_t index, const POINT *screenPoint)
   } else {
     // Keyboard: below the start of the row.
     point.x = m_chrome.dipsToPixels(row.rect.left + kHostIcon);
-    point.y = m_chrome.dipsToPixels(row.rect.bottom - m_scroll);
+    float bottom = (std::min)(m_list.top + row.rect.bottom - m_scroll, m_list.bottom);
+    point.y = m_chrome.dipsToPixels(bottom);
     ClientToScreen(m_hwnd, &point);
   }
 
@@ -1027,18 +1076,14 @@ void HomePage::paint()
     return;
   }
   m_chrome.clear(theme.background);
-  float scroll = m_scroll;
-  auto shifted = [scroll](const D2D1_RECT_F &rect) {
-    return D2D1::RectF(rect.left, rect.top - scroll, rect.right, rect.bottom - scroll);
-  };
 
-  m_chrome.drawText(kHeading, shifted(m_heading), theme.text, kHeadingSize,
+  m_chrome.drawText(kHeading, m_heading, theme.text, kHeadingSize,
                     DWRITE_FONT_WEIGHT_SEMI_BOLD);
-  m_chrome.drawText(kSubtitle, shifted(m_subtitle), theme.mutedText, theme.fontSizeBody);
+  m_chrome.drawText(kSubtitle, m_subtitle, theme.mutedText, theme.fontSizeBody);
 
   // Address field: a rounded box around the borderless EDIT.
   bool fieldFocused = m_edit != 0 && GetFocus() == m_edit;
-  D2D1_RECT_F field = shifted(m_field);
+  D2D1_RECT_F field = m_field;
   m_chrome.fillRoundRect(field, kFieldRadius, theme.field);
   if (fieldFocused) {
     m_chrome.drawRoundRect(inflate(field, -1.0f), kFieldRadius - 1.0f, theme.accent, 2.0f);
@@ -1049,7 +1094,7 @@ void HomePage::paint()
 
   // Connect: the primary button, disabled while the field is empty.
   bool canConnect = !fieldText().empty();
-  D2D1_RECT_F connectRect = shifted(m_connect);
+  D2D1_RECT_F connectRect = m_connect;
   ThemeColor connectFill = theme.border;
   if (canConnect) {
     connectFill = theme.accent;
@@ -1070,7 +1115,7 @@ void HomePage::paint()
   paintButton(ITEM_OPTIONS, kOptions, kGlyphOptions);
   paintButton(ITEM_LISTEN, listening ? kStopListening : kListen, kGlyphListen);
   if (listening) {
-    D2D1_RECT_F status = shifted(m_listenStatus);
+    D2D1_RECT_F status = m_listenStatus;
     float dot = 8.0f;
     float centerY = (status.top + status.bottom) / 2.0f;
     m_chrome.fillRoundRect(D2D1::RectF(status.left, centerY - dot / 2.0f,
@@ -1083,19 +1128,34 @@ void HomePage::paint()
                       theme.mutedText, theme.fontSizeSmall);
   }
 
+  // The host list: scrolled and clipped to its viewport.
+  float listShift = m_list.top - m_scroll;
+  m_chrome.pushClip(m_list);
   if (m_hosts.empty()) {
     paintEmptyState();
   }
   if (m_favoriteCount > 0) {
-    m_chrome.drawText(kFavorites, shifted(m_favoritesHeader), theme.mutedText,
+    m_chrome.drawText(kFavorites, offsetY(m_favoritesHeader, listShift), theme.mutedText,
                       theme.fontSizeSmall, DWRITE_FONT_WEIGHT_SEMI_BOLD);
   }
   if (m_hosts.size() > m_favoriteCount) {
-    m_chrome.drawText(kRecents, shifted(m_recentsHeader), theme.mutedText,
+    m_chrome.drawText(kRecents, offsetY(m_recentsHeader, listShift), theme.mutedText,
                       theme.fontSizeSmall, DWRITE_FONT_WEIGHT_SEMI_BOLD);
   }
   for (size_t i = 0; i < m_hosts.size(); i++) {
     paintHost(i);
+  }
+  m_chrome.popClip();
+
+  // A thin thumb inside the right edge of the list when it overflows.
+  float thumbTop = 0.0f;
+  float thumbHeight = 0.0f;
+  if (fsv::shell::scrollThumb(m_scroll, m_listContent, m_list.bottom - m_list.top,
+                              kScrollbarMinThumb, &thumbTop, &thumbHeight)) {
+    float thumbRight = m_list.right - kScrollbarInset;
+    D2D1_RECT_F thumb = D2D1::RectF(thumbRight - kScrollbarWidth, m_list.top + thumbTop,
+                                    thumbRight, m_list.top + thumbTop + thumbHeight);
+    m_chrome.fillRoundRect(thumb, kScrollbarWidth / 2.0f, theme.border);
   }
   m_chrome.endDraw();
   EndPaint(m_hwnd, &ps);
@@ -1106,8 +1166,6 @@ void HomePage::paintButton(int item, const wchar_t *label, wchar_t glyph)
   // Secondary action: glyph and label, a background only on hover/press.
   const ThemeTokens &theme = currentTheme();
   D2D1_RECT_F rect = itemRect(item);
-  rect.top -= m_scroll;
-  rect.bottom -= m_scroll;
   if (m_pressed == item) {
     m_chrome.fillRoundRect(rect, theme.cornerRadius, theme.hover);
   } else if (m_hover == item) {
@@ -1129,8 +1187,7 @@ void HomePage::paintHost(size_t index)
   const ThemeTokens &theme = currentTheme();
   const HostRow &row = m_hosts[index];
   int item = ITEM_FIRST_HOST + static_cast<int>(index);
-  D2D1_RECT_F rect = D2D1::RectF(row.rect.left, row.rect.top - m_scroll,
-                                 row.rect.right, row.rect.bottom - m_scroll);
+  D2D1_RECT_F rect = offsetY(row.rect, m_list.top - m_scroll);
   bool highlighted = m_hover == item || m_pressed == item;
   if (m_pressed == item) {
     m_chrome.fillRoundRect(rect, kFieldRadius, theme.hover);
@@ -1163,8 +1220,7 @@ void HomePage::paintHost(size_t index)
 void HomePage::paintEmptyState()
 {
   const ThemeTokens &theme = currentTheme();
-  D2D1_RECT_F area = D2D1::RectF(m_empty.left, m_empty.top - m_scroll,
-                                 m_empty.right, m_empty.bottom - m_scroll);
+  D2D1_RECT_F area = offsetY(m_empty, m_list.top - m_scroll);
   float centerX = (area.left + area.right) / 2.0f;
   float circle = 56.0f;
   D2D1_RECT_F icon = D2D1::RectF(centerX - circle / 2.0f, area.top + 8.0f,

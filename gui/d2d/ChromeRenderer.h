@@ -83,6 +83,11 @@ public:
                      float opacity = 1.0f);
   void drawRoundRect(const D2D1_RECT_F &rect, float radius, ThemeColor color,
                      float strokeWidth = 1.0f);
+  // Restricts the next draw calls to rect (axis-aligned, pixel edges, no
+  // antialiasing) until the matching popClip(); pairs nest. Only between
+  // beginDraw() and endDraw().
+  void pushClip(const D2D1_RECT_F &rect);
+  void popClip();
   // One line of text, vertically centered in rect, cut with an ellipsis.
   void drawText(const wchar_t *text, const D2D1_RECT_F &rect, ThemeColor color,
                 float fontSize, DWRITE_FONT_WEIGHT weight = DWRITE_FONT_WEIGHT_NORMAL,

@@ -441,6 +441,16 @@ void ChromeRenderer::fillRoundRect(const D2D1_RECT_F &rect, float radius, ThemeC
   m_target->FillRoundedRectangle(D2D1::RoundedRect(rect, radius, radius), brush(color, opacity));
 }
 
+void ChromeRenderer::pushClip(const D2D1_RECT_F &rect)
+{
+  m_target->PushAxisAlignedClip(rect, D2D1_ANTIALIAS_MODE_ALIASED);
+}
+
+void ChromeRenderer::popClip()
+{
+  m_target->PopAxisAlignedClip();
+}
+
 void ChromeRenderer::drawRoundRect(const D2D1_RECT_F &rect, float radius, ThemeColor color,
                                    float strokeWidth)
 {

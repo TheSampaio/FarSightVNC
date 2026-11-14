@@ -298,6 +298,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="FavoritesTest.cpp" />
+    <ClCompile Include="HomeLayoutTest.cpp" />
     
   </ItemGroup>
   <ItemGroup>

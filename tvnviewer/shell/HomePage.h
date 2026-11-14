@@ -39,8 +39,9 @@
 // host list (one tab stop); the arrows, Home and End move in the list; Enter
 // connects (field, Connect, a host) or runs the focused button, Space runs
 // buttons too; the menu key and Shift+F10 open the menu of a host; Ctrl+N
-// opens a new window on Home. The page scrolls with the mouse wheel when it
-// is taller than the window.
+// opens a new window on Home. The heading, the field and the buttons stay
+// fixed; only the host list scrolls (mouse wheel over it, Page Up and Page
+// Down) when it is taller than its viewport.
 class HomePage
 {
 public:
@@ -78,7 +79,7 @@ private:
     std::wstring address;  // Host and port.
     bool favorite;
     bool inHistory;
-    D2D1_RECT_F rect;      // Layout in DIPs, page coordinates (unscrolled).
+    D2D1_RECT_F rect;      // Layout in DIPs, list coordinates (unscrolled).
   };
 
   static bool registerClass();
@@ -98,7 +99,8 @@ private:
   void paintHost(size_t index);
   void paintEmptyState();
 
-  // Rectangle of an item in DIPs, page coordinates (unscrolled).
+  // Rectangle of an item in DIPs: page coordinates for the fixed items, list
+  // coordinates (unscrolled) for the hosts.
   D2D1_RECT_F itemRect(int item) const;
   bool isFocusable(int item) const;
   int hitTest(LPARAM lParam) const;
@@ -136,7 +138,8 @@ private:
   ConnectionConfig m_connectionConfig;
   bool m_optionsEdited;
 
-  // Layout in DIPs, page coordinates.
+  // Layout in DIPs, page coordinates; the headers and the empty state are in
+  // list coordinates (unscrolled), like the host rows.
   D2D1_RECT_F m_heading;
   D2D1_RECT_F m_subtitle;
   D2D1_RECT_F m_field;
@@ -147,7 +150,11 @@ private:
   D2D1_RECT_F m_favoritesHeader;
   D2D1_RECT_F m_recentsHeader;
   D2D1_RECT_F m_empty;
-  float m_contentHeight;
+  // Viewport of the host list, page coordinates: from below the buttons to
+  // the bottom margin, the hosts are clipped to it.
+  D2D1_RECT_F m_list;
+  // Height of the list content and scroll offset inside the list.
+  float m_listContent;
   float m_scroll;
 
   int m_hover;
