@@ -37,6 +37,19 @@ COLORREF toColorRef(ThemeColor color)
   return RGB((color >> 16) & 0xFF, (color >> 8) & 0xFF, color & 0xFF);
 }
 
+// Background of code: the field color moved 8% toward the text color, so it
+// stands out on the field in both palettes (surface equals field in dark).
+ThemeColor codeBackground(const ThemeTokens &tokens)
+{
+  ThemeColor result = 0;
+  for (int shift = 0; shift <= 16; shift += 8) {
+    const int from = static_cast<int>((tokens.field >> shift) & 0xFF);
+    const int to = static_cast<int>((tokens.text >> shift) & 0xFF);
+    result |= static_cast<ThemeColor>(from + (to - from) * 8 / 100) << shift;
+  }
+  return result;
+}
+
 std::wstring widen(const std::string &utf8)
 {
   if (utf8.empty()) {
@@ -344,7 +357,7 @@ void MarkdownRichEdit::render()
                        (style.link ? CFE_LINK | CFE_UNDERLINE : 0) | (style.code ? 0 : CFE_AUTOBACKCOLOR);
     format.yHeight = twips(style.points);
     format.crTextColor = toColorRef(style.color);
-    format.crBackColor = toColorRef(m_tokens.surface);
+    format.crBackColor = toColorRef(codeBackground(m_tokens));
     lstrcpynW(format.szFaceName, style.code ? CODE_FACE : m_tokens.fontFamily, LF_FACESIZE);
     return format;
   };

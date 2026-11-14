@@ -10,6 +10,8 @@
 
 #include "gui/BaseDialog.h"
 
+#include "MarkdownRichEdit.h"
+
 #include <cstdint>
 #include <string>
 
@@ -40,7 +42,7 @@ public:
     std::wstring availableVersion;
     std::wstring releaseDate;   // YYYY-MM-DD or empty
     std::wstring channel;       // e.g. "alpha (pre-release)"
-    std::wstring notes;         // CRLF separated, already capped
+    std::string notesMarkdown;  // UTF-8 Markdown, already capped
     std::wstring releaseUrl;    // empty -> no "View on GitHub" link
     std::wstring note;          // extra line (elevation hint, ...)
     bool canInstall = true;     // false -> "cannot be installed automatically"
@@ -93,6 +95,16 @@ private:
   void setText(UINT id, const std::wstring &text);
   void updateProgressControls();
   void openUrl(const std::wstring &url);
+  // Release notes: a RichEdit that renders the Markdown replaces the plain
+  // EDIT of the template when msftedit.dll is available.
+  void createNotesControl();
+  void showNotes();
+  // Colors of the current theme (Light, Dark or Auto) on the dialog.
+  void applyTheme();
+  void deleteBrushes();
+  LRESULT onSubclassMessage(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
+  static LRESULT CALLBACK subclassProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam,
+                                       UINT_PTR id, DWORD_PTR data);
 
   Host *m_host;
   State m_state;
@@ -104,6 +116,12 @@ private:
   std::uint64_t m_total;
   bool m_marquee;
   HWND m_owner;
+  MarkdownRichEdit m_notesView;
+  bool m_richNotes;
+  bool m_notesDirty;
+  fsv::update::Document m_notes;
+  HBRUSH m_backgroundBrush;
+  HBRUSH m_fieldBrush;
 };
 
 #endif

@@ -39,39 +39,21 @@ std::wstring versionText(const Version &version)
   return widen(version.toString().c_str());
 }
 
-// Release notes are Markdown with LF line breaks; the edit control needs CRLF.
-std::wstring notesForEdit(const std::string &notes)
+// Release notes are Markdown (UTF-8); the dialog parses and renders them.
+// Capped here so that the dialog never holds more than MAX_NOTES_BYTES.
+const char kTruncatedMark[] = "\n\n[...]";
+
+std::string cappedNotes(const std::string &notes)
 {
-  std::string text = notes;
-  bool truncated = false;
-  if (text.size() > MAX_NOTES_BYTES) {
-    size_t cut = MAX_NOTES_BYTES;
-    while (cut > 0 && (static_cast<unsigned char>(text[cut]) & 0xC0) == 0x80) {
-      --cut; // do not split a UTF-8 sequence
-    }
-    text.resize(cut);
-    truncated = true;
+  if (notes.size() <= MAX_NOTES_BYTES) {
+    return notes;
   }
-  std::wstring wide = utf8ToWide(text);
-  std::wstring result;
-  result.reserve(wide.size() + wide.size() / 16);
-  for (size_t i = 0; i < wide.size(); i++) {
-    wchar_t c = wide[i];
-    if (c == L'\r') {
-      if (i + 1 < wide.size() && wide[i + 1] == L'\n') {
-        i++;
-      }
-      result += L"\r\n";
-    } else if (c == L'\n') {
-      result += L"\r\n";
-    } else {
-      result += c;
-    }
+  // Room for the mark, so that the Markdown parser (same 64 KiB limit) keeps it.
+  size_t cut = MAX_NOTES_BYTES - sizeof(kTruncatedMark);
+  while (cut > 0 && (static_cast<unsigned char>(notes[cut]) & 0xC0) == 0x80) {
+    --cut; // do not split a UTF-8 sequence
   }
-  if (truncated) {
-    result += L"\r\n\r\n[...]";
-  }
-  return result;
+  return notes.substr(0, cut) + kTruncatedMark;
 }
 
 std::wstring releaseDate(const std::string &publishedAt)
@@ -324,7 +306,7 @@ struct UpdateController::Impl : public UpdateDialog::Host
     if (isPrereleaseRelease(*release)) {
       info.channel += L" (pre-release)";
     }
-    info.notes = notesForEdit(release->notes);
+    info.notesMarkdown = cappedNotes(release->notes);
     if (release->htmlUrl.rfind(kReleasesPageUrl, 0) == 0) {
       info.releaseUrl = utf8ToWide(release->htmlUrl);
     }
