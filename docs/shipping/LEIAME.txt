@@ -1,15 +1,16 @@
-FarSightVNC Viewer v1.2.0a (alpha)
+FarSightVNC Viewer v1.2.1a (alpha)
 ==================================
 
 Cliente VNC para Windows baseado no TightVNC Viewer 2.8.90.
 Licença: GNU GPL versão 2 ou posterior (ver LICENSE.txt).
-Data: 2026-11-13 - branch develop.
+Data: 2026-11-14 - branch develop.
 
 
-Segunda parte da nova interface (v1.2.0a): os temas Auto, Claro e Escuro
-funcionam, e o ícone do aplicativo aparece na barra de título. A janela
-redesenhada, a tela inicial (Home) e a página de Configurações vieram na
-v1.1.0a e continuam aqui. Ver O QUE MUDOU NA v1.2.0a abaixo.
+Correções e atualizador completo dentro do programa (v1.2.1a). Agora é
+possível instalar atualizações pelo próprio viewer, o Ctrl remoto não fica
+mais preso, e você pode manter teclas como o Numpad Menos só no seu
+computador. Tudo da v1.2.0a (temas, ícone) e da v1.1.0a (nova interface)
+continua aqui. Ver O QUE MUDOU NA v1.2.1a abaixo.
 
 
 *** MUDANÇA INCOMPATÍVEL na v1.0.0a (continua valendo) ***
@@ -85,6 +86,42 @@ pode ignorá-lo e manter os arquivos onde estão.
   fsvncviewer.exe e o fsvncupdater.exe são trocados ou adicionados; nenhum
   documento (README.txt, ...) é gravado ali, então um README.txt seu continua
   como está.
+
+
+O QUE MUDOU NA v1.2.1a (correções e atualizador dentro do programa)
+------------------------------------------------------------------
+- Instale atualizações pelo próprio viewer: a janela de atualização mostra a
+  versão e as notas, com Install Update, Skip This Version e Remind Me Later.
+  Depois que o download é verificado, você escolhe Restart and Install Now ou
+  Install When I Close FarSightVNC. O atualizador abre o viewer de novo e, na
+  próxima abertura, avisa uma vez que a atualização foi aplicada. Nada é
+  instalado sem a sua confirmação; se a instalação falhar, a versão anterior
+  é restaurada.
+- As notas da versão aparecem formatadas (títulos, negrito, itálico, listas,
+  links, código), nos temas Claro e Escuro. Só links https são clicáveis.
+- Verificação automática: ao abrir e a cada 30 minutos enquanto o viewer
+  fica aberto, mas o GitHub é consultado no máximo uma vez a cada 24 horas.
+  A verificação manual sempre funciona.
+- Atalhos locais (Configurações > Entrada): as teclas listadas ali, como o
+  Numpad Menos, nunca são enviadas ao computador remoto e chegam ao Windows e
+  às suas ferramentas locais, por exemplo um programa de captura de tela. O
+  Print Screen continua local como antes.
+- Tela inicial: só a lista de conexões recentes rola; o campo de endereço, o
+  Connect e a linha de Opções e Listen ficam no lugar.
+- Correção: o Ctrl remoto não fica mais preso (uma tecla já pressionada
+  quando o gancho de teclado era rearmado perdia o soltar).
+- Correção: os avisos de atualização não ficam mais escondidos atrás de
+  outras janelas; em tela cheia, esperam você sair da tela cheia.
+- Correção: a verificação de atualização não acontece mais só uma vez por
+  abertura.
+- O atualizador recusa opções de linha de comando repetidas ou conflitantes
+  e nunca reabre o viewer a partir de um processo elevado.
+- Atualizar da v1.2.0a ou anterior usa o atualizador antigo, então o viewer
+  pode não reabrir sozinho nessa única atualização.
+- Protocolo, servidor, arquivos .vnc e opções de linha de comando continuam
+  iguais. Testes (x64 Release): teclado 519/0, fila de entrada 39/0,
+  favoritos 121/0, atualizador 2384/0, teclado ponta a ponta 42/42, scripts
+  de release 31/31.
 
 
 O QUE MUDOU NA v1.2.0a (nova interface, fase 2: temas e ícones)
