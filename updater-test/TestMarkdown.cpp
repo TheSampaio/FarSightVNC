@@ -211,6 +211,20 @@ void testLinks() {
   CHECK(!isAllowedLinkUrl("https://"));
   CHECK(!isAllowedLinkUrl("https://a b"));
   CHECK(!isAllowedLinkUrl("ftp://x"));
+  for (const char *url : {"https://a\"b", "https://a<b", "https://a>b", "https://a\\b",
+                          "https://caf\xC3\xA9.example", "https://a\x7F"}) {
+    CHECK(!isAllowedLinkUrl(url));
+  }
+  CHECK(isAllowedLinkUrl("https://xn--caf-dma.example/path?q=1#x"));
+  // A bare URL stops at a character that cannot be in a URL.
+  const Document quoted = parseMarkdown("see https://a.example/x\"onclick");
+  CHECK(quoted.blocks.size() == 1 && quoted.blocks[0].spans.size() == 3);
+  if (quoted.blocks.size() == 1 && quoted.blocks[0].spans.size() == 3) {
+    CHECK(quoted.blocks[0].spans[1].linkUrl == "https://a.example/x");
+    CHECK(quoted.blocks[0].spans[2].text == "\"onclick");
+  }
+  // Non-ASCII links lose the link and keep their text.
+  CHECK(!hasLink(parseMarkdown("[t](https://caf\xC3\xA9.example)")));
 }
 
 void testHtmlIsLiteral() {
@@ -262,18 +276,23 @@ void testPathological() {
       [] { std::string s; for (int i = 0; i < 3000; ++i) { s += std::string(i % 40, ' ') + "- x\n"; } return s; }(),
       std::string(1024 * 1024, '#'),
       std::string(1024 * 1024, '\n'),
+      "https://a" + std::string(64 * 1024, ')'),
+      "x https://" + std::string(64 * 1024, ')'),
   };
   for (const std::string &input : inputs) {
     Document doc;
     const double ms = millisecondsOf([&] { doc = parseMarkdown(input); });
     CHECK(!doc.blocks.empty() || input.find_first_not_of('\n') == std::string::npos);
-    CHECK(ms < 2000.0);
-    if (ms >= 2000.0) {
+    CHECK(ms < 1000.0);
+    if (ms >= 1000.0) {
       std::printf("  (slow: %.0f ms for %zu bytes)\n", ms, input.size());
     }
   }
   const Document stars = parseMarkdown(std::string(10000, '*'));
   CHECK(stars.blocks.size() == 1 && stars.blocks[0].kind == BlockKind::Rule);
+  const Document parens = parseMarkdown("https://a" + std::string(64 * 1024, ')'));
+  CHECK(parens.blocks.size() == 1 && !parens.blocks[0].spans.empty() &&
+        parens.blocks[0].spans[0].linkUrl == "https://a");
   const Document hashes = parseMarkdown(std::string(1024 * 1024, '#'));
   CHECK(hashes.blocks.size() == 1 && blockText(hashes.blocks[0]).size() == kMarkdownMaxBytes);
 }

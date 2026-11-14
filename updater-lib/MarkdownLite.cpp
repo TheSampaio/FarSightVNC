@@ -254,25 +254,34 @@ bool parseLink(std::string_view s, std::size_t pos, std::size_t &end, std::strin
   return true;
 }
 
-// Bare "https://..." at s[pos]: ends at whitespace or "<", without trailing
-// punctuation or an unbalanced ")". Returns the length (0: not a URL).
+// Characters a link URL may contain: printable ASCII except the ones that
+// could break out of a quoted or bracketed context.
+bool isUrlChar(char c) {
+  const unsigned char u = static_cast<unsigned char>(c);
+  return u > 0x20 && u < 0x7F && c != '"' && c != '<' && c != '>' && c != '\\';
+}
+
+// Bare "https://..." at s[pos]: ends at the first character that cannot be in
+// a URL, without trailing punctuation or an unbalanced ")". The parenthesis
+// balance is counted once and updated while trimming, so the scan is linear.
+// Returns the length (0: not a URL).
 std::size_t bareUrlLength(std::string_view s, std::size_t pos) {
   if (!startsWithNoCase(s.substr(pos), "https://")) {
     return 0;
   }
   std::size_t end = pos;
-  while (end < s.size() && !isWhite(s[end]) && s[end] != '<') {
+  std::ptrdiff_t balance = 0; // count of "(" minus count of ")"
+  while (end < s.size() && isUrlChar(s[end])) {
+    balance += s[end] == '(' ? 1 : (s[end] == ')' ? -1 : 0);
     ++end;
   }
   while (end > pos) {
     const char last = s[end - 1];
-    const std::string_view candidate = s.substr(pos, end - pos);
-    const bool unbalanced =
-        last == ')' && std::count(candidate.begin(), candidate.end(), ')') >
-                           std::count(candidate.begin(), candidate.end(), '(');
-    if (std::string_view(".,:;!?'\"*_").find(last) == std::string_view::npos && !unbalanced) {
+    const bool unbalanced = last == ')' && balance < 0;
+    if (std::string_view(".,:;!?'*_").find(last) == std::string_view::npos && !unbalanced) {
       break;
     }
+    balance += last == ')' ? 1 : 0;
     --end;
   }
   return isAllowedLinkUrl(s.substr(pos, end - pos)) ? end - pos : 0;
@@ -647,8 +656,8 @@ bool isAllowedLinkUrl(std::string_view url) {
     return false;
   }
   for (const char c : url) {
-    if (static_cast<unsigned char>(c) <= 0x20 || c == 0x7F) {
-      return false;
+    if (!isUrlChar(c)) {
+      return false; // whitespace, controls, non-ASCII, quotes, <, >, backslash
     }
   }
   return true;

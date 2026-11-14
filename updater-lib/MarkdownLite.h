@@ -57,8 +57,9 @@ Document parseMarkdown(std::string_view input, std::size_t maxBytes = kMarkdownM
 // indented by two spaces per level, rules as "---". LF line breaks.
 std::string toPlainText(const Document &document);
 
-// True for an https:// URL (case-insensitive scheme) without whitespace or
-// control characters: the only kind of URL kept as a link.
+// True for an https:// URL (case-insensitive scheme) made of printable ASCII
+// only, without '"', '<', '>' or backslash: the only kind of URL kept as a
+// link (punycode hosts are ASCII).
 bool isAllowedLinkUrl(std::string_view url);
 
 } // namespace fsv::update

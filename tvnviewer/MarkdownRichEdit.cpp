@@ -31,6 +31,10 @@ const float SPACE_HEADING_AFTER = 4.0f;
 const int RULE_LENGTH = 48;
 const int MARGIN_DIPS = 6;
 const LONG TEXT_LIMIT = 1 << 20; // characters; the default is only 32767
+// Each formatted range costs two messages to the control: past these counts
+// the rest of the text keeps the base format (and its links stay plain text).
+const size_t MAX_CHAR_RUNS = 4096;
+const size_t MAX_PARA_RUNS = 4096;
 
 COLORREF toColorRef(ThemeColor color)
 {
@@ -115,7 +119,8 @@ DWORD CALLBACK streamIn(DWORD_PTR cookie, LPBYTE buffer, LONG bufferSize, LONG *
 
 MarkdownRichEdit::MarkdownRichEdit()
   : m_hwnd(0),
-    m_tokens(kLightTheme)
+    m_tokens(kLightTheme),
+    m_twipScale(1.0f)
 {
 }
 
@@ -193,7 +198,7 @@ void MarkdownRichEdit::refresh()
   render();
 }
 
-LONG MarkdownRichEdit::twips(float points) const
+void MarkdownRichEdit::updateScale()
 {
   UINT systemDpi = DpiUtils::DEFAULT_DPI;
   HDC screen = GetDC(0);
@@ -202,8 +207,12 @@ LONG MarkdownRichEdit::twips(float points) const
     ReleaseDC(0, screen);
   }
   const UINT windowDpi = m_hwnd != 0 ? DpiUtils::getDpiForWindow(m_hwnd) : systemDpi;
-  const float scale = systemDpi != 0 ? static_cast<float>(windowDpi) / static_cast<float>(systemDpi) : 1.0f;
-  return static_cast<LONG>(points * 20.0f * scale + 0.5f);
+  m_twipScale = systemDpi != 0 ? static_cast<float>(windowDpi) / static_cast<float>(systemDpi) : 1.0f;
+}
+
+LONG MarkdownRichEdit::twips(float points) const
+{
+  return static_cast<LONG>(points * 20.0f * m_twipScale + 0.5f);
 }
 
 bool MarkdownRichEdit::handleNotify(const NMHDR *header, std::wstring &outUrl) const
@@ -229,6 +238,7 @@ void MarkdownRichEdit::render()
   if (m_hwnd == 0) {
     return;
   }
+  updateScale();
   const float body = m_tokens.fontSizeBody * 0.75f; // DIPs to points
   std::wstring text;
   std::vector<CharRun> chars;
@@ -240,7 +250,9 @@ void MarkdownRichEdit::render()
     if (!value.empty()) {
       const LONG start = pos();
       text += value;
-      chars.push_back(CharRun{start, pos(), style});
+      if (chars.size() < MAX_CHAR_RUNS) {
+        chars.push_back(CharRun{start, pos(), style});
+      }
     }
   };
 
@@ -293,7 +305,9 @@ void MarkdownRichEdit::render()
         ParaRun inner = para;
         inner.end = lastLine;
         inner.spaceAfter = 0.0f;
-        paras.push_back(inner);
+        if (paras.size() < MAX_PARA_RUNS) {
+          paras.push_back(inner);
+        }
         para.start = lastLine;
       }
       break;
@@ -326,13 +340,17 @@ void MarkdownRichEdit::render()
         }
         const LONG spanStart = pos();
         addText(widen(span.text), spanStyle);
-        if (link && pos() > spanStart) {
+        // Only a range that really got CFE_LINK is in the map.
+        if (link && pos() > spanStart && !chars.empty() &&
+            chars.back().start == spanStart && chars.back().style.link) {
           links.push_back(LinkRange{spanStart, pos(), widen(span.linkUrl)});
         }
       }
     }
     para.end = pos();
-    paras.push_back(para);
+    if (paras.size() < MAX_PARA_RUNS) {
+      paras.push_back(para);
+    }
   }
 
   SendMessageW(m_hwnd, WM_SETREDRAW, FALSE, 0);

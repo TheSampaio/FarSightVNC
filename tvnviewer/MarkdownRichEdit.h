@@ -63,14 +63,17 @@ private:
 
   void configure();
   void render();
-  // Font height in twips for a size in points, corrected for the monitor DPI
-  // of the window (RichEdit scales twips by the system DPI only).
+  // Twips for a size in points, corrected for the monitor DPI of the window
+  // (RichEdit scales twips by the system DPI only). Uses m_twipScale, which
+  // updateScale() computes once per render.
   LONG twips(float points) const;
+  void updateScale();
 
   HWND m_hwnd;
   ThemeTokens m_tokens;
   fsv::update::Document m_document;
   std::vector<LinkRange> m_links;
+  float m_twipScale;
 };
 
 #endif
