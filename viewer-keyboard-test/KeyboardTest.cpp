@@ -30,6 +30,7 @@
 //
 // Modified for FarSightVNC on 2026-11-11: Ctrl shortcuts and key-up routing of the keyboard hook; Print Screen stays local.
 // Modified for FarSightVNC on 2026-11-14: held keys routed to Windows, focus restoration never presses modifiers, whole-session scenarios.
+// Modified for FarSightVNC on 2026-11-14: local keys (parse/format, routing, sessions).
 
 #include "rfb/RfbKeySym.h"
 #include "win-system/WinHooks.h"
@@ -1397,6 +1398,8 @@ private:
   }
   void deliver(unsigned vk, unsigned scan, bool ext, bool up)
   {
+    // DesktopWindow::onKey does not send the key-down of a local key.
+    if (!up && router.isLocalKey(vk, ext)) return;
     if (up) h.up(vk, scan, ext); else h.down(vk, scan, ext);
   }
 };
@@ -1544,6 +1547,153 @@ void testSessions(LogWriter *log)
     s.check("S12 5000 pseudo-random events leave nothing pressed");
   }
 }
+
+//----------------------------------------------------------------------------
+// L: local keys (Settings > Input > Local shortcuts) stay with Windows and are
+// never sent to the server.
+
+std::string narrow(const TCHAR *text)
+{
+  std::string s;
+  for (const TCHAR *c = text; c != 0 && *c != 0; c++) s += (char)*c;
+  return s;
+}
+
+void testLocalKeys(LogWriter *log)
+{
+  const WinHooks::HookKeyAction PASS = WinHooks::HOOK_KEY_PASS;
+  const WinHooks::HookKeyAction POST = WinHooks::HOOK_KEY_POST;
+  const DWORD EXT = LLKHF_EXTENDED;
+  const DWORD UP = LLKHF_UP;
+  {
+    WinHooks::LocalKeySet k = WinHooks::parseLocalKeys(_T("6D,2De"));
+    std::string text = narrow(WinHooks::formatLocalKeys(k).getString());
+    checkTrue("L1 parse and format round trip (Numpad Minus, extended Insert)",
+              k.count() == 2 && k.test(0x6D) && k.test(0x12D) && text == "6D,2De", text);
+  }
+  {
+    WinHooks::LocalKeySet k =
+      WinHooks::parseLocalKeys(_T("zz, 6d ,,123,0,FF,6De,6D,xyz,1G,g,6e e, 2c E"));
+    std::string text = narrow(WinHooks::formatLocalKeys(k).getString());
+    checkTrue("L1 invalid entries are ignored and duplicates merged",
+              text == "6D,6De", text);
+  }
+  {
+    std::string a = narrow(WinHooks::formatLocalKeys(WinHooks::parseLocalKeys(_T(""))).getString());
+    std::string b = narrow(WinHooks::formatLocalKeys(WinHooks::parseLocalKeys(0)).getString());
+    checkTrue("L1 empty and missing values give no local key", a.empty() && b.empty());
+  }
+  {
+    WinHooks::LocalKeySet k;
+    for (unsigned i = 1; i < 0xFF; i += 7) k.set(WinHooks::localKeyIndex(i, (i & 1) != 0));
+    WinHooks::LocalKeySet back =
+      WinHooks::parseLocalKeys(WinHooks::formatLocalKeys(k).getString());
+    checkTrue("L1 every stored set reads back the same", back == k);
+  }
+  {
+    WinHooks::LocalKeySet k = WinHooks::parseLocalKeys(_T("BE,BEe,E,0e"));
+    checkTrue("L1 a hex digit E is not the extended suffix",
+              k.count() == 3 && k.test(0xBE) && k.test(0x1BE) && k.test(0x0E));
+  }
+
+  WinHooks::LocalKeySet numpadMinus;
+  numpadMinus.set(WinHooks::localKeyIndex(VK_SUBTRACT, false));
+  {
+    WinHooks::KeyRouter r;
+    r.setLocalKeys(numpadMinus);
+    bool ok = r.route(VK_SUBTRACT, 0, true, false) == PASS &&
+              r.route(VK_SUBTRACT, UP, true, false) == PASS;
+    checkTrue("L2 a local key and its key-up reach Windows while the viewer has the keyboard", ok);
+  }
+  {
+    WinHooks::KeyRouter r;
+    r.setLocalKeys(numpadMinus);
+    bool ok = r.route(VK_LCONTROL, 0, true, false) == POST &&
+              r.route(VK_LSHIFT, 0, true, false) == POST &&
+              r.route(VK_SUBTRACT, 0, true, false) == PASS &&
+              r.route(VK_SUBTRACT, UP, true, false) == PASS &&
+              r.route(VK_LSHIFT, UP, true, false) == POST &&
+              r.route(VK_LCONTROL, UP, true, false) == POST;
+    checkTrue("L2 a local key stays local with modifiers held", ok);
+  }
+  {
+    WinHooks::KeyRouter r;
+    r.setLocalKeys(numpadMinus);
+    bool ok = r.route(VK_OEM_MINUS, 0, true, false) == POST &&
+              r.route(VK_OEM_MINUS, UP, true, false) == POST &&
+              r.isLocalKey(VK_SUBTRACT, false) && !r.isLocalKey(VK_OEM_MINUS, false);
+    checkTrue("L2 Numpad Minus (0x6D) local does not make the '-' key (0xBD) local", ok);
+  }
+  {
+    WinHooks::KeyRouter r;
+    WinHooks::LocalKeySet insert;
+    insert.set(WinHooks::localKeyIndex(VK_INSERT, true));
+    r.setLocalKeys(insert);
+    bool ok = r.route(VK_INSERT, EXT, true, false) == PASS &&
+              r.route(VK_INSERT, EXT | UP, true, false) == PASS &&
+              r.route(VK_INSERT, 0, true, false) == POST &&      // Numpad 0 without Num Lock
+              r.route(VK_INSERT, UP, true, false) == POST;
+    checkTrue("L2 extended Insert local, Numpad 0 (Insert without the extended flag) is not", ok);
+  }
+  {
+    WinHooks::KeyRouter r;
+    bool ok = r.route(VK_SUBTRACT, 0, true, false) == POST;      // pressed for the server
+    r.setLocalKeys(numpadMinus);                                  // becomes local meanwhile
+    ok = ok && r.route(VK_SUBTRACT, 0, true, false) == POST &&    // autorepeat keeps the owner
+         r.route(VK_SUBTRACT, UP, true, false) == POST &&         // released where pressed
+         r.route(VK_SUBTRACT, 0, true, false) == PASS;            // next press is local
+    r.route(VK_SUBTRACT, UP, true, false);
+    checkTrue("L3 a key held while it becomes local is released on the server", ok);
+  }
+  {
+    WinHooks::KeyRouter r;
+    r.setLocalKeys(numpadMinus);
+    bool ok = r.route(VK_SUBTRACT, 0, true, false) == PASS;
+    r.setLocalKeys(WinHooks::LocalKeySet());                      // no longer local
+    ok = ok && r.route(VK_SUBTRACT, UP, true, false) == PASS &&   // released in Windows
+         r.route(VK_SUBTRACT, 0, true, false) == POST;
+    r.route(VK_SUBTRACT, UP, true, false);
+    checkTrue("L3 a local key held while the list is cleared is released in Windows", ok);
+  }
+  {
+    WinHooks::KeyRouter r;
+    r.setLocalKeys(numpadMinus);
+    r.reset();
+    checkTrue("L4 reset keeps the local keys", r.route(VK_SUBTRACT, 0, true, false) == PASS);
+  }
+  {
+    WinHooks::setLocalKeys(numpadMinus);
+    bool ok = WinHooks::isLocalKey(VK_SUBTRACT, false) && !WinHooks::isLocalKey(VK_SUBTRACT, true) &&
+              !WinHooks::isLocalKey(VK_OEM_MINUS, false);
+    WinHooks::setLocalKeys(WinHooks::LocalKeySet());
+    ok = ok && !WinHooks::isLocalKey(VK_SUBTRACT, false);
+    checkTrue("L5 the local keys of the hook are set and cleared", ok);
+  }
+  {
+    // Whole session: Ctrl+Numpad Minus with Numpad Minus local, Print Screen,
+    // then the key becomes local while held.
+    Session s(log);
+    s.router.setLocalKeys(numpadMinus);
+    s.down(VK_LCONTROL); s.tap(VK_SUBTRACT); s.up(VK_LCONTROL);
+    s.tap(VK_SUBTRACT);
+    s.tap(VK_SNAPSHOT);
+    Seq e;
+    e.d(XK_Control_L).u(XK_Control_L);
+    finish("L6 Numpad Minus local: only Ctrl reaches the server", s.h, e);
+  }
+  {
+    Session s(log);
+    s.down(VK_SUBTRACT);
+    s.router.setLocalKeys(numpadMinus);
+    s.down(VK_SUBTRACT);   // autorepeat
+    s.up(VK_SUBTRACT);
+    s.loseFocus();
+    s.down(VK_SUBTRACT);   // local, in another window
+    s.gainFocus();
+    s.up(VK_SUBTRACT);
+    s.check("L6 a key that becomes local while held leaves nothing pressed");
+  }
+}
 } // namespace
 
 int main()
@@ -1583,6 +1733,7 @@ int main()
   testHeldKeyRouting();
   testFocusRestoration(&log);
   testSessions(&log);
+  testLocalKeys(&log);
 
   unloadLayouts();
   printf("\n%d passed, %d failed\n", g_passed, g_failed);

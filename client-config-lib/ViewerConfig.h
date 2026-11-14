@@ -22,6 +22,7 @@
 //-------------------------------------------------------------------------
 //
 // Modified for FarSightVNC on 2026-11-11: theme choice (Auto, Light, Dark) of the Settings page.
+// Modified for FarSightVNC on 2026-11-14: local keys (LocalKeys) of the Settings page.
 //
 
 #ifndef _VIEWER_CONFIG_H_
@@ -95,6 +96,12 @@ public:
   void setTheme(int theme);
   int getTheme() const;
 
+  // Keys that stay local (never sent to the server), in the stored form of
+  // WinHooks::formatLocalKeys() ("6D,2De"). WinHooks::setLocalKeys() applies
+  // them.
+  void setLocalKeys(const TCHAR *localKeys);
+  void getLocalKeys(StringStorage *localKeys) const;
+
   // Sets "prompt on fullscreen flag"
   void promptOnFullscreen(bool promt);
   // Returns "prompt on fullscreen flag"
@@ -122,6 +129,8 @@ protected:
   bool m_promptOnFullscreen;
   // Theme (THEME_AUTO, THEME_LIGHT or THEME_DARK).
   int m_theme;
+  // Local keys (LocalKeys, REG_SZ).
+  StringStorage m_localKeys;
   // Log file
   StringStorage m_pathToLogFile;
   StringStorage m_logName;

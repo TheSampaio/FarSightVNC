@@ -17,6 +17,10 @@
   release of the same keysym. The viewer history entry of the test host is
   removed only when this run created it. All started processes are stopped.
 
+  The run makes Numpad Minus a local key (HKCU ...\Viewer\Settings, value
+  LocalKeys = "6D") and restores the previous value (or removes it) at the
+  end: Numpad Minus must never reach the server, the '-' key still does.
+
 .EXAMPLE
   .\tools\keyboard-e2e-test.ps1 -Viewer .\build\bin\x64\Release\fsvncviewer.exe
 #>
@@ -107,6 +111,11 @@ $SC = @{ LShift = 0x2A; RShift = 0x36; A = 0x1E; AbntC1 = 0x73; DeadAcute = 0x1A
 $state = @{ Server = $null; Viewer = $null; LoadedLayout = [IntPtr]::Zero }
 $historyKey = "HKCU:\Software\TightVNC\Viewer\History\127.0.0.1::$Port"
 $historyExisted = Test-Path -LiteralPath $historyKey
+$settingsKey = 'HKCU:\Software\TightVNC\Viewer\Settings'
+$localKeysBefore = $null
+if (Test-Path -LiteralPath $settingsKey) {
+  $localKeysBefore = (Get-ItemProperty -LiteralPath $settingsKey -Name LocalKeys -ErrorAction SilentlyContinue).LocalKeys
+}
 $results = New-Object System.Collections.ArrayList
 
 function Read-Log {
@@ -175,6 +184,10 @@ try {
   $state.Server = Start-Process -FilePath $Python -PassThru -WindowStyle Hidden `
     -ArgumentList @('-I', "`"$serverScript`"", '--port', $Port, '--log', "`"$logFile`"", '--stop-file', "`"$stopFile`"", '--duration', 300)
   if (-not (Wait-LogEvent 'listening' 15)) { throw 'fake server did not start' }
+
+  # Numpad Minus is a local key for this run (Settings > Input > Local shortcuts).
+  if (-not (Test-Path -LiteralPath $settingsKey)) { New-Item -Path $settingsKey -Force | Out-Null }
+  Set-ItemProperty -LiteralPath $settingsKey -Name LocalKeys -Value '6D' -Type String
 
   $state.Viewer = Start-Process -FilePath $Viewer -PassThru -ArgumentList @('-host=127.0.0.1', "-port=$Port")
   if (-not (Wait-LogEvent 'connected' 20)) { throw 'viewer did not connect to the fake server' }
@@ -250,6 +263,14 @@ try {
   Invoke-Case 'Alt+Print Screen sends only Alt' $desk `
     @(@('d', $VK.LAlt, $SC.Alt), $psD, $psU, @('u', $VK.LAlt, $SC.Alt)) @('+ffe9', '-ffe9')
 
+  # Local keys: Numpad Minus (VK_SUBTRACT 0x6D, scan 0x4A) is local, the '-'
+  # key of the main block (VK_OEM_MINUS 0xBD, ABNT2 scan 0x0C) is not.
+  $nmD = @('d', 0x6D, 0x4A); $nmU = @('u', 0x6D, 0x4A)
+  Invoke-Case 'local key: Numpad Minus is not sent' $desk @($nmD, $nmU) @()
+  Invoke-Case 'local key: Ctrl+Numpad Minus sends only Ctrl' $desk `
+    @(@('d', $VK.LCtrl, $SC.Ctrl), $nmD, $nmU, @('u', $VK.LCtrl, $SC.Ctrl)) @('+ffe3', '-ffe3')
+  Invoke-Case "local key: the '-' key is still sent" $desk @(@('d', 0xBD, 0x0C), @('u', 0xBD, 0x0C)) @('+2d', '-2d')
+
   # The Settings page over the running session (settings button command,
   # IDS_TB_CONFIGURATION = 216): the remote desktop is hidden and loses the
   # keyboard, keys typed into the page never reach the server, Esc goes back
@@ -286,6 +307,13 @@ try {
   }
   if ($state.LoadedLayout -ne [IntPtr]::Zero) { [void][E2eWin]::UnloadKeyboardLayout($state.LoadedLayout) }
   if (-not $historyExisted -and (Test-Path -LiteralPath $historyKey)) { Remove-Item -LiteralPath $historyKey -Recurse }
+  if (Test-Path -LiteralPath $settingsKey) {
+    if ($null -ne $localKeysBefore) {
+      Set-ItemProperty -LiteralPath $settingsKey -Name LocalKeys -Value $localKeysBefore -Type String
+    } else {
+      Remove-ItemProperty -LiteralPath $settingsKey -Name LocalKeys -ErrorAction SilentlyContinue
+    }
+  }
   Remove-Item -LiteralPath $workDir -Recurse -Force -ErrorAction SilentlyContinue
 }
 

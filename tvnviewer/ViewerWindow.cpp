@@ -39,6 +39,7 @@
 // Modified for FarSightVNC on 2026-11-11: About opens the About section of the Settings page.
 // Modified for FarSightVNC on 2026-11-11: the keyboard hook releases a key on the same path it pressed it (no Ctrl/Alt stuck locally or on the server).
 // Modified for FarSightVNC on 2026-11-14: a key Windows already has down when the hook sees it first stays with Windows until its key-up.
+// Modified for FarSightVNC on 2026-11-14: the local keys of the settings are applied to the keyboard hook.
 //
 
 #include "config-lib/IniFileSettingsManager.h"
@@ -149,6 +150,11 @@ bool ViewerWindow::onCreate(LPCREATESTRUCT lps)
   applySettings();
 
   ViewerConfig *config = ViewerConfig::getInstance();
+  // Local keys (Settings, Input) of the hook and of the desktop window; the
+  // Settings page applies a change itself.
+  StringStorage localKeys;
+  config->getLocalKeys(&localKeys);
+  WinHooks::setLocalKeys(WinHooks::parseLocalKeys(localKeys.getString()));
   m_bToolBar = config->isToolbarShown();
   if (m_bToolBar) {
     m_toolbar.show();

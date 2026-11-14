@@ -24,6 +24,7 @@
 // Modified for FarSightVNC on 2026-11-01: pure helpers for the low level keyboard hook.
 // Modified for FarSightVNC on 2026-11-11: a key-up takes the same path (posted or passed to Windows) as its key-down; Print Screen stays local.
 // Modified for FarSightVNC on 2026-11-14: a key already held by Windows when the hook sees it first stays with Windows (no remote Ctrl stuck).
+// Modified for FarSightVNC on 2026-11-14: user-configurable local keys (Settings, Input, Local shortcuts) stay with Windows.
 //
 
 #include "WinHooks.h"
@@ -116,9 +117,93 @@ WinHooks::HookKeyAction WinHooks::decideKeyAction(DWORD vkCode, DWORD flags)
   return HOOK_KEY_POST;
 }
 
+unsigned WinHooks::localKeyIndex(DWORD vkCode, bool extended)
+{
+  return (vkCode & 0xff) | (extended ? 0x100 : 0);
+}
+
+WinHooks::LocalKeySet WinHooks::parseLocalKeys(const TCHAR *text)
+{
+  LocalKeySet keys;
+  if (text == 0) {
+    return keys;
+  }
+  const TCHAR *p = text;
+  while (*p != 0) {
+    // One entry: up to the next comma, spaces around it ignored.
+    const TCHAR *end = p;
+    while (*end != 0 && *end != _T(',')) end++;
+    const TCHAR *b = p;
+    const TCHAR *e = end;
+    while (b < e && (*b == _T(' ') || *b == _T('\t'))) b++;
+    while (e > b && (e[-1] == _T(' ') || e[-1] == _T('\t'))) e--;
+    // Two hex digits and the suffix: "BE" is a key, "BEe" its extended key.
+    bool extended = e - b == 3 && (e[-1] == _T('e') || e[-1] == _T('E'));
+    if (extended) e--;
+    unsigned vk = 0;
+    bool valid = e > b && e - b <= 2;
+    for (const TCHAR *c = b; valid && c < e; c++) {
+      unsigned digit;
+      if (*c >= _T('0') && *c <= _T('9')) digit = *c - _T('0');
+      else if (*c >= _T('a') && *c <= _T('f')) digit = *c - _T('a') + 10;
+      else if (*c >= _T('A') && *c <= _T('F')) digit = *c - _T('A') + 10;
+      else { valid = false; break; }
+      vk = vk * 16 + digit;
+    }
+    if (valid && vk >= 0x01 && vk <= 0xFE) {
+      keys.set(localKeyIndex(vk, extended));
+    }
+    p = *end != 0 ? end + 1 : end;
+  }
+  return keys;
+}
+
+StringStorage WinHooks::formatLocalKeys(const LocalKeySet &keys)
+{
+  StringStorage text;
+  for (unsigned i = 0; i < keys.size(); i++) {
+    if (!keys.test(i)) continue;
+    StringStorage entry;
+    entry.format(_T("%s%02X%s"), text.isEmpty() ? _T("") : _T(","), i & 0xff,
+                 (i & 0x100) ? _T("e") : _T(""));
+    text.appendString(entry.getString());
+  }
+  return text;
+}
+
+void WinHooks::setLocalKeys(const LocalKeySet &keys)
+{
+  s_keyRouter.setLocalKeys(keys);
+}
+
+bool WinHooks::isLocalKey(DWORD vkCode, bool extended)
+{
+  return s_keyRouter.isLocalKey(vkCode, extended);
+}
+
 WinHooks::KeyRouter::KeyRouter()
 {
+  for (size_t i = 0; i < sizeof(m_localKeys) / sizeof(m_localKeys[0]); i++) {
+    m_localKeys[i] = 0;
+  }
   reset();
+}
+
+void WinHooks::KeyRouter::setLocalKeys(const LocalKeySet &keys)
+{
+  for (size_t w = 0; w < sizeof(m_localKeys) / sizeof(m_localKeys[0]); w++) {
+    unsigned long long word = 0;
+    for (unsigned b = 0; b < 64; b++) {
+      if (keys.test(w * 64 + b)) word |= 1ull << b;
+    }
+    m_localKeys[w] = word;
+  }
+}
+
+bool WinHooks::KeyRouter::isLocalKey(DWORD vkCode, bool extended) const
+{
+  unsigned i = localKeyIndex(vkCode, extended);
+  return ((m_localKeys[i / 64].load() >> (i % 64)) & 1) != 0;
 }
 
 void WinHooks::KeyRouter::reset()
@@ -146,8 +231,10 @@ WinHooks::HookKeyAction WinHooks::KeyRouter::route(DWORD vkCode, DWORD flags,
   // Autorepeat keeps the owner of the first key-down. A key that Windows
   // already has down (held when the hook was installed, or passed through
   // while the hook timed out) stays with Windows until its key-up.
+  // A local key goes to Windows (screenshot tools...), modifiers or not.
   if (owner == OWNER_NONE) {
-    owner = viewerOwnsKeyboard && !systemHasKeyDown ? OWNER_VIEWER : OWNER_SYSTEM;
+    bool local = isLocalKey(vkCode, (flags & LLKHF_EXTENDED) != 0);
+    owner = viewerOwnsKeyboard && !systemHasKeyDown && !local ? OWNER_VIEWER : OWNER_SYSTEM;
   }
   return owner == OWNER_VIEWER ? HOOK_KEY_POST : HOOK_KEY_PASS;
 }

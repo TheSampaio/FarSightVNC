@@ -26,6 +26,7 @@
 // Modified for FarSightVNC on 2026-11-02: optional Direct3D 11 / Direct2D presentation (GpuPresenter) with GDI as the automatic fallback.
 // Modified for FarSightVNC on 2026-11-03: local pointer movement is reported to a listener (full screen toolbar).
 // Modified for FarSightVNC on 2026-11-11: the remote screen always fits the window (no scale modes, no scroll bars).
+// Modified for FarSightVNC on 2026-11-14: local keys (Settings, Input) are not sent to the server.
 //
 
 #include "DesktopWindow.h"
@@ -305,6 +306,14 @@ bool DesktopWindow::onKey(WPARAM wParam, LPARAM lParam)
     }
   }
 
+  // A local key is for Windows and the local applications, also when the
+  // hook is off (window not active, not connected...). Its key-up still goes
+  // on: RfbKeySym ignores a key-up it did not press, and releases a key that
+  // was pressed before it became local.
+  bool isDown = (lParam & 0x80000000) == 0;
+  if (isDown && WinHooks::isLocalKey(virtualKey, (lParam & 0x1000000) != 0)) {
+    return true;
+  }
   if (!m_conConf->isViewOnly()) {
     m_rfbKeySym->processKeyEvent(virtualKey,
                                  additionalInfo);

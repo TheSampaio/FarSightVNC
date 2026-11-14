@@ -22,6 +22,7 @@
 //-------------------------------------------------------------------------
 //
 // Modified for FarSightVNC on 2026-11-11: theme choice (Auto, Light, Dark) of the Settings page.
+// Modified for FarSightVNC on 2026-11-14: local keys (LocalKeys) of the Settings page.
 //
 
 #include "ViewerConfig.h"
@@ -87,6 +88,10 @@ bool ViewerConfig::loadFromStorage(SettingsManager *storage)
   if (storage->getInt(_T("Theme"), &theme)) {
     setTheme(theme);
   }
+  StringStorage localKeys;
+  if (storage->getString(_T("LocalKeys"), &localKeys)) {
+    setLocalKeys(localKeys.getString());
+  }
 
   return loadAllOk;
 }
@@ -101,6 +106,10 @@ bool ViewerConfig::saveToStorage(SettingsManager *storage) const
   TEST_FAIL(storage->setBoolean(_T("NoToolbar"), m_showToolbar), saveAllOk);
   TEST_FAIL(storage->setBoolean(_T("SkipFullScreenPrompt"), !m_promptOnFullscreen), saveAllOk);
   TEST_FAIL(storage->setInt(_T("Theme"), m_theme), saveAllOk);
+  {
+    AutoLock l(&m_cs);
+    TEST_FAIL(storage->setString(_T("LocalKeys"), m_localKeys.getString()), saveAllOk);
+  }
 
   return saveAllOk;
 }
@@ -220,6 +229,18 @@ int ViewerConfig::getTheme() const
 {
   AutoLock l(&m_cs);
   return m_theme;
+}
+
+void ViewerConfig::setLocalKeys(const TCHAR *localKeys)
+{
+  AutoLock l(&m_cs);
+  m_localKeys = localKeys != 0 ? localKeys : _T("");
+}
+
+void ViewerConfig::getLocalKeys(StringStorage *localKeys) const
+{
+  AutoLock l(&m_cs);
+  *localKeys = m_localKeys;
 }
 
 const TCHAR *ViewerConfig::getPathToLogFile() const
