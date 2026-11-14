@@ -54,6 +54,17 @@ inline float listHeight(float clientDips, float listTop, float bottomMargin, flo
   return (std::max)(minHeight, clientDips - bottomMargin - listTop);
 }
 
+// Height of the list viewport that is actually visible: listHeight(), but
+// never past the bottom of the client area (and never negative). The scroll
+// range, the thumb and Page Up/Down use it: with the taller minimum height
+// the last rows of a short window could never be scrolled into view.
+inline float visibleListHeight(float clientDips, float listTop, float bottomMargin,
+                               float minHeight)
+{
+  float height = listHeight(clientDips, listTop, bottomMargin, minHeight);
+  return (std::max)(0.0f, (std::min)(height, clientDips - listTop));
+}
+
 // True when client y is inside the list viewport; *listY then receives the
 // matching list coordinate at the scroll offset.
 inline bool listPoint(const HomeListGeometry &list, float scroll, float clientY, float *listY)

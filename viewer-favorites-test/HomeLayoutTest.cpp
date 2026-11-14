@@ -58,6 +58,30 @@ void testHomeLayout(void (*check)(bool, const char *))
   check(closeTo(fsv::shell::listHeight(100.0f, 250.0f, 32.0f, 140.0f), 140.0f),
         "window shorter than the fixed part keeps the minimum");
 
+  // Visible viewport: the minimum height is cut at the bottom of the client.
+  check(closeTo(fsv::shell::visibleListHeight(600.0f, 250.0f, 32.0f, 140.0f), 318.0f),
+        "visible list fills down to the bottom margin");
+  check(closeTo(fsv::shell::visibleListHeight(300.0f, 250.0f, 32.0f, 140.0f), 50.0f),
+        "short window: visible list ends at the client bottom");
+  check(closeTo(fsv::shell::visibleListHeight(400.0f, 250.0f, 32.0f, 140.0f), 140.0f),
+        "minimum height kept while it fits in the client");
+  check(closeTo(fsv::shell::visibleListHeight(100.0f, 250.0f, 32.0f, 140.0f), 0.0f),
+        "window shorter than the fixed part has no visible list");
+  {
+    // Short window, content 500: the last row must be reachable, so the
+    // scroll range follows the visible 50, not the minimum 140.
+    float visible = fsv::shell::visibleListHeight(300.0f, 250.0f, 32.0f, 140.0f);
+    check(closeTo(fsv::shell::clampScroll(1000.0f, 500.0f, visible), 450.0f),
+          "short window scrolls to the last row");
+    float top = -1.0f;
+    float height = -1.0f;
+    check(fsv::shell::scrollThumb(450.0f, 500.0f, visible, 24.0f, &top, &height) &&
+          closeTo(height, 24.0f) && closeTo(top + height, visible),
+          "short window thumb ends at the visible bottom");
+    check(!fsv::shell::scrollThumb(0.0f, 500.0f, 0.0f, 24.0f, &top, &height),
+          "no thumb without a visible list");
+  }
+
   // Rows in list coordinates: header 0-28, rows 28-84 and 86-142, 144-200.
   HomeListGeometry list = { 250.0f, 400.0f };
   HomeRowSpan rows[] = { { 28.0f, 84.0f }, { 86.0f, 142.0f }, { 144.0f, 200.0f } };

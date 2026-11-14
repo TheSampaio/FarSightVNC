@@ -674,9 +674,11 @@ void HomePage::layout()
   y += kLinkHeight + kSectionGap;
 
   // The hosts scroll inside the list viewport below the fixed part; their
-  // layout is in list coordinates.
+  // layout is in list coordinates. The viewport ends at the bottom of the
+  // client area at the latest: a short window clips the minimum list height,
+  // and the scroll range, the thumb and Page Up/Down must use what is seen.
   float clientHeight = m_chrome.pixelsToDips(client.bottom - client.top);
-  float viewport = fsv::shell::listHeight(clientHeight, y, kBottomMargin, kListMinHeight);
+  float viewport = fsv::shell::visibleListHeight(clientHeight, y, kBottomMargin, kListMinHeight);
   m_list = D2D1::RectF(left, y, (std::min)(right + kScrollbarGutter, width), y + viewport);
   y = 0.0f;
 
@@ -986,9 +988,13 @@ void HomePage::showHostMenu(size_t index, const POINT *screenPoint)
   if (screenPoint != 0) {
     point = *screenPoint;
   } else {
-    // Keyboard: below the start of the row.
+    // Keyboard: below the start of the row, which is scrolled into view
+    // first. The point stays inside the list viewport, never over the fixed
+    // part above it.
+    ensureVisible(ITEM_FIRST_HOST + static_cast<int>(index));
     point.x = m_chrome.dipsToPixels(row.rect.left + kHostIcon);
-    float bottom = (std::min)(m_list.top + row.rect.bottom - m_scroll, m_list.bottom);
+    float bottom = m_list.top + row.rect.bottom - m_scroll;
+    bottom = (std::max)(m_list.top, (std::min)(bottom, m_list.bottom));
     point.y = m_chrome.dipsToPixels(bottom);
     ClientToScreen(m_hwnd, &point);
   }
