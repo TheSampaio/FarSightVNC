@@ -12,6 +12,7 @@
 #include "ZipReader.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <utility>
 
 namespace fsv::update {
@@ -25,6 +26,7 @@ constexpr wchar_t kIncludePrereleasesValue[] = L"IncludePrereleases";
 constexpr wchar_t kSkippedVersionValue[] = L"SkippedVersion";
 constexpr wchar_t kLastCheckValue[] = L"LastCheck";
 constexpr wchar_t kNextCheckValue[] = L"NextCheckNotBefore";
+constexpr wchar_t kPendingReleaseValue[] = L"PendingRelease";
 constexpr wchar_t kPolicySubKey[] = L"SOFTWARE\\Policies\\FarSightVNC\\Viewer\\Updater";
 constexpr wchar_t kPolicyValue[] = L"DisableUpdateCheck";
 constexpr DWORD kMaxVersionStringChars = 32;
@@ -89,6 +91,47 @@ std::optional<std::wstring> readShortString(HKEY key, const wchar_t *name) {
   }
   buffer[kMaxVersionStringChars] = L'\0';
   return std::wstring(buffer);
+}
+
+// REG_BINARY of at most maxBytes; anything else is treated as invalid.
+std::optional<std::string> readBinary(HKEY key, const wchar_t *name, std::size_t maxBytes) {
+  DWORD type = 0;
+  DWORD size = 0;
+  if (::RegQueryValueExW(key, name, nullptr, &type, nullptr, &size) != ERROR_SUCCESS ||
+      type != REG_BINARY || size > maxBytes) {
+    return std::nullopt;
+  }
+  std::string value(size, '\0');
+  if (size != 0 && ::RegQueryValueExW(key, name, nullptr, &type,
+                                      reinterpret_cast<LPBYTE>(value.data()), &size) !=
+                       ERROR_SUCCESS) {
+    return std::nullopt;
+  }
+  value.resize(size);
+  return value;
+}
+
+bool writeBinary(HKEY key, const wchar_t *name, const std::string &value) {
+  return ::RegSetValueExW(key, name, 0, REG_BINARY, reinterpret_cast<const BYTE *>(value.data()),
+                          static_cast<DWORD>(value.size())) == ERROR_SUCCESS;
+}
+
+void appendJsonString(std::string &out, std::string_view text) {
+  out += '"';
+  for (const char c : text) {
+    const unsigned char u = static_cast<unsigned char>(c);
+    if (c == '"' || c == '\\') {
+      out += '\\';
+      out += c;
+    } else if (u < 0x20) {
+      char escape[8];
+      std::snprintf(escape, sizeof(escape), "\\u%04x", u);
+      out += escape;
+    } else {
+      out += c;
+    }
+  }
+  out += '"';
 }
 
 bool writeDword(HKEY key, const wchar_t *name, std::uint32_t value) {
@@ -337,6 +380,8 @@ UpdateSettings UpdateSettingsStore::load() const {
         }
         settings.lastCheckUnix = readQword(key.get(), kLastCheckValue).value_or(0);
         settings.nextCheckNotBeforeUnix = readQword(key.get(), kNextCheckValue).value_or(0);
+        settings.pendingRelease =
+            readBinary(key.get(), kPendingReleaseValue, kMaxPendingReleaseBytes).value_or("");
         return settings;
       },
       UpdateSettings{});
@@ -361,6 +406,11 @@ bool UpdateSettingsStore::save(const UpdateSettings &settings) const {
              ok;
         ok = writeQword(key.get(), kLastCheckValue, settings.lastCheckUnix) && ok;
         ok = writeQword(key.get(), kNextCheckValue, settings.nextCheckNotBeforeUnix) && ok;
+        ok = (settings.pendingRelease.empty() ||
+                      settings.pendingRelease.size() > kMaxPendingReleaseBytes
+                  ? deleteValue(key.get(), kPendingReleaseValue)
+                  : writeBinary(key.get(), kPendingReleaseValue, settings.pendingRelease)) &&
+             ok;
         return ok;
       },
       false);
@@ -446,10 +496,13 @@ void recordCheckOutcome(UpdateSettings &settings, const CheckResult &result,
   case CheckResult::Kind::UpToDate:
     settings.lastCheckUnix = nowUnix;
     settings.nextCheckNotBeforeUnix = nowUnix + kCheckIntervalSeconds;
+    settings.pendingRelease.clear();
     break;
   case CheckResult::Kind::UpdateAvailable:
     settings.lastCheckUnix = nowUnix;
-    settings.nextCheckNotBeforeUnix = nowUnix;
+    settings.nextCheckNotBeforeUnix = nowUnix + kCheckIntervalSeconds;
+    settings.pendingRelease =
+        result.release ? serializeReleaseForCache(*result.release) : std::string();
     break;
   case CheckResult::Kind::Failed:
     settings.nextCheckNotBeforeUnix = nowUnix + kRetryAfterFailureSeconds;
@@ -459,6 +512,59 @@ void recordCheckOutcome(UpdateSettings &settings, const CheckResult &result,
         std::max(result.retryAfterUnix, nowUnix + kMinRateLimitBackoffSeconds);
     break;
   }
+}
+
+std::string serializeReleaseForCache(const ReleaseInfo &release) {
+  std::string notes = release.notes;
+  if (notes.size() > kMaxCachedNotesBytes) {
+    std::size_t cut = kMaxCachedNotesBytes;
+    while (cut > 0 && (static_cast<unsigned char>(notes[cut]) & 0xC0) == 0x80) {
+      --cut; // do not split a UTF-8 sequence
+    }
+    notes.resize(cut);
+  }
+  std::string out = "[{\"tag_name\":";
+  appendJsonString(out, release.tag);
+  out += release.draft ? ",\"draft\":true" : ",\"draft\":false";
+  out += release.githubPrerelease ? ",\"prerelease\":true" : ",\"prerelease\":false";
+  out += ",\"published_at\":";
+  appendJsonString(out, release.publishedAt);
+  out += ",\"html_url\":";
+  appendJsonString(out, release.htmlUrl);
+  out += ",\"body\":";
+  appendJsonString(out, notes);
+  out += ",\"assets\":[";
+  for (std::size_t i = 0; i < release.assets.size(); ++i) {
+    const ReleaseAsset &asset = release.assets[i];
+    out += i == 0 ? "{\"name\":" : ",{\"name\":";
+    appendJsonString(out, asset.name);
+    out += ",\"browser_download_url\":";
+    appendJsonString(out, asset.downloadUrl);
+    out += ",\"size\":" + std::to_string(asset.size) + "}";
+  }
+  out += "]}]";
+  return out;
+}
+
+std::optional<ReleaseInfo> cachedAutomaticOffer(const UpdateSettings &settings,
+                                                const Version &current) {
+  if (settings.pendingRelease.empty()) {
+    return std::nullopt;
+  }
+  const std::optional<std::vector<ReleaseInfo>> releases =
+      parseGitHubReleases(settings.pendingRelease);
+  if (!releases) {
+    return std::nullopt;
+  }
+  SelectionOptions options;
+  options.current = current;
+  options.includePrereleases = effectiveIncludePrereleases(settings, current);
+  options.skipped = settings.skipped;
+  options.manual = false;
+  if (const ReleaseInfo *selected = selectUpdate(*releases, options)) {
+    return *selected;
+  }
+  return std::nullopt;
 }
 
 // ------------------------------------------------------ guarded check run
@@ -473,15 +579,20 @@ bool NamedMutexCheckLock::tryAcquire() {
   if (m_owned) {
     return true;
   }
+  m_error = 0;
   if (m_handle == nullptr) {
     m_handle = ::CreateMutexW(nullptr, FALSE, m_name.c_str());
     if (m_handle == nullptr) {
+      m_error = ::GetLastError();
       return false;
     }
   }
   // WAIT_ABANDONED: the previous owner died mid-check; the lock is ours now.
   const DWORD wait = ::WaitForSingleObject(m_handle, 0);
   m_owned = wait == WAIT_OBJECT_0 || wait == WAIT_ABANDONED;
+  if (wait == WAIT_FAILED) {
+    m_error = ::GetLastError();
+  }
   return m_owned;
 }
 
@@ -512,7 +623,12 @@ CheckRun runCheck(CheckTrigger trigger, IHttpClient &http, const IUpdateSettings
   try {
     if (automatic) {
       if (!lock.tryAcquire()) {
-        run.status = CheckRun::Status::Busy;
+        const unsigned long error = lock.lastError();
+        run.status = error == 0 ? CheckRun::Status::Busy : CheckRun::Status::LockFailed;
+        if (error != 0) {
+          run.result.detail = "update check mutex failed (Win32 error " +
+                              std::to_string(error) + ")";
+        }
         run.settings = store.load();
         return run;
       }
@@ -522,6 +638,18 @@ CheckRun runCheck(CheckTrigger trigger, IHttpClient &http, const IUpdateSettings
     run.settings = store.load();
     if (automatic && !isAutomaticCheckDue(run.settings, clock())) {
       run.status = CheckRun::Status::NotDue;
+      if (!run.settings.pendingRelease.empty() && run.settings.autoCheck) {
+        if (std::optional<ReleaseInfo> offer = cachedAutomaticOffer(run.settings, current)) {
+          run.status = CheckRun::Status::Cached;
+          run.result.kind = CheckResult::Kind::UpdateAvailable;
+          run.result.release = std::move(offer);
+        } else {
+          // Installed, skipped or no longer allowed: forget it.
+          run.settings = store.load();
+          run.settings.pendingRelease.clear();
+          store.save(run.settings);
+        }
+      }
       return run;
     }
 

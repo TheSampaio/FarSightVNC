@@ -69,6 +69,11 @@ try {
   Assert-That ((Get-Item $publicKey).Length -eq 72) 'public blob is 72 bytes'
   Assert-That (-not ((& icacls.exe $privateKey) -match '\(I\)')) 'private key has no inherited ACE'
   Assert-That (-not ((& icacls.exe $keys) -match '\(I\)')) 'new key directory has no inherited ACE'
+  $existing = Join-Path $work 'existing-keys'
+  New-Item -ItemType Directory -Force -Path $existing | Out-Null   # inherits the temp ACL
+  Assert-That ((Invoke-Script $keyScript @('-OutDirectory', $existing, '-Id', 'two')) -eq 0) 'key script succeeds in an existing directory'
+  Assert-That (-not ((& icacls.exe (Join-Path $existing 'update-key-two.private.blob')) -match '\(I\)')) 'private key in an existing directory has no inherited ACE'
+  Assert-That (@(Get-ChildItem -LiteralPath $existing -Force -Directory).Count -eq 0) 'no staging directory is left behind'
   Assert-That ((Invoke-Script $keyScript @('-OutDirectory', $keys, '-Id', 'test')) -ne 0) 'key script refuses to overwrite'
   $insideRepo = Join-Path $repoRoot 'tmp-must-not-be-created'
   Assert-That ((Invoke-Script $keyScript @('-OutDirectory', $insideRepo)) -ne 0) 'key script refuses a directory inside the repository'

@@ -511,23 +511,28 @@ struct UpdateController::Impl : public UpdateDialog::Host
     host->updateCloseAllWindows();
   }
 
+  // Each change reloads the stored settings first and saves only its own
+  // value, so a schedule saved meanwhile (worker thread, other process) is kept.
   void onUpdateSkipRequested()
   {
     if (!release) {
       return;
     }
+    settings = store.load();
     settings.skipped = release->version;
     store.save(settings);
   }
 
   void onUpdateAutoCheckToggled(bool enabled)
   {
+    settings = store.load();
     settings.autoCheck = enabled;
     store.save(settings);
   }
 
   void onUpdatePrereleaseToggled(bool enabled)
   {
+    settings = store.load();
     settings.includePrereleases = enabled;
     store.save(settings);
   }
@@ -649,12 +654,36 @@ void UpdateController::onAutoCheckTimer()
   if (now < d.quietUntil) {
     return;
   }
-  if (!isAutomaticCheckDue(d.settings, now)) {
+  // Not due, but a release found earlier is pending: runCheck() offers it
+  // again from the cache (no request).
+  if (!isAutomaticCheckDue(d.settings, now) && d.settings.pendingRelease.empty()) {
     d.log(L"Update: automatic check skipped, not due until " +
           localTimeText(d.settings.nextCheckNotBeforeUnix));
     return;
   }
   d.startCheck(false);
+}
+
+void UpdateController::onShellDestroying(HWND shell)
+{
+  Impl &d = *m_impl;
+  if (!d.dialog.isCreated()) {
+    return;
+  }
+  HWND window = d.dialog.getControl()->getWindow();
+  if (GetWindow(window, GW_OWNER) != shell) {
+    return;
+  }
+  HWND replacement = 0;
+  std::vector<UpdateController::Host::Shell> list = d.shells();
+  for (size_t i = 0; i < list.size(); i++) {
+    if (list[i].window != shell) {
+      replacement = list[i].window;
+      break;
+    }
+  }
+  d.dialog.setOwner(replacement);
+  SetWindowLongPtr(window, GWLP_HWNDPARENT, (LONG_PTR)replacement);
 }
 
 void UpdateController::onDeferredTimer()
@@ -721,6 +750,10 @@ void UpdateController::onCheckDone()
     d.log(kind + L" skipped, another FarSightVNC process is checking");
     return;
   }
+  if (run.status == CheckRun::Status::LockFailed) {
+    d.log(kind + L" skipped: " + widen(run.result.detail.c_str()));
+    return;
+  }
   if (run.status == CheckRun::Status::NotDue) {
     d.log(kind + L" skipped, not due until " +
           localTimeText(run.settings.nextCheckNotBeforeUnix) + L" (checked by another process)");
@@ -733,7 +766,9 @@ void UpdateController::onCheckDone()
   }
   switch (result.kind) {
   case CheckResult::Kind::UpdateAvailable:
-    d.log(kind + L": found " +
+    d.log(kind + (run.status == CheckRun::Status::Cached
+                    ? L": offering again (cached, no request) "
+                    : L": found ") +
           (result.release ? versionText(result.release->version) : std::wstring(L"?")));
     break;
   case CheckResult::Kind::UpToDate:

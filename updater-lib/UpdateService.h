@@ -23,6 +23,10 @@ struct UpdateSettings {
   std::optional<Version> skipped;
   std::uint64_t lastCheckUnix = 0;
   std::uint64_t nextCheckNotBeforeUnix = 0;
+  // The last release found by a check, cached as GitHub-style JSON
+  // (serializeReleaseForCache), so that later launches offer it again
+  // without a request. Empty: nothing pending.
+  std::string pendingRelease;
 };
 
 // Where the settings live. Production uses the registry (UpdateSettingsStore);
@@ -35,7 +39,8 @@ public:
 };
 
 // HKCU\Software\FarSightVNC\Viewer\Updater (values AutoCheck, IncludePrereleases,
-// SkippedVersion, LastCheck, NextCheckNotBefore). Tests pass another subkey.
+// SkippedVersion, LastCheck, NextCheckNotBefore, PendingRelease as REG_BINARY
+// UTF-8 of at most kMaxPendingReleaseBytes). Tests pass another subkey.
 class UpdateSettingsStore final : public IUpdateSettingsStore {
 public:
   explicit UpdateSettingsStore(std::wstring subKey = L"Software\\FarSightVNC\\Viewer\\Updater");
@@ -80,12 +85,28 @@ inline constexpr std::uint64_t kMaxScheduleAheadSeconds = 7 * 24 * 3600;
 // lastCheck is informational only.
 bool isAutomaticCheckDue(const UpdateSettings &settings, std::uint64_t nowUnix);
 
-// UpToDate: lastCheck = now, next = now + interval.
-// UpdateAvailable: lastCheck = now, next = now (offered again next launch
-//   until installed or skipped - "Remind Me Later" persists nothing).
+// UpToDate: lastCheck = now, next = now + interval, pendingRelease cleared.
+// UpdateAvailable: lastCheck = now, next = now + interval, pendingRelease =
+//   the release: later launches offer it again from the cache, without a
+//   request, until it is installed or skipped ("Remind Me Later" persists
+//   nothing else).
 // Failed: next = now + retry. RateLimited: next = max(reset, now + min backoff).
+// Both keep pendingRelease.
 void recordCheckOutcome(UpdateSettings &settings, const CheckResult &result,
                         std::uint64_t nowUnix);
+
+inline constexpr std::size_t kMaxPendingReleaseBytes = 128 * 1024;
+inline constexpr std::size_t kMaxCachedNotesBytes = 64 * 1024;
+
+// The release as a one-element GitHub releases array (parseGitHubReleases
+// reads it back). Notes longer than kMaxCachedNotesBytes are cut at a UTF-8
+// boundary.
+std::string serializeReleaseForCache(const ReleaseInfo &release);
+
+// The cached release if an automatic check would still offer it (newer than
+// `current`, channel allowed, not skipped); nullopt otherwise.
+std::optional<ReleaseInfo> cachedAutomaticOffer(const UpdateSettings &settings,
+                                                const Version &current);
 
 // ------------------------------------------------------ guarded check run
 
@@ -94,8 +115,10 @@ void recordCheckOutcome(UpdateSettings &settings, const CheckResult &result,
 class ICheckLock {
 public:
   virtual ~ICheckLock() = default;
-  virtual bool tryAcquire() = 0; // false: another process holds it
+  virtual bool tryAcquire() = 0; // false: another process holds it, or lastError()
   virtual void release() = 0;    // only after a successful tryAcquire()
+  // Win32 error of the last failed tryAcquire() that was not contention (0: none).
+  virtual unsigned long lastError() const { return 0; }
 };
 
 inline constexpr wchar_t kAutomaticCheckMutexName[] = L"Local\\FarSightVNC-UpdateCheck";
@@ -110,11 +133,13 @@ public:
   NamedMutexCheckLock &operator=(const NamedMutexCheckLock &) = delete;
   bool tryAcquire() override;
   void release() override;
+  unsigned long lastError() const override { return m_error; }
 
 private:
   std::wstring m_name;
   void *m_handle = nullptr;
   bool m_owned = false;
+  unsigned long m_error = 0;
 };
 
 using UnixClock = std::function<std::uint64_t()>;
@@ -123,9 +148,13 @@ enum class CheckTrigger { Automatic, Manual };
 
 struct CheckRun {
   enum class Status {
-    Checked, // the request ran; result holds the outcome
-    NotDue,  // automatic only: the policy says it is not time yet
-    Busy,    // automatic only: another process is checking right now
+    Checked,    // the request ran; result holds the outcome
+    NotDue,     // automatic only: the policy says it is not time yet
+    Busy,       // automatic only: another process is checking right now
+    Cached,     // automatic only: not due, the pending release is offered again
+                //   (result.kind = UpdateAvailable, no request)
+    LockFailed, // automatic only: the named mutex could not be created/waited
+                //   (result.detail has the Win32 error); nothing happened
   };
   Status status = Status::NotDue;
   CheckResult result;      // Checked only
@@ -135,8 +164,10 @@ struct CheckRun {
 // One update check with the persistence around it. Never throws.
 // Automatic: tryAcquire `lock` (held -> Busy, nothing else happens), re-read the
 //   settings from `store` and re-evaluate isAutomaticCheckDue(clock()) (not due ->
-//   NotDue: this keeps several processes to one check per interval), check with
-//   the skipped version honoured, record the outcome, then release the lock.
+//   NotDue: this keeps several processes to one check per interval; a pending
+//   release that is still eligible is offered from the cache instead -> Cached,
+//   one that is not any more is dropped), check with the skipped version
+//   honoured, record the outcome, then release the lock.
 // Manual: no lock and no due test; the skipped version is ignored.
 // Recording re-reads the store right before saving, so only the schedule
 // (LastCheck/NextCheckNotBefore) changes; a cancelled request records nothing.

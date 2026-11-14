@@ -87,13 +87,28 @@ try {
   }
   if ($publicBlob.Length -ne 72) { throw "Unexpected public blob size $($publicBlob.Length) (expected 72)." }
 
-  [System.IO.File]::WriteAllBytes($privatePath, $privateBlob)
-  [System.IO.File]::WriteAllBytes($publicPath, $publicBlob)
-
-  # Private key: current user only, no inherited entry.
-  & icacls.exe $privatePath /inheritance:r /grant:r "*${sid}:(R,W)" | Out-Null
-  if ($LASTEXITCODE -ne 0) { throw "icacls failed (exit $LASTEXITCODE); the private key ACL was not restricted: $privatePath" }
+  # The private blob is never written with a permissive ACL, also in an
+  # existing directory: it goes into a fresh sub-directory that is already
+  # restricted to the current user, gets its own explicit ACL there and is
+  # then moved (a rename on the same volume keeps that ACL) to its name.
+  $staging = Join-Path $outFull ('.new-key-' + [Guid]::NewGuid().ToString('N'))
+  New-Item -ItemType Directory -Path $staging | Out-Null
+  try {
+    & icacls.exe $staging /inheritance:r /grant:r "*${sid}:(OI)(CI)F" | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "icacls failed (exit $LASTEXITCODE); the staging directory ACL was not restricted: $staging" }
+    Assert-NoInheritedAce $staging
+    $stagedPrivate = Join-Path $staging 'private.blob'
+    [System.IO.File]::WriteAllBytes($stagedPrivate, $privateBlob)
+    # Private key: current user only, no inherited entry.
+    & icacls.exe $stagedPrivate /inheritance:r /grant:r "*${sid}:(R,W)" | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "icacls failed (exit $LASTEXITCODE); the private key ACL was not restricted: $stagedPrivate" }
+    Assert-NoInheritedAce $stagedPrivate
+    [System.IO.File]::Move($stagedPrivate, $privatePath)
+  } finally {
+    Remove-Item -LiteralPath $staging -Recurse -Force -ErrorAction SilentlyContinue
+  }
   Assert-NoInheritedAce $privatePath
+  [System.IO.File]::WriteAllBytes($publicPath, $publicBlob)
 
   Write-Host "Private key : $privatePath (keep offline, back it up, never commit it)"
   Write-Host "Public key  : $publicPath"

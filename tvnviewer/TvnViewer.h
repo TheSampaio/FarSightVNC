@@ -29,6 +29,7 @@
 // Modified for FarSightVNC on 2026-11-11: the messages of the removed configuration and about dialogs are gone.
 // Modified for FarSightVNC on 2026-11-14: the automatic update check timer repeats; update notifications are owned by a shell and wait for full screen to end.
 // Modified for FarSightVNC on 2026-11-14: "Restart and Install Now" closes every shell window to install a staged update.
+// Modified for FarSightVNC on 2026-11-14: a CBT hook re-owns the update dialog before its owner shell is destroyed.
 //
 
 #ifndef _TVN_VIEWER_H_
@@ -214,6 +215,12 @@ protected:
   ShellWindow *findShell(HWND hwnd) const;
 
   bool onTimer(WPARAM idTimer);
+
+  // Thread WH_CBT hook: tells the update controller that a shell window is
+  // about to be destroyed, before Windows destroys the windows it owns.
+  static LRESULT CALLBACK cbtHookProc(int code, WPARAM wParam, LPARAM lParam);
+  static TvnViewer *s_hookOwner;
+  HHOOK m_cbtHook;
 
   ViewerCollector m_instances;
   // Top-level windows of the sessions. A shell is deleted after its window

@@ -8,9 +8,12 @@
 //   --protocol 1 --install|--recover --state "<stateDir>" --viewer "<fsvncviewer.exe>"
 //   --arch x64 [--parent-pid N] [--elevated] [--relaunch]
 //
-// --relaunch ("Restart and Install Now" in the viewer): after a successful run
-// the unelevated updater starts <root>\fsvncviewer.exe again, also when the
-// elevated child did the install. The elevated child never starts the viewer.
+// --relaunch ("Restart and Install Now" in the viewer): when the run ends the
+// unelevated updater starts <root>\fsvncviewer.exe again, also when the
+// elevated child did the install, and also after a failure, a declined UAC
+// prompt or nothing to install (the old version is then intact). Only a
+// failed rollback or repair (exit kExitBroken) leaves the viewer closed. The
+// elevated child, or any elevated token, never starts the viewer.
 //
 // No network calls; the only windows are message boxes.
 
@@ -43,6 +46,7 @@ constexpr int kExitOk = 0;
 constexpr int kExitNoUpdate = 3;   // nothing staged / nothing installable
 constexpr int kExitNeedsAdmin = 4; // administrator permission was declined
 constexpr int kExitFailed = 5;     // install or recovery failed
+constexpr int kExitBroken = 6;     // rollback or repair failed: installation may be damaged
 constexpr int kExitUsage = 64;     // unknown or missing arguments
 constexpr int kExitRejected = 65;  // arguments failed validation
 constexpr int kExitInternal = 70;  // unexpected exception
@@ -222,13 +226,33 @@ std::vector<std::wstring> recoveryViewers(const Context &context) {
   return viewers;
 }
 
-// Starts the installed viewer again after "Restart and Install Now". Only the
-// unelevated updater calls this: the viewer must run as the user, never as
-// administrator. CreateProcess with no arguments, working directory = root.
+bool processIsElevated() {
+  HANDLE token = nullptr;
+  if (!::OpenProcessToken(::GetCurrentProcess(), TOKEN_QUERY, &token)) {
+    return true; // unknown: treat as elevated, never relaunch
+  }
+  UniqueHandle owned(token);
+  TOKEN_ELEVATION elevation{};
+  DWORD size = 0;
+  if (!::GetTokenInformation(token, TokenElevation, &elevation, sizeof(elevation), &size)) {
+    return true;
+  }
+  return elevation.TokenIsElevated != 0;
+}
+
+// Starts the installed viewer again after "Restart and Install Now". The
+// viewer must run as the user, never as administrator: an elevated token
+// (the --elevated child, or a user without UAC split token) skips it.
+// CreateProcess with no arguments, working directory = root.
 void relaunchViewer(const Context &context, const Log &log) {
-  std::wstring viewer = joinPath(context.target.root, kViewerExeName);
+  if (context.options.elevated || processIsElevated()) {
+    log.write("relaunch skipped: this updater runs elevated");
+    return;
+  }
+  const std::wstring viewer = joinPath(context.target.root, kViewerExeName);
   if (!fileExists(viewer)) {
-    viewer = context.options.viewer;
+    log.write("relaunch skipped: viewer not found", viewer);
+    return;
   }
   std::wstring commandLine = quoteArgument(viewer);
   std::vector<wchar_t> buffer(commandLine.begin(), commandLine.end());
@@ -339,7 +363,7 @@ int reportInstallFailure(const Context &context, const Log &log, InstallError er
                                   utf8ToWide(version.toString()) + L". " + outcome +
                                   L"Open the releases page to update manually?",
                               MB_ICONWARNING);
-  return kExitFailed;
+  return error == InstallError::RollbackFailed ? kExitBroken : kExitFailed;
 }
 
 // applyInstall with the "viewer restarted meanwhile" retry.
@@ -446,7 +470,7 @@ int runRecover(const Context &context, const Log &log) {
       L"FarSightVNC could not finish repairing an interrupted update. It will try again the "
       L"next time FarSightVNC closes. Open the releases page to update manually?",
       MB_ICONWARNING);
-  return kExitFailed;
+  return kExitBroken;
 }
 
 // --------------------------------------------------------------------- main
@@ -471,6 +495,12 @@ int run(const std::vector<std::wstring> &args) {
     mutex.reset(::CreateMutexW(
         nullptr, FALSE, (std::wstring(kMutexPrefix) + fileName(context.options.stateDir)).c_str()));
     if (mutex.valid() && ::GetLastError() == ERROR_ALREADY_EXISTS) {
+      // Another updater of this installation is already waiting; it installs
+      // when the viewer started here exits again.
+      if (context.options.relaunch) {
+        ensureDirectory(context.options.stateDir);
+        relaunchViewer(context, Log(joinPath(context.options.stateDir, L"updater.log")));
+      }
       return kExitOk;
     }
   }
@@ -483,9 +513,9 @@ int run(const std::vector<std::wstring> &args) {
 
   const int code = context.options.mode == Mode::Install ? runInstall(context, log)
                                                          : runRecover(context, log);
-  // parseUpdaterArguments() refuses --relaunch with --elevated; checked again
-  // here because starting the viewer elevated must never happen.
-  if (code == kExitOk && context.options.relaunch && !context.options.elevated) {
+  // Every terminal outcome leaves the old or the new version intact, except a
+  // failed rollback/repair. relaunchViewer() refuses an elevated process.
+  if (context.options.relaunch && code != kExitBroken) {
     relaunchViewer(context, log);
   }
   return code;

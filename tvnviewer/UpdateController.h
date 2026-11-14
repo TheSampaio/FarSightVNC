@@ -57,6 +57,10 @@ public:
   void onAutoCheckTimer();
   // Short timer while an automatic result waits for full screen to end.
   void onDeferredTimer();
+  // A shell window is about to be destroyed (called before its owned windows
+  // go): the update dialog it owns is re-owned to another visible shell, or
+  // to none, so that it survives.
+  void onShellDestroying(HWND shell);
   // "Check for Updates..." menu entries. Runs unless disabled by policy.
   void requestManualCheck();
 

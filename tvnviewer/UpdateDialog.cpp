@@ -322,6 +322,9 @@ BOOL UpdateDialog::onDestroy()
   WindowsApplication::removeModelessDialog(m_ctrlThis.getWindow());
   RemoveWindowSubclass(m_ctrlThis.getWindow(), subclassProc, SUBCLASS_ID);
   m_richNotes = false; // the RichEdit is destroyed with the dialog
+  // Also when the window goes without close() (its owner was destroyed):
+  // never keep a handle that Windows may give to another window.
+  m_ctrlThis.setWindow(NULL);
   return FALSE;
 }
 

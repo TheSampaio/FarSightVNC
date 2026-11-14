@@ -53,31 +53,43 @@ inline bool parseUpdaterPid(const std::wstring &text, std::uint32_t &pid) {
 
 } // namespace detail
 
-// Strict parse: any unknown argument, an option without its value, a missing
-// required argument, or --relaunch with --elevated returns nullopt.
+// Strict parse: any unknown argument, an option given twice (including a
+// second mode flag), an option without its value or with a value that starts
+// with "--", a missing required argument, or --relaunch with --elevated
+// returns nullopt.
 inline std::optional<UpdaterOptions> parseUpdaterArguments(const std::vector<std::wstring> &args) {
   UpdaterOptions options;
   bool protocolOk = false;
   bool haveMode = false;
+  bool seenProtocol = false, seenState = false, seenViewer = false, seenArch = false;
+  bool seenPid = false, seenElevated = false, seenRelaunch = false;
+  // Marks a flag as seen; false if it already was.
+  const auto once = [](bool &seen) {
+    const bool first = !seen;
+    seen = true;
+    return first;
+  };
   for (std::size_t i = 0; i < args.size(); ++i) {
     const std::wstring &arg = args[i];
-    const bool hasValue = i + 1 < args.size();
+    const bool hasValue = i + 1 < args.size() && args[i + 1].rfind(L"--", 0) != 0;
     if (arg == L"--install" || arg == L"--recover") {
+      if (!once(haveMode)) {
+        return std::nullopt;
+      }
       options.mode = arg == L"--install" ? UpdaterMode::Install : UpdaterMode::Recover;
-      haveMode = true;
-    } else if (arg == L"--elevated") {
+    } else if (arg == L"--elevated" && once(seenElevated)) {
       options.elevated = true;
-    } else if (arg == L"--relaunch") {
+    } else if (arg == L"--relaunch" && once(seenRelaunch)) {
       options.relaunch = true;
-    } else if (arg == L"--protocol" && hasValue) {
+    } else if (arg == L"--protocol" && hasValue && once(seenProtocol)) {
       protocolOk = args[++i] == L"1";
-    } else if (arg == L"--state" && hasValue) {
+    } else if (arg == L"--state" && hasValue && once(seenState)) {
       options.stateDir = args[++i];
-    } else if (arg == L"--viewer" && hasValue) {
+    } else if (arg == L"--viewer" && hasValue && once(seenViewer)) {
       options.viewer = args[++i];
-    } else if (arg == L"--arch" && hasValue) {
+    } else if (arg == L"--arch" && hasValue && once(seenArch)) {
       options.arch = args[++i];
-    } else if (arg == L"--parent-pid" && hasValue) {
+    } else if (arg == L"--parent-pid" && hasValue && once(seenPid)) {
       if (!detail::parseUpdaterPid(args[++i], options.parentPid)) {
         return std::nullopt;
       }
