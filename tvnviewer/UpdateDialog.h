@@ -62,6 +62,9 @@ public:
   virtual ~UpdateDialog();
 
   void setOptions(bool autoCheck, bool includePrereleases);
+  // The window that owns the dialog from the next present() on (a shell
+  // window; 0: unowned). An owned dialog always stays above its owner.
+  void setOwner(HWND owner);
   void setAvailable(const AvailableInfo &info);
   // Creates the window if needed. text is the message of the states that have one.
   void present(State state, const std::wstring &text, Focus focus);
@@ -97,6 +100,7 @@ private:
   std::uint64_t m_received;
   std::uint64_t m_total;
   bool m_marquee;
+  HWND m_owner;
 };
 
 #endif

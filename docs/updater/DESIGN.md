@@ -76,11 +76,15 @@ Why a separate updater exe: the files must be replaced after the viewer exits, t
 
 ## Check policy (`UpdateService.h`)
 
-- An automatic check runs at most once per launch, only when the policy is due:
+- Automatic checks run only when the policy is due (`isAutomaticCheckDue`, schedule in `NextCheckNotBefore`):
   - every 24 h after an up-to-date result;
   - every 6 h after a failure;
   - after a rate limit, respecting the `X-RateLimit-Reset` time.
-- If an update was found but not acted on ("Remind Me Later"), the next launch checks again and offers it again.
+- The viewer evaluates the policy 5 s after start and then every 30 min (`TvnViewer::TIMER_UPDATE_STARTUP`, re-armed with `TIMER_UPDATE_PERIOD`), so a viewer left open for days still checks once a day. Only one check runs at a time per process.
+- Cross-process: `runCheck` takes the named mutex `Local\FarSightVNC-UpdateCheck` without waiting (held by another viewer process: this tick is skipped), re-reads the settings from the registry and re-evaluates the policy just before the request, and records the outcome before releasing it. Several viewer processes therefore make one request per interval in total. Recording re-reads the settings right before saving, so only `LastCheck`/`NextCheckNotBefore` change. A request cancelled because the viewer is exiting records nothing (the next launch checks again).
+- If an update was found but not acted on ("Remind Me Later"), the next launch checks again and offers it again. The same process does not offer it again for 24 h.
+- Manual checks ("Check for Updates" in Settings > Updates) ignore the interval, the lock and the skipped version; their outcome is recorded the same way.
+- Every automatic outcome is written to the viewer log (`Update: automatic check ...`: up to date, found vX, failed with the reason, skipped because it is not due or because another process is checking).
 - Requests send only the User-Agent `FarSightVNC-Updater/<ver>` and `Accept`. There is no telemetry.
 - Administrator kill switch: `HKLM\SOFTWARE\Policies\FarSightVNC\Viewer\Updater\DisableUpdateCheck = 1`.
 - Settings are stored in `HKCU\Software\FarSightVNC\Viewer\Updater`, alongside the existing FarSightVNC key `...\Viewer\Favorites`. The TightVNC keys are untouched.
@@ -104,8 +108,9 @@ Why a separate updater exe: the files must be replaced after the viewer exits, t
 ## Flow
 
 1. **Check** (viewer worker thread): `checkForUpdate`, then `PostMessage` to the TvnViewer hidden window, then `UpdateDialog`.
-   - Automatic results are shown without activation (no focus stealing) and only when an update exists.
-   - Automatic failures are silent; only manual checks report errors.
+   - Automatic results are shown without activation (no focus stealing) and only when an update exists. The dialog is owned by the foreground shell window of this process (else the first visible shell; unowned when only the tray icon is left), raised with `SetWindowPos(HWND_TOP, SWP_NOACTIVATE)`, and the taskbar button flashes (`FLASHW_TRAY | FLASHW_TIMERNOFG`) until FarSightVNC comes to the foreground. An owned dialog always stays above its shell, so it cannot be hidden behind it.
+   - Never over a full screen session: while any visible shell is in full screen, the notification waits (a 2 s timer, `TIMER_UPDATE_DEFERRED`) and appears when no shell is in full screen any more. Polling was chosen over a hook in `ShellWindow` because it needs no change to the shell and costs nothing measurable. A dialog that was already open when the user enters full screen stays where it is.
+   - Automatic failures are not shown; they are logged. Only manual checks report errors.
 2. **Download and Install** (viewer worker thread): `stageUpdate` into `%LOCALAPPDATA%\FarSightVNC\Updates\<hash(root)>\pending`. The dialog shows progress and a Cancel button. Sessions keep running.
    - Before downloading, the viewer probes `canWriteDirectory(root)`. If the folder is not writable, the dialog says administrator approval will be requested at install time.
 3. **Ready**: the dialog says the update will be installed after all FarSightVNC windows are closed. The user can cancel, which discards the staged update.

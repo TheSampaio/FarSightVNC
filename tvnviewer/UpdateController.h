@@ -14,21 +14,43 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <vector>
 
 class UpdateController
 {
 public:
+  // What the controller needs from the application (TvnViewer).
+  class Host
+  {
+  public:
+    struct Shell
+    {
+      HWND window;
+      bool fullscreen;
+    };
+    virtual ~Host() {}
+    // The visible, live shell windows of this process.
+    virtual std::vector<Shell> updateShells() = 0;
+    // One line in the viewer log (automatic check outcomes and the like).
+    virtual void updateLog(const std::wstring &line) = 0;
+  };
+
   // mainWindow is the hidden window of TvnViewer; it receives the messages of
-  // the worker thread. Nothing slow happens here.
-  explicit UpdateController(HWND mainWindow);
+  // the worker thread and the timers. Nothing slow happens here.
+  UpdateController(HWND mainWindow, Host *host);
   // Cancels the running operation and joins the worker thread.
   ~UpdateController();
 
   UpdateController(const UpdateController &) = delete;
   UpdateController &operator=(const UpdateController &) = delete;
 
-  // One-shot startup timer: automatic check if the policy says it is due.
-  void onStartupTimer();
+  // Periodic timer (first tick shortly after start): automatic check if the
+  // policy says it is due. A long-lived process thus checks again after the
+  // interval; the policy and a cross-process lock keep it to one check per
+  // interval for all viewer processes of the user.
+  void onAutoCheckTimer();
+  // Short timer while an automatic result waits for full screen to end.
+  void onDeferredTimer();
   // "Check for Updates..." menu entries. Runs unless disabled by policy.
   void requestManualCheck();
 

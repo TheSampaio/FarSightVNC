@@ -18,6 +18,7 @@
 #include <map>
 #include <optional>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -347,6 +348,180 @@ void testPolicy() {
   for (int i = 0; i <= static_cast<int>(HttpError::Other); ++i) {
     const std::string name = httpErrorName(static_cast<HttpError>(i));
     CHECK(!name.empty() && name != "unknown");
+  }
+}
+
+// ------------------------------------------------------ guarded check run
+
+class MemoryStore final : public IUpdateSettingsStore {
+public:
+  mutable UpdateSettings stored;
+  mutable int saves = 0;
+  UpdateSettings load() const override { return stored; }
+  bool save(const UpdateSettings &settings) const override {
+    stored = settings;
+    ++saves;
+    return true;
+  }
+};
+
+class FakeLock final : public ICheckLock {
+public:
+  bool heldElsewhere = false;
+  int acquired = 0;
+  int released = 0;
+  bool tryAcquire() override {
+    if (heldElsewhere) {
+      return false;
+    }
+    ++acquired;
+    return true;
+  }
+  void release() override { ++released; }
+};
+
+struct CheckBench {
+  MemoryStore store;
+  FakeLock lock;
+  FakeHttpClient http;
+  std::uint64_t now = 1'800'000'000;
+  Version current = versionOf("0.2.1a");
+
+  CheckRun run(CheckTrigger trigger) {
+    return runCheck(trigger, http, store, lock, current, [this] { return now; });
+  }
+  int requests() const { return static_cast<int>(http.requests.size()); }
+};
+
+void testGuardedCheck() {
+  const std::string url = kReleasesApiUrl;
+  const std::string newer = "[" + releaseJson("v0.3.0a", true) + "]";
+  const std::string same = "[" + releaseJson("v0.2.1a", true) + "]";
+  constexpr std::uint64_t day = kCheckIntervalSeconds;
+
+  { // up to date: next automatic check exactly 24 h later
+    CheckBench b;
+    b.http.routes[url] = okRoute(same);
+    const std::uint64_t start = b.now;
+    CheckRun run = b.run(CheckTrigger::Automatic);
+    CHECK(run.status == CheckRun::Status::Checked);
+    CHECK(run.result.kind == CheckResult::Kind::UpToDate);
+    CHECK(b.store.stored.lastCheckUnix == start);
+    CHECK(b.store.stored.nextCheckNotBeforeUnix == start + day);
+    CHECK(b.lock.acquired == 1 && b.lock.released == 1);
+    b.now = start + day - 1;
+    CHECK(b.run(CheckTrigger::Automatic).status == CheckRun::Status::NotDue);
+    CHECK(b.requests() == 1);
+    CHECK(b.lock.acquired == 2 && b.lock.released == 2); // released when not due too
+    b.now = start + day;
+    CHECK(b.run(CheckTrigger::Automatic).status == CheckRun::Status::Checked);
+    CHECK(b.requests() == 2);
+    CHECK(b.store.stored.nextCheckNotBeforeUnix == start + 2 * day);
+  }
+  { // failure: retried after 6 h, not before
+    CheckBench b;
+    b.http.routes[url] = errorRoute(HttpError::Offline);
+    const std::uint64_t start = b.now;
+    CheckRun run = b.run(CheckTrigger::Automatic);
+    CHECK(run.status == CheckRun::Status::Checked);
+    CHECK(run.result.kind == CheckResult::Kind::Failed);
+    CHECK(b.store.stored.lastCheckUnix == 0);
+    CHECK(b.store.stored.nextCheckNotBeforeUnix == start + kRetryAfterFailureSeconds);
+    b.now = start + kRetryAfterFailureSeconds - 1;
+    CHECK(b.run(CheckTrigger::Automatic).status == CheckRun::Status::NotDue);
+    b.now = start + kRetryAfterFailureSeconds;
+    CHECK(b.run(CheckTrigger::Automatic).status == CheckRun::Status::Checked);
+    CHECK(b.requests() == 2);
+  }
+  { // rate limit: the reset time is respected
+    CheckBench b;
+    FakeHttpClient::Route route = errorRoute(HttpError::RateLimited, 403);
+    route.rateLimitReset = b.now + 2 * 3600;
+    b.http.routes[url] = route;
+    const std::uint64_t start = b.now;
+    CHECK(b.run(CheckTrigger::Automatic).result.kind == CheckResult::Kind::RateLimited);
+    CHECK(b.store.stored.nextCheckNotBeforeUnix == start + 2 * 3600);
+    b.now = start + 2 * 3600 - 1;
+    CHECK(b.run(CheckTrigger::Automatic).status == CheckRun::Status::NotDue);
+    b.now = start + 2 * 3600;
+    CHECK(b.run(CheckTrigger::Automatic).status == CheckRun::Status::Checked);
+  }
+  { // found: due again on the next launch ("Remind Me Later")
+    CheckBench b;
+    b.http.routes[url] = okRoute(newer);
+    CheckRun run = b.run(CheckTrigger::Automatic);
+    CHECK(run.result.kind == CheckResult::Kind::UpdateAvailable);
+    CHECK(run.result.release && run.result.release->tag == "v0.3.0a");
+    b.now += 60;
+    CHECK(b.run(CheckTrigger::Automatic).status == CheckRun::Status::Checked);
+    CHECK(b.requests() == 2);
+  }
+  { // manual ignores the interval and the skipped version; automatic honours both
+    CheckBench b;
+    b.http.routes[url] = okRoute(newer);
+    b.store.stored.nextCheckNotBeforeUnix = b.now + day;
+    b.store.stored.skipped = versionOf("0.3.0a");
+    CHECK(b.run(CheckTrigger::Automatic).status == CheckRun::Status::NotDue);
+    CHECK(b.requests() == 0);
+    CheckRun manual = b.run(CheckTrigger::Manual);
+    CHECK(manual.status == CheckRun::Status::Checked);
+    CHECK(manual.result.kind == CheckResult::Kind::UpdateAvailable);
+    CHECK(b.requests() == 1);
+    CHECK(b.lock.acquired == 1); // only the automatic run took the lock
+    b.store.stored.nextCheckNotBeforeUnix = 0;
+    CHECK(b.run(CheckTrigger::Automatic).result.kind == CheckResult::Kind::UpToDate);
+  }
+  { // manual check while automatic checks are off
+    CheckBench b;
+    b.http.routes[url] = okRoute(same);
+    b.store.stored.autoCheck = false;
+    CHECK(b.run(CheckTrigger::Automatic).status == CheckRun::Status::NotDue);
+    CHECK(b.run(CheckTrigger::Manual).status == CheckRun::Status::Checked);
+    CHECK(!b.store.stored.autoCheck);
+  }
+  { // another process holds the lock: nothing is requested or saved
+    CheckBench b;
+    b.http.routes[url] = okRoute(same);
+    b.lock.heldElsewhere = true;
+    CHECK(b.run(CheckTrigger::Automatic).status == CheckRun::Status::Busy);
+    CHECK(b.requests() == 0);
+    CHECK(b.store.saves == 0);
+    CHECK(b.lock.released == 0);
+    // ...and when it checked meanwhile, this process finds it not due.
+    b.lock.heldElsewhere = false;
+    b.store.stored.nextCheckNotBeforeUnix = b.now + day;
+    CHECK(b.run(CheckTrigger::Automatic).status == CheckRun::Status::NotDue);
+    CHECK(b.requests() == 0);
+  }
+  { // a cancelled request (viewer exiting) records nothing
+    CheckBench b;
+    b.http.routes[url] = errorRoute(HttpError::Cancelled);
+    CheckRun run = b.run(CheckTrigger::Automatic);
+    CHECK(run.status == CheckRun::Status::Checked);
+    CHECK(run.result.httpError == HttpError::Cancelled);
+    CHECK(b.store.saves == 0);
+    CHECK(b.lock.released == 1);
+  }
+  { // the real named mutex: a second owner (another thread here) is refused
+    wchar_t name[96];
+    swprintf_s(name, L"Local\\FarSightVNC-UpdateCheck-test-%lu-%llu", ::GetCurrentProcessId(),
+               static_cast<unsigned long long>(::GetTickCount64()));
+    NamedMutexCheckLock first(name);
+    CHECK(first.tryAcquire());
+    bool otherGot = true;
+    std::thread([&] {
+      NamedMutexCheckLock second(name);
+      otherGot = second.tryAcquire();
+    }).join();
+    CHECK(!otherGot);
+    first.release();
+    bool otherAfter = false;
+    std::thread([&] {
+      NamedMutexCheckLock second(name);
+      otherAfter = second.tryAcquire();
+      second.release();
+    }).join();
+    CHECK(otherAfter);
   }
 }
 
@@ -982,6 +1157,7 @@ void runUpdateServiceTests() {
   CHECK(probe.valid());
   testCheck();
   testPolicy();
+  testGuardedCheck();
   testSettings();
   testStageSuccess(temp);
   testStageAssetErrors(temp);

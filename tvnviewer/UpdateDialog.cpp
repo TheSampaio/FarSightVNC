@@ -76,7 +76,8 @@ UpdateDialog::UpdateDialog(Host *host)
   m_includePrereleases(false),
   m_received(0),
   m_total(0),
-  m_marquee(false)
+  m_marquee(false),
+  m_owner(0)
 {
 }
 
@@ -94,6 +95,11 @@ void UpdateDialog::setOptions(bool autoCheck, bool includePrereleases)
     CheckDlgButton(m_ctrlThis.getWindow(), IDC_UPDATE_PRERELEASE,
                    m_includePrereleases ? BST_CHECKED : BST_UNCHECKED);
   }
+}
+
+void UpdateDialog::setOwner(HWND owner)
+{
+  m_owner = owner;
 }
 
 void UpdateDialog::setAvailable(const AvailableInfo &info)
@@ -127,6 +133,10 @@ void UpdateDialog::present(State state, const std::wstring &text, Focus focus)
   if (window == 0) {
     return;
   }
+  if (m_owner != 0 && IsWindow(m_owner) &&
+      (HWND)GetWindowLongPtr(window, GWLP_HWNDPARENT) != m_owner) {
+    SetWindowLongPtr(window, GWLP_HWNDPARENT, (LONG_PTR)m_owner);
+  }
   switch (focus) {
   case Focus::Activate:
     ShowWindow(window, SW_SHOW);
@@ -141,11 +151,21 @@ void UpdateDialog::present(State state, const std::wstring &text, Focus focus)
       }
     }
     break;
-  case Focus::NoActivate:
+  case Focus::NoActivate: {
+    // Visible without taking the focus: on top of the other windows (and
+    // always above its owner shell), with the taskbar button flashing until
+    // FarSightVNC comes to the foreground.
     if (!IsWindowVisible(window)) {
       ShowWindow(window, SW_SHOWNOACTIVATE);
     }
+    SetWindowPos(window, HWND_TOP, 0, 0, 0, 0, SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE);
+    FLASHWINFO flash = {};
+    flash.cbSize = sizeof(flash);
+    flash.hwnd = (m_owner != 0 && IsWindow(m_owner)) ? m_owner : window;
+    flash.dwFlags = FLASHW_TRAY | FLASHW_TIMERNOFG;
+    FlashWindowEx(&flash);
     break;
+  }
   case Focus::Keep:
     break;
   }

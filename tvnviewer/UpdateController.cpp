@@ -16,6 +16,8 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <utility>
+#include <vector>
 
 using namespace fsv::update;
 
@@ -170,14 +172,28 @@ std::uint64_t unixNow()
   return static_cast<std::uint64_t>(std::time(nullptr));
 }
 
+// "YYYY-MM-DD HH:MM" in local time, for the log.
+std::wstring localTimeText(std::uint64_t unixTime)
+{
+  std::time_t when = static_cast<std::time_t>(unixTime);
+  std::tm local = {};
+  if (localtime_s(&local, &when) != 0) {
+    return std::to_wstring(unixTime);
+  }
+  wchar_t text[32];
+  swprintf_s(text, L"%04d-%02d-%02d %02d:%02d", local.tm_year + 1900, local.tm_mon + 1,
+             local.tm_mday, local.tm_hour, local.tm_min);
+  return text;
+}
+
 } // namespace
 
 struct UpdateController::Impl : public UpdateDialog::Host
 {
   enum class Operation { None, Check, Stage };
 
-  explicit Impl(HWND mainWindow)
-  : window(mainWindow), dialog(this) {}
+  Impl(HWND mainWindow, UpdateController::Host *appHost)
+  : window(mainWindow), host(appHost), dialog(this) {}
 
   ~Impl()
   {
@@ -212,10 +228,74 @@ struct UpdateController::Impl : public UpdateDialog::Host
 
   // ----------------------------------------------------------- UI helpers
 
+  void log(const std::wstring &line)
+  {
+    if (host != 0) {
+      host->updateLog(line);
+    }
+  }
+
+  std::vector<UpdateController::Host::Shell> shells()
+  {
+    if (host == 0) {
+      return std::vector<UpdateController::Host::Shell>();
+    }
+    return host->updateShells();
+  }
+
+  bool fullscreenSessionShown()
+  {
+    std::vector<UpdateController::Host::Shell> list = shells();
+    for (size_t i = 0; i < list.size(); i++) {
+      if (list[i].fullscreen) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // The foreground shell window if it belongs to this process, else the first
+  // visible shell, else none (only the tray icon is left).
+  HWND dialogOwner()
+  {
+    std::vector<UpdateController::Host::Shell> list = shells();
+    HWND foreground = GetForegroundWindow();
+    for (size_t i = 0; i < list.size(); i++) {
+      if (list[i].window == foreground) {
+        return foreground;
+      }
+    }
+    return list.empty() ? 0 : list.front().window;
+  }
+
+  void stopDeferral()
+  {
+    if (deferred) {
+      deferred.reset();
+      KillTimer(window, TvnViewer::TIMER_UPDATE_DEFERRED);
+    }
+  }
+
+  // An unfocused result (automatic check, a download finishing after the
+  // dialog was closed) never appears over a full screen session: it waits
+  // until no shell is in full screen (onDeferredTimer()).
   void presentDialog(UpdateDialog::State state, const std::wstring &text,
                      UpdateDialog::Focus focus)
   {
     dialog.setOptions(settings.autoCheck, effectiveIncludePrereleases(settings, current));
+    bool unfocused = focus == UpdateDialog::Focus::NoActivate ||
+                     (focus == UpdateDialog::Focus::Keep && !dialog.isCreated());
+    if (unfocused && fullscreenSessionShown()) {
+      if (!deferred) {
+        log(L"Update: the notification waits until full screen ends");
+      }
+      deferred = std::make_pair(state, text);
+      SetTimer(window, TvnViewer::TIMER_UPDATE_DEFERRED, TvnViewer::TIMER_UPDATE_DEFERRED_DELAY,
+               (TIMERPROC)NULL);
+      return;
+    }
+    stopDeferral();
+    dialog.setOwner(dialogOwner());
     dialog.present(state, text, focus);
   }
 
@@ -307,31 +387,29 @@ struct UpdateController::Impl : public UpdateDialog::Host
     }
   }
 
+  // The settings are re-read and saved by runCheck() on the worker thread;
+  // automatic checks take the cross-process lock there (same thread).
   void startCheck(bool manual)
   {
-    SelectionOptions options;
-    options.current = current;
-    options.includePrereleases = effectiveIncludePrereleases(settings, current);
-    options.skipped = settings.skipped;
-    options.manual = manual;
-
-    bool started = startThread(Operation::Check, [this, options, manual]() {
-      CheckResult result;
+    Version running = current;
+    bool started = startThread(Operation::Check, [this, running, manual]() {
+      CheckRun run;
       std::shared_ptr<IHttpClient> client = openClient();
-      if (!client) {
-        result.kind = CheckResult::Kind::Failed;
-        result.httpError = HttpError::Other;
-        result.detail = "HTTP unavailable";
-      } else if (cancelRequested) {
-        result.kind = CheckResult::Kind::Failed;
-        result.httpError = HttpError::Cancelled;
+      if (!client || cancelRequested) {
+        run.status = CheckRun::Status::Checked;
+        run.result.kind = CheckResult::Kind::Failed;
+        run.result.httpError = client ? HttpError::Cancelled : HttpError::Other;
+        run.result.detail = client ? "cancelled" : "HTTP unavailable";
+        run.settings = store.load();
       } else {
-        result = checkForUpdate(*client, options);
+        NamedMutexCheckLock checkLock;
+        run = runCheck(manual ? CheckTrigger::Manual : CheckTrigger::Automatic, *client, store,
+                       checkLock, running, unixNow);
       }
       closeClient();
       {
         std::lock_guard<std::mutex> lock(mutex);
-        checkResult = std::move(result);
+        checkRun = std::move(run);
         checkManual = manual;
       }
       PostMessage(window, TvnViewer::WM_USER_UPDATE_CHECK_DONE, 0, 0);
@@ -446,6 +524,7 @@ struct UpdateController::Impl : public UpdateDialog::Host
   // ---------------------------------------------------------------- state
 
   HWND window;
+  UpdateController::Host *host;
   UpdateDialog dialog;
 
   bool initialized = false;
@@ -463,9 +542,9 @@ struct UpdateController::Impl : public UpdateDialog::Host
   std::atomic<bool> cancelRequested{false};
   Operation operation = Operation::None;
 
-  std::mutex mutex;             // guards http, checkResult, checkManual, stageResult
+  std::mutex mutex;             // guards http, checkRun, checkManual, stageResult
   std::shared_ptr<IHttpClient> http;
-  CheckResult checkResult;
+  CheckRun checkRun;
   bool checkManual = false;
   StageResult stageResult;
 
@@ -476,10 +555,16 @@ struct UpdateController::Impl : public UpdateDialog::Host
   std::optional<ReleaseInfo> release;     // the release offered in the dialog
   std::optional<Version> stagedVersion;   // downloaded and verified in this session
   bool needsElevation = false;
+
+  // An automatic offer is not repeated by this process before this time; the
+  // stored schedule re-offers it on the next launch ("Remind Me Later").
+  std::uint64_t quietUntil = 0;
+  // An unfocused result that waits for full screen to end.
+  std::optional<std::pair<UpdateDialog::State, std::wstring> > deferred;
 };
 
-UpdateController::UpdateController(HWND mainWindow)
-: m_impl(new Impl(mainWindow))
+UpdateController::UpdateController(HWND mainWindow, Host *host)
+: m_impl(new Impl(mainWindow, host))
 {
 }
 
@@ -525,18 +610,42 @@ void UpdateController::setIncludePrereleases(bool enabled)
   d.onUpdatePrereleaseToggled(enabled);
 }
 
-void UpdateController::onStartupTimer()
+void UpdateController::onAutoCheckTimer()
 {
   Impl &d = *m_impl;
   d.ensureInitialized();
-  if (!d.available || d.busy || updatesDisabledByPolicy()) {
+  if (!d.available || d.busy || d.stagedVersion || updatesDisabledByPolicy()) {
     return;
   }
   d.settings = d.store.load();
-  if (!isAutomaticCheckDue(d.settings, unixNow())) {
+  if (!d.settings.autoCheck) {
+    return;
+  }
+  std::uint64_t now = unixNow();
+  if (now < d.quietUntil) {
+    return;
+  }
+  if (!isAutomaticCheckDue(d.settings, now)) {
+    d.log(L"Update: automatic check skipped, not due until " +
+          localTimeText(d.settings.nextCheckNotBeforeUnix));
     return;
   }
   d.startCheck(false);
+}
+
+void UpdateController::onDeferredTimer()
+{
+  Impl &d = *m_impl;
+  if (!d.deferred) {
+    KillTimer(d.window, TvnViewer::TIMER_UPDATE_DEFERRED);
+    return;
+  }
+  if (d.fullscreenSessionShown()) {
+    return;
+  }
+  std::pair<UpdateDialog::State, std::wstring> waiting = *d.deferred;
+  d.stopDeferral();
+  d.presentDialog(waiting.first, waiting.second, UpdateDialog::Focus::NoActivate);
 }
 
 void UpdateController::requestManualCheck()
@@ -574,19 +683,45 @@ void UpdateController::onCheckDone()
   Impl &d = *m_impl;
   d.joinWorker();
 
-  CheckResult result;
+  CheckRun run;
   bool manual = false;
   {
     std::lock_guard<std::mutex> lock(d.mutex);
-    result = std::move(d.checkResult);
+    run = std::move(d.checkRun);
     manual = d.checkManual;
   }
-  if (result.httpError == HttpError::Cancelled) {
+  // runCheck() already saved the outcome (the schedule) on the worker thread.
+  d.settings = run.settings;
+  std::wstring kind = manual ? L"Update: manual check" : L"Update: automatic check";
+  if (run.status == CheckRun::Status::Busy) {
+    d.log(kind + L" skipped, another FarSightVNC process is checking");
     return;
   }
-
-  recordCheckOutcome(d.settings, result, unixNow());
-  d.store.save(d.settings);
+  if (run.status == CheckRun::Status::NotDue) {
+    d.log(kind + L" skipped, not due until " +
+          localTimeText(run.settings.nextCheckNotBeforeUnix) + L" (checked by another process)");
+    return;
+  }
+  CheckResult &result = run.result;
+  if (result.httpError == HttpError::Cancelled) {
+    d.log(kind + L" cancelled");
+    return;
+  }
+  switch (result.kind) {
+  case CheckResult::Kind::UpdateAvailable:
+    d.log(kind + L": found " +
+          (result.release ? versionText(result.release->version) : std::wstring(L"?")));
+    break;
+  case CheckResult::Kind::UpToDate:
+    d.log(kind + L": up to date (" + versionText(d.current) +
+          L"), next automatic check after " + localTimeText(run.settings.nextCheckNotBeforeUnix));
+    break;
+  case CheckResult::Kind::Failed:
+  case CheckResult::Kind::RateLimited:
+    d.log(kind + L" failed: " + widen(result.detail.c_str()) +
+          L", next automatic check after " + localTimeText(run.settings.nextCheckNotBeforeUnix));
+    break;
+  }
 
   using Focus = UpdateDialog::Focus;
   switch (result.kind) {
@@ -596,6 +731,9 @@ void UpdateController::onCheckDone()
     }
     d.release = std::move(result.release);
     d.needsElevation = !canWriteDirectory(d.target.root);
+    if (!manual) {
+      d.quietUntil = unixNow() + kCheckIntervalSeconds;
+    }
     if (d.stagedVersion && *d.stagedVersion == d.release->version) {
       d.presentDialog(UpdateDialog::State::Ready, d.readyText(),
                       manual ? Focus::Activate : Focus::NoActivate);
