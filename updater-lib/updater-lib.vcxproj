@@ -267,6 +267,7 @@
     <ClCompile Include="Json.cpp" />
     <ClCompile Include="Releases.cpp" />
     <ClCompile Include="Manifest.cpp" />
+    <ClCompile Include="MarkdownLite.cpp" />
     <ClCompile Include="ZipReader.cpp" />
     <ClCompile Include="FsUtil.cpp" />
     <ClCompile Include="HttpClient.cpp" />
@@ -281,6 +282,7 @@
     <ClInclude Include="Installer.h" />
     <ClInclude Include="Json.h" />
     <ClInclude Include="Manifest.h" />
+    <ClInclude Include="MarkdownLite.h" />
     <ClInclude Include="Releases.h" />
     <ClInclude Include="UpdateService.h" />
     <ClInclude Include="UpdateTypes.h" />

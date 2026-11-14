@@ -12,7 +12,8 @@ add_executable(updater-test
   TestZip.cpp
   TestUpdateService.cpp
   TestInstaller.cpp
-  TestHttp.cpp)
+  TestHttp.cpp
+  TestMarkdown.cpp)
 
 fsv_configure_updater_executable(updater-test)
 target_compile_definitions(updater-test PRIVATE _CONSOLE)

@@ -322,6 +322,7 @@
     <ClCompile Include="ReconnectDialog.cpp" />
     <ClCompile Include="HelpDialog.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="MarkdownRichEdit.cpp" />
     <ClCompile Include="NamingDefs.cpp" />
     <ClCompile Include="NewFolderDialog.cpp" />
     <ClCompile Include="OptionsDialog.cpp" />
@@ -367,6 +368,7 @@
     <ClInclude Include="ReconnectPolicy.h" />
     <ClInclude Include="HelpDialog.h" />
     <ClInclude Include="KeyMap.h" />
+    <ClInclude Include="MarkdownRichEdit.h" />
     <ClInclude Include="NamingDefs.h" />
     <ClInclude Include="NewFolderDialog.h" />
     <ClInclude Include="OptionsDialog.h" />
