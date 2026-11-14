@@ -33,6 +33,12 @@ public:
     virtual std::vector<Shell> updateShells() = 0;
     // One line in the viewer log (automatic check outcomes and the like).
     virtual void updateLog(const std::wstring &line) = 0;
+    // Shell windows that show a session (connected or connecting).
+    virtual int updateOpenSessions() = 0;
+    // "Restart and Install Now": stops listening and closes every shell
+    // window through its normal close path, so that the process exits and
+    // main() reaches launchPendingUpdaterAtExit(). Kills nothing.
+    virtual void updateCloseAllWindows() = 0;
   };
 
   // mainWindow is the hidden window of TvnViewer; it receives the messages of
@@ -83,7 +89,8 @@ private:
 
 // Called by main() after the viewer has been destroyed: starts
 // fsvncupdater.exe detached if an update is staged or an interrupted
-// installation must be repaired. Does nothing otherwise.
+// installation must be repaired. Does nothing otherwise. After "Restart and
+// Install Now" it passes --relaunch, so the updater starts the viewer again.
 void launchPendingUpdaterAtExit();
 
 #endif

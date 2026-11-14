@@ -25,6 +25,7 @@ public:
     Downloading, // text = headline, progress via setProgress()
     Ready,
     StageFailed, // text = reason
+    Updated,     // text = "FarSightVNC was updated to vX" (after an install)
   };
 
   // How present() treats the window.
@@ -53,6 +54,8 @@ public:
     virtual void onUpdateDownloadRequested() = 0;
     virtual void onUpdateCancelDownload() = 0;
     virtual void onUpdateCancelStaged() = 0;
+    // "Restart and Install Now" in the Ready state.
+    virtual void onUpdateRestartRequested() = 0;
     virtual void onUpdateSkipRequested() = 0;
     virtual void onUpdateAutoCheckToggled(bool enabled) = 0;
     virtual void onUpdatePrereleaseToggled(bool enabled) = 0;

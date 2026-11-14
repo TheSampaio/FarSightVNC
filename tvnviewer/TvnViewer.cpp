@@ -29,6 +29,7 @@
 // Modified for FarSightVNC on 2026-11-11: the Settings page replaces the configuration and about dialogs.
 // Modified for FarSightVNC on 2026-11-11: the messages of the removed configuration and about dialogs are gone.
 // Modified for FarSightVNC on 2026-11-14: the automatic update check timer repeats; update notifications are owned by a shell and wait for full screen to end.
+// Modified for FarSightVNC on 2026-11-14: "Restart and Install Now" closes every shell window to install a staged update.
 //
 
 #include "TvnViewer.h"
@@ -266,6 +267,33 @@ std::vector<UpdateController::Host::Shell> TvnViewer::updateShells()
 void TvnViewer::updateLog(const std::wstring &line)
 {
   m_logWriter.info(_T("%s"), line.c_str());
+}
+
+int TvnViewer::updateOpenSessions()
+{
+  int count = 0;
+  std::list<std::unique_ptr<ShellWindow> >::iterator iter;
+  for (iter = m_shells.begin(); iter != m_shells.end(); ++iter) {
+    if (!(*iter)->isDestroyed() && !(*iter)->isShowingHome()) {
+      count++;
+    }
+  }
+  return count;
+}
+
+void TvnViewer::updateCloseAllWindows()
+{
+  // The normal close path of each shell (WM_CLOSE) ends its session; when no
+  // shell, session or listener is left, onTimer() shuts the application down
+  // and main() starts the updater. Nothing is terminated forcibly, and other
+  // viewer processes are left alone (the updater waits for them).
+  stopListening();
+  std::list<std::unique_ptr<ShellWindow> >::iterator iter;
+  for (iter = m_shells.begin(); iter != m_shells.end(); ++iter) {
+    if (!(*iter)->isDestroyed()) {
+      PostMessage((*iter)->getHWnd(), WM_CLOSE, 0, 0);
+    }
+  }
 }
 
 void TvnViewer::addInstance(ViewerInstance *viewerInstance)

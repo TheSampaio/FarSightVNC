@@ -576,6 +576,70 @@ StageResult stageUpdate(IHttpClient &http, const ReleaseInfo &release, const Ver
                  stageFailure(StageError::Io, "internal error"));
 }
 
+std::optional<InstallOutcome> parseInstallOutcome(std::string_view text) {
+  const auto isSpace = [](char c) { return c == ' ' || c == '\t' || c == '\r' || c == '\n'; };
+  while (!text.empty() && isSpace(text.front())) {
+    text.remove_prefix(1);
+  }
+  while (!text.empty() && isSpace(text.back())) {
+    text.remove_suffix(1);
+  }
+  const std::size_t space = text.find(' ');
+  if (space == std::string_view::npos || space + 1 >= text.size()) {
+    return std::nullopt;
+  }
+  const std::string_view word = text.substr(0, space);
+  const std::string value(text.substr(space + 1));
+  if (value.find_first_of(" \t") != std::string::npos) {
+    return std::nullopt;
+  }
+  InstallOutcome outcome;
+  if (word == "ok") {
+    outcome.kind = InstallOutcome::Kind::Installed;
+    outcome.version = Version::parse(value);
+    if (!outcome.version) {
+      return std::nullopt;
+    }
+  } else if (word == "declined") {
+    outcome.kind = InstallOutcome::Kind::Declined;
+    if (value != "unknown") {
+      outcome.version = Version::parse(value);
+      if (!outcome.version) {
+        return std::nullopt;
+      }
+    }
+  } else if (word == "failed") {
+    outcome.kind = InstallOutcome::Kind::Failed;
+    outcome.detail = value;
+  } else {
+    return std::nullopt;
+  }
+  return outcome;
+}
+
+bool acknowledgeInstalledUpdate(const std::wstring &stateDir, const Version &running) {
+  return guarded(
+      [&] {
+        if (stateDir.empty()) {
+          return false;
+        }
+        const std::wstring path = joinPath(stateDir, kLastResultFileName);
+        constexpr std::size_t kMaxResultBytes = 256;
+        const std::optional<std::string> text = readFile(path, kMaxResultBytes);
+        if (!text) {
+          return false;
+        }
+        const std::optional<InstallOutcome> outcome = parseInstallOutcome(*text);
+        if (!outcome || outcome->kind != InstallOutcome::Kind::Installed ||
+            !outcome->version || *outcome->version != running) {
+          return false;
+        }
+        return ::MoveFileExW(path.c_str(), joinPath(stateDir, kLastResultAckFileName).c_str(),
+                             MOVEFILE_REPLACE_EXISTING) != FALSE;
+      },
+      false);
+}
+
 std::optional<Manifest> loadStagedUpdate(const std::wstring &stateDir,
                                          std::span<const TrustedKey> keys) {
   return guarded(

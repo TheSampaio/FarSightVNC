@@ -190,4 +190,28 @@ StageResult stageUpdate(IHttpClient &http, const ReleaseInfo &release,
 std::optional<Manifest> loadStagedUpdate(const std::wstring &stateDir,
                                          std::span<const TrustedKey> keys);
 
+// ---------------------------------------------------------- install result
+
+// fsvncupdater writes one line into stateDir\last-result.txt after an install:
+// "ok <version>", "failed <install error>" or "declined <version|unknown>".
+// The viewer renames it to last-result.ack once it has told the user.
+inline constexpr wchar_t kLastResultFileName[] = L"last-result.txt";
+inline constexpr wchar_t kLastResultAckFileName[] = L"last-result.ack";
+
+struct InstallOutcome {
+  enum class Kind { Installed, Failed, Declined };
+  Kind kind = Kind::Failed;
+  std::optional<Version> version; // Installed (always), Declined (when known)
+  std::string detail;             // Failed: the install error name
+};
+
+// Parses the line (surrounding whitespace ignored); nullopt if malformed.
+std::optional<InstallOutcome> parseInstallOutcome(std::string_view text);
+
+// True, once: if stateDir\last-result.txt records a successful install of
+// exactly `running`, it is renamed to last-result.ack (replacing an older
+// one) so the "updated" notice is shown a single time. Anything else (no
+// file, another version, a failure) returns false and leaves the file alone.
+bool acknowledgeInstalledUpdate(const std::wstring &stateDir, const Version &running);
+
 } // namespace fsv::update

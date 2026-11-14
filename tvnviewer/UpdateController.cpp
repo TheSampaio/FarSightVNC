@@ -26,6 +26,9 @@ namespace {
 const size_t MAX_NOTES_BYTES = 64 * 1024;
 const DWORD PROGRESS_POST_INTERVAL_MS = 100;
 
+// Set by "Restart and Install Now"; read by launchPendingUpdaterAtExit().
+std::atomic<bool> g_relaunchAfterExit{false};
+
 std::wstring widen(const char *text)
 {
   return utf8ToWide(text);
@@ -302,8 +305,9 @@ struct UpdateController::Impl : public UpdateDialog::Host
   std::wstring readyText() const
   {
     std::wstring text = L"FarSightVNC " + versionText(*stagedVersion) +
-      L" has been downloaded and verified. It will be installed automatically "
-      L"after you close all FarSightVNC windows. Active connections are not interrupted.";
+      L" has been downloaded and verified. Restart FarSightVNC now to install it, or it "
+      L"will be installed when you close all FarSightVNC windows. Connections stay open "
+      L"until then.";
     if (needsElevation) {
       text += L"\r\n\r\nInstalling will ask for administrator permission.";
     }
@@ -500,6 +504,31 @@ struct UpdateController::Impl : public UpdateDialog::Host
     stagedVersion.reset();
   }
 
+  void onUpdateRestartRequested()
+  {
+    if (!stagedVersion || host == 0) {
+      return;
+    }
+    int sessions = host->updateOpenSessions();
+    if (sessions > 0) {
+      std::wstring question = sessions == 1
+        ? std::wstring(L"1 connection is open. FarSightVNC will close it, install version ")
+        : std::to_wstring(sessions) +
+          L" connections are open. FarSightVNC will close them, install version ";
+      question += versionText(*stagedVersion) + L" and start again.\r\n\r\nRestart now?";
+      HWND parent = dialog.isCreated() ? dialog.getControl()->getWindow() : 0;
+      if (MessageBoxW(parent, question.c_str(), L"FarSightVNC Update",
+                      MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2) != IDYES) {
+        return;
+      }
+    }
+    log(L"Update: restart and install " + versionText(*stagedVersion) + L" requested (" +
+        std::to_wstring(sessions) + L" open sessions)");
+    g_relaunchAfterExit = true;
+    dialog.close();
+    host->updateCloseAllWindows();
+  }
+
   void onUpdateSkipRequested()
   {
     if (!release) {
@@ -561,6 +590,8 @@ struct UpdateController::Impl : public UpdateDialog::Host
   std::uint64_t quietUntil = 0;
   // An unfocused result that waits for full screen to end.
   std::optional<std::pair<UpdateDialog::State, std::wstring> > deferred;
+  // The "updated to vX" notice of the last install was looked for.
+  bool installResultChecked = false;
 };
 
 UpdateController::UpdateController(HWND mainWindow, Host *host)
@@ -614,6 +645,17 @@ void UpdateController::onAutoCheckTimer()
 {
   Impl &d = *m_impl;
   d.ensureInitialized();
+  if (d.available && !d.installResultChecked) {
+    // First tick: confirm an update that fsvncupdater installed while the
+    // viewer was closed (once; the result file is then acknowledged).
+    d.installResultChecked = true;
+    if (acknowledgeInstalledUpdate(d.stateDir, d.current)) {
+      d.log(L"Update: FarSightVNC was updated to " + versionText(d.current));
+      d.presentDialog(UpdateDialog::State::Updated,
+                      L"FarSightVNC was updated to " + versionText(d.current) + L".",
+                      UpdateDialog::Focus::NoActivate);
+    }
+  }
   if (!d.available || d.busy || d.stagedVersion || updatesDisabledByPolicy()) {
     return;
   }
@@ -849,6 +891,11 @@ void launchPendingUpdaterAtExit()
     std::wstring commandLine = qExe + L" --protocol 1 " + mode + L" --state " + qState +
                                L" --viewer " + qViewer + L" --arch " + utf8ToWide(arch) +
                                L" --parent-pid " + std::to_wstring(GetCurrentProcessId());
+    if (g_relaunchAfterExit) {
+      // "Restart and Install Now": the (unelevated) updater starts the viewer
+      // again after a successful install.
+      commandLine += L" --relaunch";
+    }
     std::vector<wchar_t> buffer(commandLine.begin(), commandLine.end());
     buffer.push_back(L'\0');
 

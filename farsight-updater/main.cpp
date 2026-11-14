@@ -6,7 +6,11 @@
 // install (see docs/updater/DESIGN.md, "Flow" steps 5 and 6). Protocol 1:
 //
 //   --protocol 1 --install|--recover --state "<stateDir>" --viewer "<fsvncviewer.exe>"
-//   --arch x64 [--parent-pid N] [--elevated]
+//   --arch x64 [--parent-pid N] [--elevated] [--relaunch]
+//
+// --relaunch ("Restart and Install Now" in the viewer): after a successful run
+// the unelevated updater starts <root>\fsvncviewer.exe again, also when the
+// elevated child did the install. The elevated child never starts the viewer.
 //
 // No network calls; the only windows are message boxes.
 
@@ -18,6 +22,7 @@
 #include "updater-lib/FsUtil.h"
 #include "updater-lib/Installer.h"
 #include "updater-lib/UpdateService.h"
+#include "updater-lib/UpdaterCommandLine.h"
 #include "updater-lib/Win32Util.h"
 
 #include <cstdint>
@@ -49,65 +54,10 @@ constexpr wchar_t kAppTitle[] = L"FarSightVNC Updater";
 
 // ----------------------------------------------------------------- options
 
-enum class Mode { Install, Recover };
-
-struct Options {
-  Mode mode = Mode::Install;
-  std::wstring stateDir;
-  std::wstring viewer;
-  std::wstring arch;
-  DWORD parentPid = 0;
-  bool elevated = false;
-};
-
-bool parsePid(const std::wstring &text, DWORD &pid) {
-  if (text.empty() || text.size() > 10) {
-    return false;
-  }
-  wchar_t *end = nullptr;
-  const unsigned long value = std::wcstoul(text.c_str(), &end, 10);
-  if (end == nullptr || *end != L'\0' || value == 0) {
-    return false;
-  }
-  pid = static_cast<DWORD>(value);
-  return true;
-}
-
-// Strict parse; any unknown or missing argument returns nullopt.
-std::optional<Options> parseArguments(const std::vector<std::wstring> &args) {
-  Options options;
-  bool protocolOk = false;
-  bool haveMode = false;
-  for (std::size_t i = 0; i < args.size(); ++i) {
-    const std::wstring &arg = args[i];
-    const bool hasValue = i + 1 < args.size();
-    if (arg == L"--install" || arg == L"--recover") {
-      options.mode = arg == L"--install" ? Mode::Install : Mode::Recover;
-      haveMode = true;
-    } else if (arg == L"--elevated") {
-      options.elevated = true;
-    } else if (arg == L"--protocol" && hasValue) {
-      protocolOk = args[++i] == L"1";
-    } else if (arg == L"--state" && hasValue) {
-      options.stateDir = args[++i];
-    } else if (arg == L"--viewer" && hasValue) {
-      options.viewer = args[++i];
-    } else if (arg == L"--arch" && hasValue) {
-      options.arch = args[++i];
-    } else if (arg == L"--parent-pid" && hasValue) {
-      if (!parsePid(args[++i], options.parentPid)) {
-        return std::nullopt;
-      }
-    } else {
-      return std::nullopt;
-    }
-  }
-  if (!protocolOk || !haveMode || options.stateDir.empty() || options.viewer.empty() ||
-      options.arch.empty()) {
-    return std::nullopt;
-  }
-  return options;
-}
+// The command line grammar lives in updater-lib (UpdaterCommandLine.h) so
+// that updater-test covers it.
+using Options = UpdaterOptions;
+using Mode = UpdaterMode;
 
 std::vector<std::wstring> commandLineArguments() {
   std::vector<std::wstring> args;
@@ -270,6 +220,30 @@ std::vector<std::wstring> recoveryViewers(const Context &context) {
     viewers.push_back(rootViewer);
   }
   return viewers;
+}
+
+// Starts the installed viewer again after "Restart and Install Now". Only the
+// unelevated updater calls this: the viewer must run as the user, never as
+// administrator. CreateProcess with no arguments, working directory = root.
+void relaunchViewer(const Context &context, const Log &log) {
+  std::wstring viewer = joinPath(context.target.root, kViewerExeName);
+  if (!fileExists(viewer)) {
+    viewer = context.options.viewer;
+  }
+  std::wstring commandLine = quoteArgument(viewer);
+  std::vector<wchar_t> buffer(commandLine.begin(), commandLine.end());
+  buffer.push_back(L'\0');
+  STARTUPINFOW startup{};
+  startup.cb = sizeof(startup);
+  PROCESS_INFORMATION process{};
+  if (::CreateProcessW(viewer.c_str(), buffer.data(), nullptr, nullptr, FALSE, 0, nullptr,
+                       context.target.root.c_str(), &startup, &process)) {
+    ::CloseHandle(process.hThread);
+    ::CloseHandle(process.hProcess);
+    log.write("relaunched", viewer);
+  } else {
+    log.write("relaunch failed (Win32 error " + std::to_string(::GetLastError()) + ")", viewer);
+  }
 }
 
 // ------------------------------------------------------------- elevation
@@ -478,7 +452,7 @@ int runRecover(const Context &context, const Log &log) {
 // --------------------------------------------------------------------- main
 
 int run(const std::vector<std::wstring> &args) {
-  const std::optional<Options> parsed = parseArguments(args);
+  const std::optional<Options> parsed = parseUpdaterArguments(args);
   if (!parsed) {
     return kExitUsage;
   }
@@ -489,7 +463,7 @@ int run(const std::vector<std::wstring> &args) {
   }
   context.options.stateDir = fullPath(context.options.stateDir);
   context.pendingDir = joinPath(context.options.stateDir, kPendingDirName);
-  context.lastResultPath = joinPath(context.options.stateDir, L"last-result.txt");
+  context.lastResultPath = joinPath(context.options.stateDir, kLastResultFileName);
 
   // One updater per installation; the elevated child runs under its parent's lock.
   UniqueHandle mutex;
@@ -507,8 +481,14 @@ int run(const std::vector<std::wstring> &args) {
             (context.options.elevated ? " (elevated)" : ""));
   log.write("viewer", context.options.viewer);
 
-  return context.options.mode == Mode::Install ? runInstall(context, log)
-                                               : runRecover(context, log);
+  const int code = context.options.mode == Mode::Install ? runInstall(context, log)
+                                                         : runRecover(context, log);
+  // parseUpdaterArguments() refuses --relaunch with --elevated; checked again
+  // here because starting the viewer elevated must never happen.
+  if (code == kExitOk && context.options.relaunch && !context.options.elevated) {
+    relaunchViewer(context, log);
+  }
+  return code;
 }
 
 } // namespace

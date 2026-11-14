@@ -31,13 +31,14 @@ struct ButtonWidth
 };
 
 const ButtonWidth BUTTON_WIDTHS[] = {
-  {IDC_UPDATE_DOWNLOAD, 80},
+  {IDC_UPDATE_DOWNLOAD, 64},
+  {IDC_UPDATE_RESTART, 92},
   {IDC_UPDATE_LATER, 64},
   {IDC_UPDATE_SKIP, 66},
   {IDC_UPDATE_RELEASES, 72},
   {IDC_UPDATE_CANCEL_DOWNLOAD, 60},
   {IDC_UPDATE_CANCEL_STAGED, 64},
-  {IDOK, 56},
+  {IDOK, 128},
   {IDCANCEL, 56},
 };
 
@@ -63,7 +64,7 @@ const UINT ALL_CONTENT_CONTROLS[] = {
 
 const UINT ALL_BUTTONS[] = {
   IDC_UPDATE_DOWNLOAD, IDC_UPDATE_LATER, IDC_UPDATE_SKIP, IDC_UPDATE_RELEASES,
-  IDC_UPDATE_CANCEL_DOWNLOAD, IDC_UPDATE_CANCEL_STAGED, IDOK, IDCANCEL,
+  IDC_UPDATE_CANCEL_DOWNLOAD, IDC_UPDATE_CANCEL_STAGED, IDC_UPDATE_RESTART, IDOK, IDCANCEL,
 };
 
 }
@@ -248,6 +249,11 @@ BOOL UpdateDialog::onCommand(UINT controlID, UINT notificationID)
     }
     close();
     break;
+  case IDC_UPDATE_RESTART:
+    if (m_host != 0) {
+      m_host->onUpdateRestartRequested();
+    }
+    break;
   case IDC_UPDATE_AUTOCHECK:
     m_autoCheck = IsDlgButtonChecked(m_ctrlThis.getWindow(), IDC_UPDATE_AUTOCHECK) == BST_CHECKED;
     if (m_host != 0) {
@@ -406,10 +412,11 @@ void UpdateDialog::apply()
 
   case State::UpToDate:
   case State::Disabled:
+  case State::Updated:
     statusHeight = 20;
     moveControl(IDC_UPDATE_STATUS, MARGIN, textTop, DIALOG_WIDTH - 2 * MARGIN, statusHeight);
     updateProgressControls();
-    if (m_state == State::UpToDate) {
+    if (m_state != State::Disabled) {
       layout(closeOnly, 1, IDCANCEL, textTop + statusHeight);
     } else {
       layout(releasesAndClose, 2, IDCANCEL, textTop + statusHeight);
@@ -426,8 +433,9 @@ void UpdateDialog::apply()
   case State::Ready: {
     moveControl(IDC_UPDATE_STATUS, MARGIN, textTop, DIALOG_WIDTH - 2 * MARGIN, statusHeight);
     updateProgressControls();
-    const UINT readyButtons[] = {IDC_UPDATE_CANCEL_STAGED, IDOK};
-    layout(readyButtons, 2, IDOK, textTop + statusHeight);
+    // Installing at exit is the default: restarting closes the sessions.
+    const UINT readyButtons[] = {IDC_UPDATE_RESTART, IDOK, IDC_UPDATE_CANCEL_STAGED};
+    layout(readyButtons, 3, IDOK, textTop + statusHeight);
     break;
   }
 

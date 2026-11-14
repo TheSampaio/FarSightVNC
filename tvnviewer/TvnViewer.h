@@ -28,6 +28,7 @@
 // Modified for FarSightVNC on 2026-11-11: the Settings page replaces the configuration and about dialogs.
 // Modified for FarSightVNC on 2026-11-11: the messages of the removed configuration and about dialogs are gone.
 // Modified for FarSightVNC on 2026-11-14: the automatic update check timer repeats; update notifications are owned by a shell and wait for full screen to end.
+// Modified for FarSightVNC on 2026-11-14: "Restart and Install Now" closes every shell window to install a staged update.
 //
 
 #ifndef _TVN_VIEWER_H_
@@ -112,6 +113,8 @@ public:
   // UpdateController::Host implementation.
   virtual std::vector<UpdateController::Host::Shell> updateShells();
   virtual void updateLog(const std::wstring &line);
+  virtual int updateOpenSessions();
+  virtual void updateCloseAllWindows();
 
   // Shows the Settings page on section in the foreground shell window, or
   // in a new one on the Home page (tray menu).

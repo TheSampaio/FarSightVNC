@@ -16,7 +16,7 @@ Public interfaces: `updater-lib/*.h` (the contract; change them only through the
 PCSX2 is GPLv3. None of its code is copied; FarSightVNC is GPLv2-or-later.
 
 What we keep from it:
-- The three-button dialog: Download and Install / Skip This Version / Remind Me Later.
+- The three-button dialog: Install Update / Skip This Version / Remind Me Later (PCSX2 says "Download and Install").
 - Skip is persisted per version.
 - Background checks stay quiet on errors and do not pop up over a running session.
 
@@ -111,13 +111,15 @@ Why a separate updater exe: the files must be replaced after the viewer exits, t
    - Automatic results are shown without activation (no focus stealing) and only when an update exists. The dialog is owned by the foreground shell window of this process (else the first visible shell; unowned when only the tray icon is left), raised with `SetWindowPos(HWND_TOP, SWP_NOACTIVATE)`, and the taskbar button flashes (`FLASHW_TRAY | FLASHW_TIMERNOFG`) until FarSightVNC comes to the foreground. An owned dialog always stays above its shell, so it cannot be hidden behind it.
    - Never over a full screen session: while any visible shell is in full screen, the notification waits (a 2 s timer, `TIMER_UPDATE_DEFERRED`) and appears when no shell is in full screen any more. Polling was chosen over a hook in `ShellWindow` because it needs no change to the shell and costs nothing measurable. A dialog that was already open when the user enters full screen stays where it is.
    - Automatic failures are not shown; they are logged. Only manual checks report errors.
-2. **Download and Install** (viewer worker thread): `stageUpdate` into `%LOCALAPPDATA%\FarSightVNC\Updates\<hash(root)>\pending`. The dialog shows progress and a Cancel button. Sessions keep running.
+2. **Install Update** (viewer worker thread): `stageUpdate` into `%LOCALAPPDATA%\FarSightVNC\Updates\<hash(root)>\pending`. The dialog shows progress and a Cancel button. Sessions keep running.
    - Before downloading, the viewer probes `canWriteDirectory(root)`. If the folder is not writable, the dialog says administrator approval will be requested at install time.
-3. **Ready**: the dialog says the update will be installed after all FarSightVNC windows are closed. The user can cancel, which discards the staged update.
+3. **Ready**: the dialog offers **Restart and Install Now**, **Install When I Close FarSightVNC** (the default; it only closes the dialog) and **Cancel Update** (discards the staged update).
+   - Restart and Install Now: if any shell shows a session, a confirmation names how many connections will be closed (default No). Then the viewer stops listening and posts `WM_CLOSE` to every shell window, the normal close path (a session that refuses to close, for example during a file transfer, keeps the process alive; the update then installs whenever it exits). When the process exits, step 4 adds `--relaunch`. Nothing is terminated forcibly, and other viewer processes are not touched: the updater waits for them by image path, so with a second viewer process open the install (and the relaunch) happens when that one exits too.
 4. **Viewer exit** (`main.cpp`, after `TvnViewer::run()` returns), if `pending\ready` exists:
    - copy `fsvncupdater.exe` from the viewer folder to `<state>\bin\` (if it is missing there, use the verified staged copy `pending\files\fsvncupdater.exe`);
    - launch it detached:
-     `fsvncupdater.exe --protocol 1 --install --state "<stateDir>" --viewer "<full path of fsvncviewer.exe>" --arch x64 --parent-pid <pid>`
+     `fsvncupdater.exe --protocol 1 --install --state "<stateDir>" --viewer "<full path of fsvncviewer.exe>" --arch x64 --parent-pid <pid> [--relaunch]`
+   - The grammar is parsed by `updater-lib/UpdaterCommandLine.h` (covered by updater-test). `--relaunch` together with `--elevated` is refused.
 5. **fsvncupdater** (unelevated):
    1. take the per-root mutex `Local\FarSightVNC-Updater-<hash>` (a second instance exits);
    2. run `loadStagedUpdate`, which re-verifies the signature and file hashes;
@@ -127,9 +129,11 @@ Why a separate updater exe: the files must be replaced after the viewer exits, t
    6. if `canWriteDirectory`/`canReplaceFile` fails, relaunch itself with `ShellExecuteEx("runas")` and the same arguments plus `--elevated`, then wait for it.
       - UAC cancelled: a message offers to open the release page, and the staged update is kept. The next viewer start shows "ready" again.
    7. `applyInstall`;
-   8. on success, delete `pending` (guarded `removeTree`) and write `<state>\last-result.txt`. No dialog is shown on success.
+   8. on success, delete `pending` (guarded `removeTree`) and write `<state>\last-result.txt` (`ok <version>`). No dialog is shown by the updater on success. With `--relaunch`, the unelevated updater then starts `<root>\fsvncviewer.exe` with no arguments (`CreateProcess`, working directory = root), also when the elevated child did the install. The elevated child never starts the viewer: the viewer must run as the user.
+   - Every step and failure (with the install error name and detail) is appended to `<state>\updater.log` (reset above 256 KiB); failures also write `failed <error>` to `last-result.txt`.
    9. on failure, show a message box with the error, "previous version restored", and an offer to open the release page.
-6. **Recovery**: if the viewer starts and `<root>\.fsv-update\journal` exists, an install was interrupted. The viewer schedules `fsvncupdater --recover` at exit, the same way as step 4.
+6. **Confirmation**: on the first timer tick after start the viewer reads `<state>\last-result.txt`. If it records a successful install of exactly the running version, a small notice "FarSightVNC was updated to vX." is shown without activation (the update dialog in its Updated state, same ownership and full screen rules as step 1), and the file is renamed to `last-result.ack`, so the notice appears once.
+7. **Recovery**: if the viewer starts and `<root>\.fsv-update\journal` exists, an install was interrupted. The viewer schedules `fsvncupdater --recover` at exit, the same way as step 4.
 
 ## Install transaction (`applyInstall`)
 

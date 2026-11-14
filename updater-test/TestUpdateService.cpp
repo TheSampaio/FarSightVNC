@@ -7,6 +7,7 @@
 #include "updater-lib/Crypto.h"
 #include "updater-lib/FsUtil.h"
 #include "updater-lib/UpdateService.h"
+#include "updater-lib/UpdaterCommandLine.h"
 
 #include <windows.h>
 
@@ -523,6 +524,100 @@ void testGuardedCheck() {
     }).join();
     CHECK(otherAfter);
   }
+}
+
+// --------------------------------------------- updater command line, results
+
+std::vector<std::wstring> baseUpdaterArgs() {
+  return {L"--protocol", L"1",    L"--install", L"--state", L"C:\\s", L"--viewer",
+          L"C:\\v\\fsvncviewer.exe", L"--arch", L"x64",     L"--parent-pid", L"42"};
+}
+
+std::vector<std::wstring> plus(std::vector<std::wstring> args, const wchar_t *extra) {
+  args.push_back(extra);
+  return args;
+}
+
+void testUpdaterCommandLine() {
+  const std::optional<UpdaterOptions> base = parseUpdaterArguments(baseUpdaterArgs());
+  CHECK(base.has_value());
+  CHECK(base && base->mode == UpdaterMode::Install && !base->relaunch && !base->elevated);
+  CHECK(base && base->parentPid == 42u && base->stateDir == L"C:\\s" && base->arch == L"x64");
+
+  const std::optional<UpdaterOptions> relaunch =
+      parseUpdaterArguments(plus(baseUpdaterArgs(), L"--relaunch"));
+  CHECK(relaunch && relaunch->relaunch && !relaunch->elevated);
+  const std::optional<UpdaterOptions> elevated =
+      parseUpdaterArguments(plus(baseUpdaterArgs(), L"--elevated"));
+  CHECK(elevated && elevated->elevated && !elevated->relaunch);
+  // The elevated child never relaunches the viewer.
+  CHECK(!parseUpdaterArguments(plus(plus(baseUpdaterArgs(), L"--relaunch"), L"--elevated")));
+
+  std::vector<std::wstring> recover = baseUpdaterArgs();
+  recover[2] = L"--recover";
+  const std::optional<UpdaterOptions> recovered = parseUpdaterArguments(plus(recover, L"--relaunch"));
+  CHECK(recovered && recovered->mode == UpdaterMode::Recover && recovered->relaunch);
+
+  CHECK(!parseUpdaterArguments(plus(baseUpdaterArgs(), L"--relaunch=1")));
+  CHECK(!parseUpdaterArguments(plus(baseUpdaterArgs(), L"--unknown")));
+  CHECK(!parseUpdaterArguments(plus(baseUpdaterArgs(), L"--state"))); // option without value
+  std::vector<std::wstring> wrongProtocol = baseUpdaterArgs();
+  wrongProtocol[1] = L"2";
+  CHECK(!parseUpdaterArguments(wrongProtocol));
+  std::vector<std::wstring> noMode = baseUpdaterArgs();
+  noMode.erase(noMode.begin() + 2);
+  CHECK(!parseUpdaterArguments(noMode));
+  for (const wchar_t *pid : {L"0", L"-1", L"12x", L"", L"4294967296", L"12345678901"}) {
+    std::vector<std::wstring> bad = baseUpdaterArgs();
+    bad[10] = pid;
+    CHECK(!parseUpdaterArguments(bad));
+  }
+  std::vector<std::wstring> maxPid = baseUpdaterArgs();
+  maxPid[10] = L"4294967295";
+  CHECK(parseUpdaterArguments(maxPid) && parseUpdaterArguments(maxPid)->parentPid == 4294967295u);
+  std::vector<std::wstring> noPid = baseUpdaterArgs();
+  noPid.resize(9);
+  CHECK(parseUpdaterArguments(noPid) && parseUpdaterArguments(noPid)->parentPid == 0u);
+  CHECK(!parseUpdaterArguments({}));
+}
+
+void testInstallOutcome(const TempDir &temp) {
+  const std::optional<InstallOutcome> ok = parseInstallOutcome("ok 1.3.0a");
+  CHECK(ok && ok->kind == InstallOutcome::Kind::Installed && ok->version == versionOf("1.3.0a"));
+  CHECK(parseInstallOutcome("  ok 1.3.0a\r\n").has_value());
+  const std::optional<InstallOutcome> failed = parseInstallOutcome("failed rolled-back");
+  CHECK(failed && failed->kind == InstallOutcome::Kind::Failed && failed->detail == "rolled-back");
+  const std::optional<InstallOutcome> declined = parseInstallOutcome("declined 1.3.0a");
+  CHECK(declined && declined->kind == InstallOutcome::Kind::Declined && declined->version);
+  const std::optional<InstallOutcome> unknown = parseInstallOutcome("declined unknown");
+  CHECK(unknown && unknown->kind == InstallOutcome::Kind::Declined && !unknown->version);
+  for (const char *bad : {"", "ok", "ok ", "ok banana", "ok 1.3.0a extra", "done 1.3.0a",
+                          "OK 1.3.0a", "declined nope"}) {
+    CHECK(!parseInstallOutcome(bad));
+  }
+
+  const std::wstring state = joinPath(temp.path(), L"result-state");
+  CHECK(ensureDirectory(state));
+  const std::wstring resultPath = joinPath(state, kLastResultFileName);
+  const std::wstring ackPath = joinPath(state, kLastResultAckFileName);
+  const Version running = versionOf("1.3.0a");
+
+  CHECK(!acknowledgeInstalledUpdate(state, running)); // no file
+  CHECK(writeFileAtomic(resultPath, "ok 1.2.0a"));    // an older install
+  CHECK(!acknowledgeInstalledUpdate(state, running));
+  CHECK(fileExists(resultPath));
+  CHECK(writeFileAtomic(resultPath, "failed rolled-back"));
+  CHECK(!acknowledgeInstalledUpdate(state, running));
+  CHECK(fileExists(resultPath) && !fileExists(ackPath));
+
+  CHECK(writeFileAtomic(resultPath, "ok 1.3.0a"));
+  CHECK(acknowledgeInstalledUpdate(state, running)); // told once...
+  CHECK(!fileExists(resultPath) && fileExists(ackPath));
+  CHECK(!acknowledgeInstalledUpdate(state, running)); // ...never again
+  CHECK(writeFileAtomic(resultPath, "ok 1.3.0a"));    // a later install replaces the ack
+  CHECK(acknowledgeInstalledUpdate(state, running));
+  CHECK(!fileExists(resultPath) && fileExists(ackPath));
+  CHECK(!acknowledgeInstalledUpdate(std::wstring(), running));
 }
 
 // ----------------------------------------------------------------- settings
@@ -1158,6 +1253,8 @@ void runUpdateServiceTests() {
   testCheck();
   testPolicy();
   testGuardedCheck();
+  testUpdaterCommandLine();
+  testInstallOutcome(temp);
   testSettings();
   testStageSuccess(temp);
   testStageAssetErrors(temp);
