@@ -25,6 +25,7 @@
 // Modified for FarSightVNC on 2026-11-11: a key-up takes the same path (posted or passed to Windows) as its key-down; Print Screen stays local.
 // Modified for FarSightVNC on 2026-11-14: a key already held by Windows when the hook sees it first stays with Windows (no remote Ctrl stuck).
 // Modified for FarSightVNC on 2026-11-14: user-configurable local keys (Settings, Input, Local shortcuts) stay with Windows.
+// Modified for FarSightVNC on 2026-11-14: key owners per extended key (Enter/Numpad Enter); stricter LocalKeys parsing.
 //
 
 #include "WinHooks.h"
@@ -138,10 +139,12 @@ WinHooks::LocalKeySet WinHooks::parseLocalKeys(const TCHAR *text)
     while (b < e && (*b == _T(' ') || *b == _T('\t'))) b++;
     while (e > b && (e[-1] == _T(' ') || e[-1] == _T('\t'))) e--;
     // Two hex digits and the suffix: "BE" is a key, "BEe" its extended key.
+    // At least the two digits come before the suffix: a lone "e" is not a
+    // key.
     bool extended = e - b == 3 && (e[-1] == _T('e') || e[-1] == _T('E'));
     if (extended) e--;
     unsigned vk = 0;
-    bool valid = e > b && e - b <= 2;
+    bool valid = e - b == 2;
     for (const TCHAR *c = b; valid && c < e; c++) {
       unsigned digit;
       if (*c >= _T('0') && *c <= _T('9')) digit = *c - _T('0');
@@ -218,7 +221,8 @@ WinHooks::HookKeyAction WinHooks::KeyRouter::route(DWORD vkCode, DWORD flags,
   if (decideKeyAction(vkCode, flags) == HOOK_KEY_PASS) {
     return HOOK_KEY_PASS;
   }
-  unsigned char &owner = m_owner[vkCode & 0xff];
+  bool extended = (flags & LLKHF_EXTENDED) != 0;
+  unsigned char &owner = m_owner[localKeyIndex(vkCode, extended)];
   if (flags & LLKHF_UP) {
     // A key-up without a recorded key-down was pressed before the hook was
     // installed, so Windows has its key-down. Windows also gets the key-up of
@@ -231,9 +235,10 @@ WinHooks::HookKeyAction WinHooks::KeyRouter::route(DWORD vkCode, DWORD flags,
   // Autorepeat keeps the owner of the first key-down. A key that Windows
   // already has down (held when the hook was installed, or passed through
   // while the hook timed out) stays with Windows until its key-up.
-  // A local key goes to Windows (screenshot tools...), modifiers or not.
+  // A local key goes to Windows (screenshot tools...) as the bare key: the
+  // modifiers the viewer owns were swallowed.
   if (owner == OWNER_NONE) {
-    bool local = isLocalKey(vkCode, (flags & LLKHF_EXTENDED) != 0);
+    bool local = isLocalKey(vkCode, extended);
     owner = viewerOwnsKeyboard && !systemHasKeyDown && !local ? OWNER_VIEWER : OWNER_SYSTEM;
   }
   return owner == OWNER_VIEWER ? HOOK_KEY_POST : HOOK_KEY_PASS;

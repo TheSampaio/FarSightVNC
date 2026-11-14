@@ -27,6 +27,7 @@
 // Modified for FarSightVNC on 2026-11-07: Shift released around characters a TightVNC server types with AltGr (ABNT2 Shift+'/?').
 // Modified for FarSightVNC on 2026-11-11: Print Screen is never sent to the server.
 // Modified for FarSightVNC on 2026-11-14: focus restoration only releases modifiers that are no longer held (it never presses them).
+// Modified for FarSightVNC on 2026-11-14: focus restoration keeps the modifiers pressed after the focus loss.
 //
 
 #include "RfbKeySym.h"
@@ -50,6 +51,7 @@ RfbKeySym::RfbKeySym(RfbKeySymListener *extKeySymListener, LogWriter *log)
   m_scrollLockOverride(false),
   m_keyStateOverride(0),
   m_asyncKeyStateOverride(0),
+  m_focusLost(false),
   m_shiftKeysDown(0)
 {
   clearKeyState();
@@ -362,6 +364,20 @@ void RfbKeySym::processFocusRestoration()
   // key-up of such a key, so the server kept Ctrl/Alt/Shift pressed until the
   // reconnection. A modifier still held now is sent with its next key event;
   // a modifier pressed on the server but released meanwhile is released.
+  //
+  // GetAsyncKeyState never sees a key the hook swallowed. A key-down posted
+  // by the hook and processed between WM_KILLFOCUS and WM_SETFOCUS is in
+  // m_pressedKeys (processFocusLoss emptied it) although Windows reports the
+  // key up: releasing it here released a Ctrl the user still held, and its
+  // key-up comes to the viewer anyway. So after a focus loss nothing in
+  // m_pressedKeys is released.
+  //
+  // Known limitation: a Ctrl/Shift already held when the viewer is
+  // activated is not pressed on the server until its first autorepeat
+  // arrives, so Ctrl+click right after Alt+Tab into the viewer is a plain
+  // click on the server.
+  bool keepAll = m_focusLost;
+  m_focusLost = false;
   std::map<unsigned int, std::vector<UINT32> >::iterator it = m_pressedKeys.begin();
   while (it != m_pressedKeys.end()) {
     unsigned char vk = 0;
@@ -375,7 +391,7 @@ void RfbKeySym::processFocusRestoration()
       case XK_Shift_R: vk = VK_RSHIFT; break;
       }
     }
-    if (vk == 0 || isKeyPhysicallyHeld(vk)) {
+    if (vk == 0 || keepAll || isKeyPhysicallyHeld(vk)) {
       ++it;
       continue;
     }
@@ -397,6 +413,7 @@ void RfbKeySym::processFocusLoss()
       sendKeySymEvent(it->second[i], false);
   }
   m_pressedKeys.clear();
+  m_focusLost = true;
   m_shiftKeysDown = 0;
   m_leftMetaIsPressed = false;
   m_rightMetaIsPressed = false;

@@ -19,6 +19,7 @@
 // Modified for FarSightVNC on 2026-11-12: Third-party notices (Lucide) in About.
 // Modified for FarSightVNC on 2026-11-12: the Appearance theme is applied, not only stored.
 // Modified for FarSightVNC on 2026-11-14: Local shortcuts (keys never sent to the server) in Input.
+// Modified for FarSightVNC on 2026-11-14: the Local shortcuts note says that only the bare key is local and that Numpad keys depend on Num Lock.
 //
 
 #include "SettingsSections.h"
@@ -313,7 +314,9 @@ public:
     form->header(L"Local shortcuts");
     form->note(L"Keys listed here go to Windows and the applications of this computer "
                L"(a screenshot tool, for example) and are never sent to the remote "
-               L"computer, in every session. Print Screen is always local.");
+               L"computer, in every session. Only the key alone is local: with Ctrl, Alt "
+               L"or Shift held the modifier still goes to the remote computer. Numpad keys "
+               L"depend on Num Lock. Print Screen is always local.");
     form->textField(CTL_LOCAL_KEYS, L"Local keys");
     m_addButton = form->button(CTL_LOCAL_ADD, L"Add key\u2026");
     form->button(CTL_LOCAL_CLEAR, L"Clear", true);

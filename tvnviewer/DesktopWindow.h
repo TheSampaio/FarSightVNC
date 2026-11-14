@@ -24,6 +24,7 @@
 // Modified for FarSightVNC on 2026-11-02: optional Direct3D 11 / Direct2D presenter member.
 // Modified for FarSightVNC on 2026-11-03: listener for local pointer movement (full screen toolbar).
 // Modified for FarSightVNC on 2026-11-11: the remote screen always fits the window (no scale modes, no scroll bars).
+// Modified for FarSightVNC on 2026-11-14: scan code of a dropped local key-down (its WM_CHAR is dropped too).
 //
 
 #ifndef _DESKTOP_WINDOW_H_
@@ -181,6 +182,10 @@ protected:
 
   bool m_ctrlDown;
   bool m_altDown;
+  // Scan code (bits 16-24 of lParam: scan code and extended flag) of the
+  // local key whose key-down was dropped, or -1. TranslateMessage still
+  // makes a WM_CHAR of it ('-' for Numpad Minus), dropped as well.
+  int m_droppedLocalScan;
 
   RemoteViewerCore *m_viewerCore;
   ConnectionConfig *m_conConf;

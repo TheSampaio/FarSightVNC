@@ -23,6 +23,7 @@
 //
 // Modified for FarSightVNC on 2026-10-29, 2026-11-01, 2026-11-03, 2026-11-04 and 2026-11-07: added <string>; keyboard test seams and physical key tracking; Shift and dead-key workarounds for TightVNC servers; lost Shift key-up; Shift released around AltGr characters.
 // Modified for FarSightVNC on 2026-11-14: focus restoration only releases modifiers that are no longer held (it never presses them).
+// Modified for FarSightVNC on 2026-11-14: focus restoration keeps the modifiers pressed after the focus loss.
 //
 
 #ifndef __RFBKEYSYM_H__
@@ -54,6 +55,7 @@ public:
   // pressed on the server but no longer physically held. It never presses a
   // modifier: a key down in GetAsyncKeyState may have no key-up to come
   // (swallowed by a hook), and pressing it left it stuck on the server.
+  // A modifier pressed after processFocusLoss() is never released here.
   void processFocusRestoration();
   // This function release all modifiers unconditionally.
   void processFocusLoss();
@@ -154,6 +156,10 @@ private:
   const unsigned char *m_keyStateOverride;
   const unsigned char *m_asyncKeyStateOverride;
   std::map<unsigned int, std::vector<UINT32> > m_pressedKeys;
+  // Set by processFocusLoss() (which empties m_pressedKeys), cleared by
+  // processFocusRestoration(): every key pressed meanwhile was seen going
+  // down by the viewer, so its key-up will come to the viewer too.
+  bool m_focusLost;
   // Bit 0: Left Shift, bit 1: Right Shift, as sent to sendKeySymEvent().
   unsigned char m_shiftKeysDown;
 };

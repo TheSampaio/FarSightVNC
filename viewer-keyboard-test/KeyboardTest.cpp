@@ -1252,6 +1252,23 @@ void testFocusRestoration(LogWriter *log)
     e.d(XK_Alt_R).u(XK_Alt_R);
     finish("FR3 focus restoration keeps a modifier that is still held", h, e);
   }
+  {
+    // A Ctrl key-down posted by the hook and processed between WM_KILLFOCUS
+    // and WM_SETFOCUS: GetAsyncKeyState never saw it (the hook swallowed
+    // it), but the user still holds Ctrl and its key-up comes to the viewer.
+    Harness h(g_us->hkl, log);
+    BYTE async[256] = {0};
+    h.ks().setAsyncKeyStateOverride(async);
+    h.ks().processFocusLoss();
+    h.down(VK_LCONTROL, SC_CTRL);
+    h.ks().processFocusRestoration();
+    bool kept = h.events().size() == 1;
+    h.up(VK_LCONTROL, SC_CTRL);
+    Seq e;
+    e.d(XK_Control_L).u(XK_Control_L);
+    finish("FR4 a modifier pressed after the focus loss is not released at restoration", h, e);
+    checkTrue("FR4 nothing is released at restoration", kept);
+  }
 }
 
 //----------------------------------------------------------------------------
@@ -1595,6 +1612,13 @@ void testLocalKeys(LogWriter *log)
     checkTrue("L1 a hex digit E is not the extended suffix",
               k.count() == 3 && k.test(0xBE) && k.test(0x1BE) && k.test(0x0E));
   }
+  {
+    WinHooks::LocalKeySet k = WinHooks::parseLocalKeys(_T("e,E, e ,Ee,eE,6,6De"));
+    std::string text = narrow(WinHooks::formatLocalKeys(k).getString());
+    // "Ee" and "eE" are two hex digits (0xEE): only entries without two digits
+    // before the suffix are dropped.
+    checkTrue("L1 a lone suffix or a single digit is not a key", text == "EE,6De", text);
+  }
 
   WinHooks::LocalKeySet numpadMinus;
   numpadMinus.set(WinHooks::localKeyIndex(VK_SUBTRACT, false));
@@ -1634,6 +1658,38 @@ void testLocalKeys(LogWriter *log)
               r.route(VK_INSERT, 0, true, false) == POST &&      // Numpad 0 without Num Lock
               r.route(VK_INSERT, UP, true, false) == POST;
     checkTrue("L2 extended Insert local, Numpad 0 (Insert without the extended flag) is not", ok);
+  }
+  {
+    // Enter and Numpad Enter share VK_RETURN; each key-up follows the owner
+    // of its own key-down.
+    WinHooks::KeyRouter r;
+    WinHooks::LocalKeySet numpadEnter;
+    numpadEnter.set(WinHooks::localKeyIndex(VK_RETURN, true));
+    r.setLocalKeys(numpadEnter);
+    bool ok = r.route(VK_RETURN, 0, true, false) == POST &&      // Enter: server
+              r.route(VK_RETURN, EXT, true, false) == PASS &&    // Numpad Enter: local
+              r.route(VK_RETURN, 0, true, false) == POST &&      // Enter autorepeat
+              r.route(VK_RETURN, EXT | UP, true, false) == PASS &&
+              r.route(VK_RETURN, UP, true, false) == POST;
+    // The other order of the key-ups.
+    ok = ok && r.route(VK_RETURN, EXT, true, false) == PASS &&
+         r.route(VK_RETURN, 0, true, false) == POST &&
+         r.route(VK_RETURN, UP, true, false) == POST &&
+         r.route(VK_RETURN, EXT | UP, true, false) == PASS;
+    checkTrue("L2 Enter and Numpad Enter held together keep separate owners", ok);
+  }
+  {
+    // Insert (extended) and Numpad 0 without Num Lock (VK_INSERT, not
+    // extended): pressed for different owners, each released by its own.
+    WinHooks::KeyRouter r;
+    bool ok = r.route(VK_INSERT, 0, true, false) == POST;           // Numpad 0: server
+    WinHooks::LocalKeySet insert;
+    insert.set(WinHooks::localKeyIndex(VK_INSERT, true));
+    r.setLocalKeys(insert);
+    ok = ok && r.route(VK_INSERT, EXT, true, false) == PASS &&      // Insert: local
+         r.route(VK_INSERT, UP, true, false) == POST &&
+         r.route(VK_INSERT, EXT | UP, true, false) == PASS;
+    checkTrue("L2 Insert and Numpad 0 keep separate owners", ok);
   }
   {
     WinHooks::KeyRouter r;
