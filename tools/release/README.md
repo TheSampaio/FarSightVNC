@@ -7,7 +7,7 @@ the manifest grammar is in `updater-lib/Manifest.h`.
 
 - `New-UpdateSigningKey.ps1 -OutDirectory <dir> [-Id 1]`
   Generates an ECDSA P-256 key pair: `update-key-<Id>.private.blob` (ACL restricted to the
-  current user) and `update-key-<Id>.public.blob` (72-byte `BCRYPT_ECCPUBLIC_BLOB`). It prints
+  current user, no inherited entry; a directory the script creates is restricted too) and `update-key-<Id>.public.blob` (72-byte `BCRYPT_ECCPUBLIC_BLOB`). It prints
   the public key as a C++ array for `updater-lib/TrustedKeys.cpp`. It refuses to write inside the
   repository or to overwrite existing files. Keep the private blob offline and back it up
   (for example in `%USERPROFILE%\.farsightvnc-signing\`). Never commit it.
@@ -19,6 +19,12 @@ the manifest grammar is in `updater-lib/Manifest.h`.
   End-to-end check against `updater-test.exe` (default `build\bin\x64\Release\updater-test.exe`):
   throw-away key, fake flat shipping folder (`fsvncviewer.exe`, `fsvncupdater.exe`, docs) and zip,
   manifest verified by the C++ code, tampering rejected. Uses `%TEMP%` and cleans up.
+- `Test-ReleaseAssets.ps1 -Tag v<version> [-DownloadZip]`
+  Read-only check of a published GitHub release (gh CLI): the zip, `farsightvnc-update.manifest`
+  and `farsightvnc-update.manifest.sig` are attached, the signature verifies with a public key of
+  `updater-lib/TrustedKeys.cpp`, the manifest version equals the tag and its package size equals
+  the zip asset size (with `-DownloadZip`, also the SHA-256). Must pass after every upload.
+  `-LocalDirectory`/`-PublicKeyPath` are a test mode used by `Test-ReleaseScripts.ps1`.
 - `Test-EndToEndInstall.ps1 -ReleaseDir <dir> -OldShipping <dir>`
   Installs the real signed release (x64 only) over a copy of an older version: a Full layout
   install (waits for the running old viewer, keeps user files), a Standalone install (no

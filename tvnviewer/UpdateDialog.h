@@ -10,6 +10,8 @@
 
 #include "gui/BaseDialog.h"
 
+#include "MarkdownRichEdit.h"
+
 #include <cstdint>
 #include <string>
 
@@ -25,6 +27,7 @@ public:
     Downloading, // text = headline, progress via setProgress()
     Ready,
     StageFailed, // text = reason
+    Updated,     // text = "FarSightVNC was updated to vX" (after an install)
   };
 
   // How present() treats the window.
@@ -39,7 +42,7 @@ public:
     std::wstring availableVersion;
     std::wstring releaseDate;   // YYYY-MM-DD or empty
     std::wstring channel;       // e.g. "alpha (pre-release)"
-    std::wstring notes;         // CRLF separated, already capped
+    std::string notesMarkdown;  // UTF-8 Markdown, already capped
     std::wstring releaseUrl;    // empty -> no "View on GitHub" link
     std::wstring note;          // extra line (elevation hint, ...)
     bool canInstall = true;     // false -> "cannot be installed automatically"
@@ -53,6 +56,8 @@ public:
     virtual void onUpdateDownloadRequested() = 0;
     virtual void onUpdateCancelDownload() = 0;
     virtual void onUpdateCancelStaged() = 0;
+    // "Restart and Install Now" in the Ready state.
+    virtual void onUpdateRestartRequested() = 0;
     virtual void onUpdateSkipRequested() = 0;
     virtual void onUpdateAutoCheckToggled(bool enabled) = 0;
     virtual void onUpdatePrereleaseToggled(bool enabled) = 0;
@@ -62,6 +67,9 @@ public:
   virtual ~UpdateDialog();
 
   void setOptions(bool autoCheck, bool includePrereleases);
+  // The window that owns the dialog from the next present() on (a shell
+  // window; 0: unowned). An owned dialog always stays above its owner.
+  void setOwner(HWND owner);
   void setAvailable(const AvailableInfo &info);
   // Creates the window if needed. text is the message of the states that have one.
   void present(State state, const std::wstring &text, Focus focus);
@@ -87,6 +95,16 @@ private:
   void setText(UINT id, const std::wstring &text);
   void updateProgressControls();
   void openUrl(const std::wstring &url);
+  // Release notes: a RichEdit that renders the Markdown replaces the plain
+  // EDIT of the template when msftedit.dll is available.
+  void createNotesControl();
+  void showNotes();
+  // Colors of the current theme (Light, Dark or Auto) on the dialog.
+  void applyTheme();
+  void deleteBrushes();
+  LRESULT onSubclassMessage(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
+  static LRESULT CALLBACK subclassProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam,
+                                       UINT_PTR id, DWORD_PTR data);
 
   Host *m_host;
   State m_state;
@@ -97,6 +115,13 @@ private:
   std::uint64_t m_received;
   std::uint64_t m_total;
   bool m_marquee;
+  HWND m_owner;
+  MarkdownRichEdit m_notesView;
+  bool m_richNotes;
+  bool m_notesDirty;
+  fsv::update::Document m_notes;
+  HBRUSH m_backgroundBrush;
+  HBRUSH m_fieldBrush;
 };
 
 #endif

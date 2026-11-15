@@ -4,11 +4,14 @@
 // Standard and updater-lib headers first: they must see <windows.h> macros
 // (min/max) only after they are parsed.
 #include "updater-lib/FsUtil.h"
+#include "updater-lib/MarkdownLite.h"
 #include "updater-lib/UpdateTypes.h"
 
 #include "UpdateDialog.h"
 
 #include "resource.h"
+#include "gui/DpiUtils.h"
+#include "gui/d2d/Theme.h"
 #include "win-system/WindowsApplication.h"
 
 #include <commctrl.h>
@@ -31,13 +34,14 @@ struct ButtonWidth
 };
 
 const ButtonWidth BUTTON_WIDTHS[] = {
-  {IDC_UPDATE_DOWNLOAD, 80},
+  {IDC_UPDATE_DOWNLOAD, 64},
+  {IDC_UPDATE_RESTART, 92},
   {IDC_UPDATE_LATER, 64},
   {IDC_UPDATE_SKIP, 66},
   {IDC_UPDATE_RELEASES, 72},
   {IDC_UPDATE_CANCEL_DOWNLOAD, 60},
   {IDC_UPDATE_CANCEL_STAGED, 64},
-  {IDOK, 56},
+  {IDOK, 128},
   {IDCANCEL, 56},
 };
 
@@ -61,9 +65,32 @@ const UINT ALL_CONTENT_CONTROLS[] = {
   IDC_UPDATE_PROGRESS, IDC_UPDATE_PROGRESS_TEXT,
 };
 
+const UINT_PTR SUBCLASS_ID = 1;
+
+COLORREF themeColor(ThemeColor color)
+{
+  return RGB((color >> 16) & 0xFF, (color >> 8) & 0xFF, color & 0xFF);
+}
+
+// Plain-text fallback of the release notes for the EDIT control (CRLF).
+std::wstring plainNotes(const fsv::update::Document &document)
+{
+  const std::wstring wide = fsv::update::utf8ToWide(fsv::update::toPlainText(document));
+  std::wstring result;
+  result.reserve(wide.size() + wide.size() / 16);
+  for (size_t i = 0; i < wide.size(); i++) {
+    if (wide[i] == L'\n') {
+      result += L"\r\n";
+    } else {
+      result += wide[i];
+    }
+  }
+  return result;
+}
+
 const UINT ALL_BUTTONS[] = {
   IDC_UPDATE_DOWNLOAD, IDC_UPDATE_LATER, IDC_UPDATE_SKIP, IDC_UPDATE_RELEASES,
-  IDC_UPDATE_CANCEL_DOWNLOAD, IDC_UPDATE_CANCEL_STAGED, IDOK, IDCANCEL,
+  IDC_UPDATE_CANCEL_DOWNLOAD, IDC_UPDATE_CANCEL_STAGED, IDC_UPDATE_RESTART, IDOK, IDCANCEL,
 };
 
 }
@@ -76,12 +103,18 @@ UpdateDialog::UpdateDialog(Host *host)
   m_includePrereleases(false),
   m_received(0),
   m_total(0),
-  m_marquee(false)
+  m_marquee(false),
+  m_owner(0),
+  m_richNotes(false),
+  m_notesDirty(true),
+  m_backgroundBrush(0),
+  m_fieldBrush(0)
 {
 }
 
 UpdateDialog::~UpdateDialog()
 {
+  deleteBrushes();
 }
 
 void UpdateDialog::setOptions(bool autoCheck, bool includePrereleases)
@@ -96,9 +129,16 @@ void UpdateDialog::setOptions(bool autoCheck, bool includePrereleases)
   }
 }
 
+void UpdateDialog::setOwner(HWND owner)
+{
+  m_owner = owner;
+}
+
 void UpdateDialog::setAvailable(const AvailableInfo &info)
 {
   m_available = info;
+  m_notes = fsv::update::parseMarkdown(info.notesMarkdown);
+  m_notesDirty = true;
 }
 
 void UpdateDialog::present(State state, const std::wstring &text, Focus focus)
@@ -127,6 +167,10 @@ void UpdateDialog::present(State state, const std::wstring &text, Focus focus)
   if (window == 0) {
     return;
   }
+  if (m_owner != 0 && IsWindow(m_owner) &&
+      (HWND)GetWindowLongPtr(window, GWLP_HWNDPARENT) != m_owner) {
+    SetWindowLongPtr(window, GWLP_HWNDPARENT, (LONG_PTR)m_owner);
+  }
   switch (focus) {
   case Focus::Activate:
     ShowWindow(window, SW_SHOW);
@@ -141,11 +185,21 @@ void UpdateDialog::present(State state, const std::wstring &text, Focus focus)
       }
     }
     break;
-  case Focus::NoActivate:
+  case Focus::NoActivate: {
+    // Visible without taking the focus: on top of the other windows (and
+    // always above its owner shell), with the taskbar button flashing until
+    // FarSightVNC comes to the foreground.
     if (!IsWindowVisible(window)) {
       ShowWindow(window, SW_SHOWNOACTIVATE);
     }
+    SetWindowPos(window, HWND_TOP, 0, 0, 0, 0, SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE);
+    FLASHWINFO flash = {};
+    flash.cbSize = sizeof(flash);
+    flash.hwnd = (m_owner != 0 && IsWindow(m_owner)) ? m_owner : window;
+    flash.dwFlags = FLASHW_TRAY | FLASHW_TIMERNOFG;
+    FlashWindowEx(&flash);
     break;
+  }
   case Focus::Keep:
     break;
   }
@@ -174,7 +228,11 @@ void UpdateDialog::close()
 
 BOOL UpdateDialog::onInitDialog()
 {
-  SendDlgItemMessage(m_ctrlThis.getWindow(), IDC_UPDATE_NOTES, EM_SETLIMITTEXT, 1000000, 0);
+  HWND window = m_ctrlThis.getWindow();
+  SetWindowSubclass(window, subclassProc, SUBCLASS_ID, reinterpret_cast<DWORD_PTR>(this));
+  createNotesControl();
+  applyTheme();
+  m_notesDirty = true;
   apply();
   // No control takes the focus here: automatic results are shown unfocused.
   return FALSE;
@@ -186,6 +244,15 @@ BOOL UpdateDialog::onNotify(UINT controlID, LPARAM data)
   if (controlID == IDC_UPDATE_GITHUB_LINK && header != 0 &&
       (header->code == NM_CLICK || header->code == NM_RETURN)) {
     openUrl(m_available.releaseUrl);
+    return TRUE;
+  }
+  // A click on a link of the release notes: the URL comes from the range map
+  // of the RichEdit, and is checked again before it is opened.
+  std::wstring url;
+  if (m_richNotes && m_notesView.handleNotify(header, url)) {
+    if (fsv::update::isAllowedLinkUrl(fsv::update::wideToUtf8(url))) {
+      openUrl(url);
+    }
     return TRUE;
   }
   return FALSE;
@@ -228,6 +295,11 @@ BOOL UpdateDialog::onCommand(UINT controlID, UINT notificationID)
     }
     close();
     break;
+  case IDC_UPDATE_RESTART:
+    if (m_host != 0) {
+      m_host->onUpdateRestartRequested();
+    }
+    break;
   case IDC_UPDATE_AUTOCHECK:
     m_autoCheck = IsDlgButtonChecked(m_ctrlThis.getWindow(), IDC_UPDATE_AUTOCHECK) == BST_CHECKED;
     if (m_host != 0) {
@@ -248,7 +320,148 @@ BOOL UpdateDialog::onCommand(UINT controlID, UINT notificationID)
 BOOL UpdateDialog::onDestroy()
 {
   WindowsApplication::removeModelessDialog(m_ctrlThis.getWindow());
+  RemoveWindowSubclass(m_ctrlThis.getWindow(), subclassProc, SUBCLASS_ID);
+  m_richNotes = false; // the RichEdit is destroyed with the dialog
+  // Also when the window goes without close() (its owner was destroyed):
+  // never keep a handle that Windows may give to another window.
+  m_ctrlThis.setWindow(NULL);
   return FALSE;
+}
+
+void UpdateDialog::createNotesControl()
+{
+  HWND window = m_ctrlThis.getWindow();
+  HWND placeholder = GetDlgItem(window, IDC_UPDATE_NOTES);
+  m_richNotes = false;
+  if (placeholder == 0) {
+    return;
+  }
+  SendMessage(placeholder, EM_SETLIMITTEXT, 1000000, 0);
+  if (!MarkdownRichEdit::ensureLibrary()) {
+    return; // no msftedit.dll: the plain EDIT shows the notes as text
+  }
+  RECT rect;
+  GetWindowRect(placeholder, &rect);
+  MapWindowPoints(0, window, reinterpret_cast<POINT *>(&rect), 2);
+  // The id moves to the RichEdit, so every control id lookup finds it.
+  SetWindowLongPtr(placeholder, GWLP_ID, 0);
+  HWND rich = m_notesView.create(window, IDC_UPDATE_NOTES, rect);
+  if (rich == 0) {
+    SetWindowLongPtr(placeholder, GWLP_ID, IDC_UPDATE_NOTES);
+    return;
+  }
+  // Same place in the tab order as the EDIT of the template.
+  SetWindowPos(rich, placeholder, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+  DestroyWindow(placeholder);
+  m_richNotes = true;
+}
+
+void UpdateDialog::showNotes()
+{
+  if (!m_notesDirty) {
+    return;
+  }
+  m_notesDirty = false;
+  if (m_richNotes) {
+    m_notesView.setMarkdown(m_notes);
+  } else {
+    setText(IDC_UPDATE_NOTES, plainNotes(m_notes));
+    SendDlgItemMessage(m_ctrlThis.getWindow(), IDC_UPDATE_NOTES, EM_SETSEL, 0, 0);
+  }
+}
+
+void UpdateDialog::deleteBrushes()
+{
+  if (m_backgroundBrush != 0) {
+    DeleteObject(m_backgroundBrush);
+    m_backgroundBrush = 0;
+  }
+  if (m_fieldBrush != 0) {
+    DeleteObject(m_fieldBrush);
+    m_fieldBrush = 0;
+  }
+}
+
+void UpdateDialog::applyTheme()
+{
+  HWND window = m_ctrlThis.getWindow();
+  const ThemeTokens &tokens = currentTheme();
+  deleteBrushes();
+  m_backgroundBrush = CreateSolidBrush(themeColor(tokens.background));
+  m_fieldBrush = CreateSolidBrush(themeColor(tokens.field));
+  Theme::applyWindowDarkMode(window);
+  Theme::applyControlThemeTree(window);
+  if (m_richNotes) {
+    m_notesView.setTheme(tokens);
+  }
+  RedrawWindow(window, 0, 0, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_FRAME);
+}
+
+LRESULT CALLBACK UpdateDialog::subclassProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam,
+                                            UINT_PTR, DWORD_PTR data)
+{
+  return reinterpret_cast<UpdateDialog *>(data)->onSubclassMessage(hwnd, message, wParam, lParam);
+}
+
+// Theme colors of the dialog and its controls, as in shell/SettingsForm.cpp.
+LRESULT UpdateDialog::onSubclassMessage(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
+{
+  // Not a constant (RegisterWindowMessage), so it cannot be a case label.
+  if (message == Theme::changedMessage()) {
+    applyTheme();
+    return 0;
+  }
+  const ThemeTokens &tokens = currentTheme();
+  switch (message) {
+  case WM_CTLCOLORDLG:
+    return reinterpret_cast<LRESULT>(m_backgroundBrush);
+  case WM_CTLCOLORSTATIC:
+  case WM_CTLCOLORBTN:
+  case WM_CTLCOLOREDIT: {
+    // The read-only EDIT of the notes (fallback) sends WM_CTLCOLORSTATIC.
+    const bool field = message == WM_CTLCOLOREDIT ||
+                       GetDlgCtrlID(reinterpret_cast<HWND>(lParam)) == IDC_UPDATE_NOTES;
+    HDC dc = reinterpret_cast<HDC>(wParam);
+    SetTextColor(dc, themeColor(tokens.text));
+    SetBkColor(dc, themeColor(field ? tokens.field : tokens.background));
+    return reinterpret_cast<LRESULT>(field ? m_fieldBrush : m_backgroundBrush);
+  }
+  case WM_NOTIFY: {
+    // Check boxes are drawn by Theme in the dark theme (readable labels).
+    const NMHDR *header = reinterpret_cast<const NMHDR *>(lParam);
+    if (header != 0 && header->code == NM_CUSTOMDRAW &&
+        Theme::customDrawButton(header->hwndFrom, reinterpret_cast<void *>(lParam))) {
+      return CDRF_SKIPDEFAULT;
+    }
+    break;
+  }
+  case WM_DPICHANGED: {
+    LRESULT result = DefSubclassProc(hwnd, message, wParam, lParam);
+    if (m_richNotes) {
+      m_notesView.refresh(); // font sizes follow the new DPI
+    }
+    return result;
+  }
+  case WM_PAINT: {
+    // A thin border around the RichEdit: its background is the field color,
+    // which is the dialog color in the light theme.
+    LRESULT result = DefSubclassProc(hwnd, message, wParam, lParam);
+    HWND notes = GetDlgItem(hwnd, IDC_UPDATE_NOTES);
+    if (m_richNotes && notes != 0 && IsWindowVisible(notes)) {
+      RECT rect;
+      GetWindowRect(notes, &rect);
+      MapWindowPoints(0, hwnd, reinterpret_cast<POINT *>(&rect), 2);
+      InflateRect(&rect, 1, 1);
+      HDC dc = GetDC(hwnd);
+      HBRUSH border = CreateSolidBrush(themeColor(tokens.border));
+      FrameRect(dc, &rect, border);
+      DeleteObject(border);
+      ReleaseDC(hwnd, dc);
+    }
+    return result;
+  }
+  }
+  return DefSubclassProc(hwnd, message, wParam, lParam);
 }
 
 void UpdateDialog::showControl(UINT id, bool visible)
@@ -386,10 +599,11 @@ void UpdateDialog::apply()
 
   case State::UpToDate:
   case State::Disabled:
+  case State::Updated:
     statusHeight = 20;
     moveControl(IDC_UPDATE_STATUS, MARGIN, textTop, DIALOG_WIDTH - 2 * MARGIN, statusHeight);
     updateProgressControls();
-    if (m_state == State::UpToDate) {
+    if (m_state != State::Disabled) {
       layout(closeOnly, 1, IDCANCEL, textTop + statusHeight);
     } else {
       layout(releasesAndClose, 2, IDCANCEL, textTop + statusHeight);
@@ -406,8 +620,9 @@ void UpdateDialog::apply()
   case State::Ready: {
     moveControl(IDC_UPDATE_STATUS, MARGIN, textTop, DIALOG_WIDTH - 2 * MARGIN, statusHeight);
     updateProgressControls();
-    const UINT readyButtons[] = {IDC_UPDATE_CANCEL_STAGED, IDOK};
-    layout(readyButtons, 2, IDOK, textTop + statusHeight);
+    // Installing at exit is the default: restarting closes the sessions.
+    const UINT readyButtons[] = {IDC_UPDATE_RESTART, IDOK, IDC_UPDATE_CANCEL_STAGED};
+    layout(readyButtons, 3, IDOK, textTop + statusHeight);
     break;
   }
 
@@ -431,8 +646,7 @@ void UpdateDialog::apply()
     setText(IDC_UPDATE_AVAILABLE, m_available.availableVersion);
     setText(IDC_UPDATE_DATE, m_available.releaseDate);
     setText(IDC_UPDATE_CHANNEL, m_available.channel);
-    setText(IDC_UPDATE_NOTES, m_available.notes);
-    SendDlgItemMessage(window, IDC_UPDATE_NOTES, EM_SETSEL, 0, 0);
+    showNotes();
 
     std::wstring note = m_available.note;
     if (!m_available.canInstall) {
@@ -465,6 +679,7 @@ void UpdateDialog::apply()
     break;
   }
   }
+  InvalidateRect(window, 0, TRUE);
 }
 
 void UpdateDialog::openUrl(const std::wstring &url)

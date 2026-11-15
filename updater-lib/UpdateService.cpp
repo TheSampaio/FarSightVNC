@@ -12,6 +12,7 @@
 #include "ZipReader.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <utility>
 
 namespace fsv::update {
@@ -25,6 +26,7 @@ constexpr wchar_t kIncludePrereleasesValue[] = L"IncludePrereleases";
 constexpr wchar_t kSkippedVersionValue[] = L"SkippedVersion";
 constexpr wchar_t kLastCheckValue[] = L"LastCheck";
 constexpr wchar_t kNextCheckValue[] = L"NextCheckNotBefore";
+constexpr wchar_t kPendingReleaseValue[] = L"PendingRelease";
 constexpr wchar_t kPolicySubKey[] = L"SOFTWARE\\Policies\\FarSightVNC\\Viewer\\Updater";
 constexpr wchar_t kPolicyValue[] = L"DisableUpdateCheck";
 constexpr DWORD kMaxVersionStringChars = 32;
@@ -89,6 +91,47 @@ std::optional<std::wstring> readShortString(HKEY key, const wchar_t *name) {
   }
   buffer[kMaxVersionStringChars] = L'\0';
   return std::wstring(buffer);
+}
+
+// REG_BINARY of at most maxBytes; anything else is treated as invalid.
+std::optional<std::string> readBinary(HKEY key, const wchar_t *name, std::size_t maxBytes) {
+  DWORD type = 0;
+  DWORD size = 0;
+  if (::RegQueryValueExW(key, name, nullptr, &type, nullptr, &size) != ERROR_SUCCESS ||
+      type != REG_BINARY || size > maxBytes) {
+    return std::nullopt;
+  }
+  std::string value(size, '\0');
+  if (size != 0 && ::RegQueryValueExW(key, name, nullptr, &type,
+                                      reinterpret_cast<LPBYTE>(value.data()), &size) !=
+                       ERROR_SUCCESS) {
+    return std::nullopt;
+  }
+  value.resize(size);
+  return value;
+}
+
+bool writeBinary(HKEY key, const wchar_t *name, const std::string &value) {
+  return ::RegSetValueExW(key, name, 0, REG_BINARY, reinterpret_cast<const BYTE *>(value.data()),
+                          static_cast<DWORD>(value.size())) == ERROR_SUCCESS;
+}
+
+void appendJsonString(std::string &out, std::string_view text) {
+  out += '"';
+  for (const char c : text) {
+    const unsigned char u = static_cast<unsigned char>(c);
+    if (c == '"' || c == '\\') {
+      out += '\\';
+      out += c;
+    } else if (u < 0x20) {
+      char escape[8];
+      std::snprintf(escape, sizeof(escape), "\\u%04x", u);
+      out += escape;
+    } else {
+      out += c;
+    }
+  }
+  out += '"';
 }
 
 bool writeDword(HKEY key, const wchar_t *name, std::uint32_t value) {
@@ -337,6 +380,8 @@ UpdateSettings UpdateSettingsStore::load() const {
         }
         settings.lastCheckUnix = readQword(key.get(), kLastCheckValue).value_or(0);
         settings.nextCheckNotBeforeUnix = readQword(key.get(), kNextCheckValue).value_or(0);
+        settings.pendingRelease =
+            readBinary(key.get(), kPendingReleaseValue, kMaxPendingReleaseBytes).value_or("");
         return settings;
       },
       UpdateSettings{});
@@ -361,6 +406,11 @@ bool UpdateSettingsStore::save(const UpdateSettings &settings) const {
              ok;
         ok = writeQword(key.get(), kLastCheckValue, settings.lastCheckUnix) && ok;
         ok = writeQword(key.get(), kNextCheckValue, settings.nextCheckNotBeforeUnix) && ok;
+        ok = (settings.pendingRelease.empty() ||
+                      settings.pendingRelease.size() > kMaxPendingReleaseBytes
+                  ? deleteValue(key.get(), kPendingReleaseValue)
+                  : writeBinary(key.get(), kPendingReleaseValue, settings.pendingRelease)) &&
+             ok;
         return ok;
       },
       false);
@@ -446,10 +496,13 @@ void recordCheckOutcome(UpdateSettings &settings, const CheckResult &result,
   case CheckResult::Kind::UpToDate:
     settings.lastCheckUnix = nowUnix;
     settings.nextCheckNotBeforeUnix = nowUnix + kCheckIntervalSeconds;
+    settings.pendingRelease.clear();
     break;
   case CheckResult::Kind::UpdateAvailable:
     settings.lastCheckUnix = nowUnix;
-    settings.nextCheckNotBeforeUnix = nowUnix;
+    settings.nextCheckNotBeforeUnix = nowUnix + kCheckIntervalSeconds;
+    settings.pendingRelease =
+        result.release ? serializeReleaseForCache(*result.release) : std::string();
     break;
   case CheckResult::Kind::Failed:
     settings.nextCheckNotBeforeUnix = nowUnix + kRetryAfterFailureSeconds;
@@ -459,6 +512,167 @@ void recordCheckOutcome(UpdateSettings &settings, const CheckResult &result,
         std::max(result.retryAfterUnix, nowUnix + kMinRateLimitBackoffSeconds);
     break;
   }
+}
+
+std::string serializeReleaseForCache(const ReleaseInfo &release) {
+  std::string notes = release.notes;
+  if (notes.size() > kMaxCachedNotesBytes) {
+    std::size_t cut = kMaxCachedNotesBytes;
+    while (cut > 0 && (static_cast<unsigned char>(notes[cut]) & 0xC0) == 0x80) {
+      --cut; // do not split a UTF-8 sequence
+    }
+    notes.resize(cut);
+  }
+  std::string out = "[{\"tag_name\":";
+  appendJsonString(out, release.tag);
+  out += release.draft ? ",\"draft\":true" : ",\"draft\":false";
+  out += release.githubPrerelease ? ",\"prerelease\":true" : ",\"prerelease\":false";
+  out += ",\"published_at\":";
+  appendJsonString(out, release.publishedAt);
+  out += ",\"html_url\":";
+  appendJsonString(out, release.htmlUrl);
+  out += ",\"body\":";
+  appendJsonString(out, notes);
+  out += ",\"assets\":[";
+  for (std::size_t i = 0; i < release.assets.size(); ++i) {
+    const ReleaseAsset &asset = release.assets[i];
+    out += i == 0 ? "{\"name\":" : ",{\"name\":";
+    appendJsonString(out, asset.name);
+    out += ",\"browser_download_url\":";
+    appendJsonString(out, asset.downloadUrl);
+    out += ",\"size\":" + std::to_string(asset.size) + "}";
+  }
+  out += "]}]";
+  return out;
+}
+
+std::optional<ReleaseInfo> cachedAutomaticOffer(const UpdateSettings &settings,
+                                                const Version &current) {
+  if (settings.pendingRelease.empty()) {
+    return std::nullopt;
+  }
+  const std::optional<std::vector<ReleaseInfo>> releases =
+      parseGitHubReleases(settings.pendingRelease);
+  if (!releases) {
+    return std::nullopt;
+  }
+  SelectionOptions options;
+  options.current = current;
+  options.includePrereleases = effectiveIncludePrereleases(settings, current);
+  options.skipped = settings.skipped;
+  options.manual = false;
+  if (const ReleaseInfo *selected = selectUpdate(*releases, options)) {
+    return *selected;
+  }
+  return std::nullopt;
+}
+
+// ------------------------------------------------------ guarded check run
+
+NamedMutexCheckLock::NamedMutexCheckLock(std::wstring name) : m_name(std::move(name)) {}
+
+NamedMutexCheckLock::~NamedMutexCheckLock() {
+  release();
+}
+
+bool NamedMutexCheckLock::tryAcquire() {
+  if (m_owned) {
+    return true;
+  }
+  m_error = 0;
+  if (m_handle == nullptr) {
+    m_handle = ::CreateMutexW(nullptr, FALSE, m_name.c_str());
+    if (m_handle == nullptr) {
+      m_error = ::GetLastError();
+      return false;
+    }
+  }
+  // WAIT_ABANDONED: the previous owner died mid-check; the lock is ours now.
+  const DWORD wait = ::WaitForSingleObject(m_handle, 0);
+  m_owned = wait == WAIT_OBJECT_0 || wait == WAIT_ABANDONED;
+  if (wait == WAIT_FAILED) {
+    m_error = ::GetLastError();
+  }
+  return m_owned;
+}
+
+void NamedMutexCheckLock::release() {
+  if (m_owned) {
+    ::ReleaseMutex(m_handle);
+    m_owned = false;
+  }
+  if (m_handle != nullptr) {
+    ::CloseHandle(m_handle);
+    m_handle = nullptr;
+  }
+}
+
+CheckRun runCheck(CheckTrigger trigger, IHttpClient &http, const IUpdateSettingsStore &store,
+                  ICheckLock &lock, const Version &current, const UnixClock &clock) {
+  struct Guard {
+    ICheckLock *held = nullptr;
+    ~Guard() {
+      if (held != nullptr) {
+        held->release();
+      }
+    }
+  } guard;
+
+  const bool automatic = trigger == CheckTrigger::Automatic;
+  CheckRun run;
+  try {
+    if (automatic) {
+      if (!lock.tryAcquire()) {
+        const unsigned long error = lock.lastError();
+        run.status = error == 0 ? CheckRun::Status::Busy : CheckRun::Status::LockFailed;
+        if (error != 0) {
+          run.result.detail = "update check mutex failed (Win32 error " +
+                              std::to_string(error) + ")";
+        }
+        run.settings = store.load();
+        return run;
+      }
+      guard.held = &lock;
+    }
+    // Another process may have checked while this one waited for its timer.
+    run.settings = store.load();
+    if (automatic && !isAutomaticCheckDue(run.settings, clock())) {
+      run.status = CheckRun::Status::NotDue;
+      if (!run.settings.pendingRelease.empty() && run.settings.autoCheck) {
+        if (std::optional<ReleaseInfo> offer = cachedAutomaticOffer(run.settings, current)) {
+          run.status = CheckRun::Status::Cached;
+          run.result.kind = CheckResult::Kind::UpdateAvailable;
+          run.result.release = std::move(offer);
+        } else {
+          // Installed, skipped or no longer allowed: forget it.
+          run.settings = store.load();
+          run.settings.pendingRelease.clear();
+          store.save(run.settings);
+        }
+      }
+      return run;
+    }
+
+    SelectionOptions options;
+    options.current = current;
+    options.includePrereleases = effectiveIncludePrereleases(run.settings, current);
+    options.skipped = run.settings.skipped;
+    options.manual = !automatic;
+    run.status = CheckRun::Status::Checked;
+    run.result = checkForUpdate(http, options);
+
+    if (run.result.httpError != HttpError::Cancelled) {
+      // Only the schedule changes: a toggle saved meanwhile is kept.
+      run.settings = store.load();
+      recordCheckOutcome(run.settings, run.result, clock());
+      store.save(run.settings);
+    }
+  } catch (...) {
+    run.status = CheckRun::Status::Checked;
+    run.result = CheckResult{CheckResult::Kind::Failed, std::nullopt, HttpError::Other, 0,
+                             "internal error"};
+  }
+  return run;
 }
 
 // ----------------------------------------------------------------- staging
@@ -488,6 +702,70 @@ StageResult stageUpdate(IHttpClient &http, const ReleaseInfo &release, const Ver
                         const ProgressFn &progress) {
   return guarded([&] { return stageUpdateImpl(http, release, current, keys, stateDir, progress); },
                  stageFailure(StageError::Io, "internal error"));
+}
+
+std::optional<InstallOutcome> parseInstallOutcome(std::string_view text) {
+  const auto isSpace = [](char c) { return c == ' ' || c == '\t' || c == '\r' || c == '\n'; };
+  while (!text.empty() && isSpace(text.front())) {
+    text.remove_prefix(1);
+  }
+  while (!text.empty() && isSpace(text.back())) {
+    text.remove_suffix(1);
+  }
+  const std::size_t space = text.find(' ');
+  if (space == std::string_view::npos || space + 1 >= text.size()) {
+    return std::nullopt;
+  }
+  const std::string_view word = text.substr(0, space);
+  const std::string value(text.substr(space + 1));
+  if (value.find_first_of(" \t") != std::string::npos) {
+    return std::nullopt;
+  }
+  InstallOutcome outcome;
+  if (word == "ok") {
+    outcome.kind = InstallOutcome::Kind::Installed;
+    outcome.version = Version::parse(value);
+    if (!outcome.version) {
+      return std::nullopt;
+    }
+  } else if (word == "declined") {
+    outcome.kind = InstallOutcome::Kind::Declined;
+    if (value != "unknown") {
+      outcome.version = Version::parse(value);
+      if (!outcome.version) {
+        return std::nullopt;
+      }
+    }
+  } else if (word == "failed") {
+    outcome.kind = InstallOutcome::Kind::Failed;
+    outcome.detail = value;
+  } else {
+    return std::nullopt;
+  }
+  return outcome;
+}
+
+bool acknowledgeInstalledUpdate(const std::wstring &stateDir, const Version &running) {
+  return guarded(
+      [&] {
+        if (stateDir.empty()) {
+          return false;
+        }
+        const std::wstring path = joinPath(stateDir, kLastResultFileName);
+        constexpr std::size_t kMaxResultBytes = 256;
+        const std::optional<std::string> text = readFile(path, kMaxResultBytes);
+        if (!text) {
+          return false;
+        }
+        const std::optional<InstallOutcome> outcome = parseInstallOutcome(*text);
+        if (!outcome || outcome->kind != InstallOutcome::Kind::Installed ||
+            !outcome->version || *outcome->version != running) {
+          return false;
+        }
+        return ::MoveFileExW(path.c_str(), joinPath(stateDir, kLastResultAckFileName).c_str(),
+                             MOVEFILE_REPLACE_EXISTING) != FALSE;
+      },
+      false);
 }
 
 std::optional<Manifest> loadStagedUpdate(const std::wstring &stateDir,

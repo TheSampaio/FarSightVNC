@@ -26,6 +26,8 @@
 // Modified for FarSightVNC on 2026-11-02: optional Direct3D 11 / Direct2D presentation (GpuPresenter) with GDI as the automatic fallback.
 // Modified for FarSightVNC on 2026-11-03: local pointer movement is reported to a listener (full screen toolbar).
 // Modified for FarSightVNC on 2026-11-11: the remote screen always fits the window (no scale modes, no scroll bars).
+// Modified for FarSightVNC on 2026-11-14: local keys (Settings, Input) are not sent to the server.
+// Modified for FarSightVNC on 2026-11-14: the WM_CHAR of a dropped local key-down is dropped too.
 //
 
 #include "DesktopWindow.h"
@@ -45,6 +47,7 @@ DesktopWindow::DesktopWindow(LogWriter *logWriter, ConnectionConfig *conConf)
   m_viewerCore(0),
   m_ctrlDown(false),
   m_altDown(false),
+  m_droppedLocalScan(-1),
   m_previousMousePos(-1, -1),
   m_previousMouseState(0),
   m_isBackgroundDirty(false),
@@ -305,6 +308,22 @@ bool DesktopWindow::onKey(WPARAM wParam, LPARAM lParam)
     }
   }
 
+  // A local key is for Windows and the local applications, also when the
+  // hook is off (window not active, not connected...). Its key-up still goes
+  // on: RfbKeySym ignores a key-up it did not press, and releases a key that
+  // was pressed before it became local.
+  // TranslateMessage still turns the dropped key-down into a WM_CHAR ('-'
+  // for Numpad Minus): its scan code is kept so that onChar drops it too,
+  // until the key-up.
+  bool isDown = (lParam & 0x80000000) == 0;
+  int scan = static_cast<int>((lParam >> 16) & 0x1ff);
+  if (isDown && WinHooks::isLocalKey(virtualKey, (lParam & 0x1000000) != 0)) {
+    m_droppedLocalScan = scan;
+    return true;
+  }
+  if (!isDown && scan == m_droppedLocalScan) {
+    m_droppedLocalScan = -1;
+  }
   if (!m_conConf->isViewOnly()) {
     m_rfbKeySym->processKeyEvent(virtualKey,
                                  additionalInfo);
@@ -314,6 +333,11 @@ bool DesktopWindow::onKey(WPARAM wParam, LPARAM lParam)
 
 bool DesktopWindow::onChar(WPARAM wParam, LPARAM lParam)
 {
+  // The character of a local key whose key-down was dropped (see onKey).
+  if (m_droppedLocalScan >= 0 &&
+      static_cast<int>((lParam >> 16) & 0x1ff) == m_droppedLocalScan) {
+    return true;
+  }
   if (!m_conConf->isViewOnly()) {
     m_rfbKeySym->processCharEvent(static_cast<WCHAR>(wParam),
                                   static_cast<unsigned int>(lParam));

@@ -17,9 +17,12 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //
 // Modified for FarSightVNC on 2026-11-12: "+" button (new connection, Lucide icon) right after the tab.
+// Modified for FarSightVNC on 2026-11-12: the application icon (IDI_APPICON) is the logo of the bar.
 //
 
 #include "TitleBar.h"
+
+#include "gui/d2d/Theme.h"
 
 #include "../resource.h"
 
@@ -106,12 +109,12 @@ TitleBar::TitleBar()
 
 float TitleBar::height() const
 {
-  return kLightTheme.titleBarHeight;
+  return currentTheme().titleBarHeight;
 }
 
 void TitleBar::layout(float width)
 {
-  const ThemeTokens &theme = kLightTheme;
+  const ThemeTokens &theme = currentTheme();
   float h = height();
   m_width = width;
 
@@ -205,7 +208,7 @@ const D2D1_RECT_F &TitleBar::partRect(TitleBarPart part) const
 
 bool TitleBar::buttonBackground(TitleBarPart part, ThemeColor *color) const
 {
-  const ThemeTokens &theme = kLightTheme;
+  const ThemeTokens &theme = currentTheme();
   // A pressed button shows its pressed color only while the pointer is
   // still over it, like the native buttons.
   bool pressed = m_pressed == part && m_hover == part;
@@ -239,7 +242,7 @@ bool TitleBar::buttonBackground(TitleBarPart part, ThemeColor *color) const
 void TitleBar::paintCaptionButton(ChromeRenderer *renderer, TitleBarPart part, wchar_t icon,
                                   const wchar_t *placeholder, bool active) const
 {
-  const ThemeTokens &theme = kLightTheme;
+  const ThemeTokens &theme = currentTheme();
   const D2D1_RECT_F &rect = partRect(part);
   ThemeColor background;
   ThemeColor glyph = active ? theme.text : theme.mutedText;
@@ -266,7 +269,7 @@ void TitleBar::paintCaptionButton(ChromeRenderer *renderer, TitleBarPart part, w
 
 void TitleBar::paintNewTabButton(ChromeRenderer *renderer, bool active) const
 {
-  const ThemeTokens &theme = kLightTheme;
+  const ThemeTokens &theme = currentTheme();
   const D2D1_RECT_F &rect = m_tabs.newTabSlot();
   if (rect.right - rect.left <= 0.0f) {
     return;
@@ -289,7 +292,7 @@ void TitleBar::paintNewTabButton(ChromeRenderer *renderer, bool active) const
 
 void TitleBar::paint(ChromeRenderer *renderer, bool active, bool maximized) const
 {
-  const ThemeTokens &theme = kLightTheme;
+  const ThemeTokens &theme = currentTheme();
   float h = height();
   ThemeColor text = active ? theme.text : theme.mutedText;
 
@@ -298,11 +301,13 @@ void TitleBar::paint(ChromeRenderer *renderer, bool active, bool maximized) cons
   float line = renderer->pixelsToDips(1);
   renderer->fillRect(D2D1::RectF(0.0f, h - line, m_width, h), theme.border);
 
-  // Placeholder logo until the icon phase.
-  renderer->fillRoundRect(m_logo, theme.cornerRadius - 1.0f,
-                          active ? theme.accent : theme.mutedText);
-  renderer->drawText(L"F", m_logo, theme.closeHoverText, theme.fontSizeSmall + 1.0f,
-                     DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
+  // The application icon, else a drawn placeholder with its initial.
+  if (!renderer->drawIconResource(IDI_APPICON, m_logo)) {
+    renderer->fillRoundRect(m_logo, theme.cornerRadius - 1.0f,
+                            active ? theme.accent : theme.mutedText);
+    renderer->drawText(L"F", m_logo, theme.closeHoverText, theme.fontSizeSmall + 1.0f,
+                       DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
+  }
 
   for (size_t i = 0; i < m_tabs.count(); i++) {
     const D2D1_RECT_F &tab = m_tabs.tab(i);

@@ -28,6 +28,9 @@
 // Modified for FarSightVNC on 2026-11-11: the Settings page of a shell window (SettingsActions).
 // Modified for FarSightVNC on 2026-11-11: the Settings page replaces the configuration and about dialogs.
 // Modified for FarSightVNC on 2026-11-11: the messages of the removed configuration and about dialogs are gone.
+// Modified for FarSightVNC on 2026-11-14: the automatic update check timer repeats; update notifications are owned by a shell and wait for full screen to end.
+// Modified for FarSightVNC on 2026-11-14: "Restart and Install Now" closes every shell window to install a staged update.
+// Modified for FarSightVNC on 2026-11-14: a CBT hook re-owns the update dialog before its owner shell is destroyed.
 //
 
 #include "TvnViewer.h"
@@ -45,6 +48,7 @@ TvnViewer::TvnViewer(HINSTANCE appInstance, const TCHAR *windowClassName,
   m_conListener(0),
   m_hAccelTable(0),
   m_logWriter(ViewerConfig::getInstance()->getLogger()),
+  m_cbtHook(0),
   m_isListening(false)
 {
   m_logWriter.info(_T("Init WinSock 2.1"));
@@ -58,8 +62,25 @@ TvnViewer::TvnViewer(HINSTANCE appInstance, const TCHAR *windowClassName,
   m_trayIcon = new ControlTrayIcon(this);
 }
 
+TvnViewer *TvnViewer::s_hookOwner = 0;
+
+LRESULT CALLBACK TvnViewer::cbtHookProc(int code, WPARAM wParam, LPARAM lParam)
+{
+  if (code == HCBT_DESTROYWND && s_hookOwner != 0 && s_hookOwner->m_updateController &&
+      s_hookOwner->findShell(reinterpret_cast<HWND>(wParam)) != nullptr) {
+    s_hookOwner->m_updateController->onShellDestroying(reinterpret_cast<HWND>(wParam));
+  }
+  return CallNextHookEx(0, code, wParam, lParam);
+}
+
 TvnViewer::~TvnViewer()
 {
+  if (m_cbtHook != 0) {
+    UnhookWindowsHookEx(m_cbtHook);
+    m_cbtHook = 0;
+  }
+  s_hookOwner = 0;
+
   // Cancels and joins the update worker thread before anything else goes away.
   m_updateController.reset();
 
@@ -248,6 +269,52 @@ void TvnViewer::checkForUpdates()
   postMessage(WM_USER_CHECK_UPDATES);
 }
 
+std::vector<UpdateController::Host::Shell> TvnViewer::updateShells()
+{
+  std::vector<UpdateController::Host::Shell> result;
+  std::list<std::unique_ptr<ShellWindow> >::iterator iter;
+  for (iter = m_shells.begin(); iter != m_shells.end(); ++iter) {
+    HWND hwnd = (*iter)->getHWnd();
+    if (!(*iter)->isDestroyed() && IsWindowVisible(hwnd)) {
+      UpdateController::Host::Shell shell = { hwnd, (*iter)->isFullscreen() };
+      result.push_back(shell);
+    }
+  }
+  return result;
+}
+
+void TvnViewer::updateLog(const std::wstring &line)
+{
+  m_logWriter.info(_T("%s"), line.c_str());
+}
+
+int TvnViewer::updateOpenSessions()
+{
+  int count = 0;
+  std::list<std::unique_ptr<ShellWindow> >::iterator iter;
+  for (iter = m_shells.begin(); iter != m_shells.end(); ++iter) {
+    if (!(*iter)->isDestroyed() && !(*iter)->isShowingHome()) {
+      count++;
+    }
+  }
+  return count;
+}
+
+void TvnViewer::updateCloseAllWindows()
+{
+  // The normal close path of each shell (WM_CLOSE) ends its session; when no
+  // shell, session or listener is left, onTimer() shuts the application down
+  // and main() starts the updater. Nothing is terminated forcibly, and other
+  // viewer processes are left alone (the updater waits for them).
+  stopListening();
+  std::list<std::unique_ptr<ShellWindow> >::iterator iter;
+  for (iter = m_shells.begin(); iter != m_shells.end(); ++iter) {
+    if (!(*iter)->isDestroyed()) {
+      PostMessage((*iter)->getHWnd(), WM_CLOSE, 0, 0);
+    }
+  }
+}
+
 void TvnViewer::addInstance(ViewerInstance *viewerInstance)
 {
   m_instances.addInstance(viewerInstance);
@@ -343,7 +410,10 @@ void TvnViewer::createWindow(const TCHAR *className)
 
   // The automatic update check runs a few seconds after start, never before
   // the first connection or dialog is up.
-  m_updateController.reset(new UpdateController(m_mainWindow));
+  m_updateController.reset(new UpdateController(m_mainWindow, this));
+  // Only this (UI) thread: the shells and the update dialog live here.
+  s_hookOwner = this;
+  m_cbtHook = SetWindowsHookEx(WH_CBT, cbtHookProc, 0, GetCurrentThreadId());
   if (m_updateController->interruptedUpdateFound()) {
     m_logWriter.info(_T("Update: an interrupted update was found, it will be repaired when the viewer exits"));
   }
@@ -511,9 +581,18 @@ bool TvnViewer::onTimer(WPARAM idTimer)
     }
     return true;
   case TIMER_UPDATE_STARTUP:
-    KillTimer(m_mainWindow, TIMER_UPDATE_STARTUP);
+    // The first tick re-arms the timer with the long period: a viewer that
+    // stays open checks again when the policy says it is due.
+    SetTimer(m_mainWindow, TIMER_UPDATE_STARTUP, TIMER_UPDATE_PERIOD, (TIMERPROC)NULL);
     if (m_updateController) {
-      m_updateController->onStartupTimer();
+      m_updateController->onAutoCheckTimer();
+    }
+    return true;
+  case TIMER_UPDATE_DEFERRED:
+    if (m_updateController) {
+      m_updateController->onDeferredTimer();
+    } else {
+      KillTimer(m_mainWindow, TIMER_UPDATE_DEFERRED);
     }
     return true;
   default:

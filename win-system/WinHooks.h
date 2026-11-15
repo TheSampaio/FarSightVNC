@@ -23,10 +23,16 @@
 //
 // Modified for FarSightVNC on 2026-11-01: pure helpers for the low level keyboard hook.
 // Modified for FarSightVNC on 2026-11-11: a key-up takes the same path (posted or passed to Windows) as its key-down; Print Screen stays local.
+// Modified for FarSightVNC on 2026-11-14: a key already held by Windows when the hook sees it first stays with Windows (no remote Ctrl stuck).
+// Modified for FarSightVNC on 2026-11-14: user-configurable local keys (Settings, Input, Local shortcuts) stay with Windows.
+// Modified for FarSightVNC on 2026-11-14: key owners per extended key (Enter/Numpad Enter); stricter LocalKeys parsing.
 //
 
 #include "util/CommonHeader.h"
 #include "win-system/HookEventListener.h"
+
+#include <atomic>
+#include <bitset>
 
 // Class for intercepting keyboard on low level.
 class WinHooks
@@ -50,6 +56,30 @@ public:
   // always stay with Windows (injected, lock keys, Print Screen).
   static HookKeyAction decideKeyAction(DWORD vkCode, DWORD flags);
 
+  // Local keys: keys the user keeps for Windows and local applications (a
+  // screenshot tool on Numpad Minus...). They are never sent to the server.
+  // Bit localKeyIndex(vk, extended): the virtual key, plus 0x100 for an
+  // extended key (Numpad Enter is not Enter, Insert is not Numpad 0).
+  // A local key is matched as the bare key: the modifiers the viewer owns
+  // were swallowed by the hook, so Ctrl+Numpad Minus does not fire a local
+  // hot key and the server still gets the Ctrl. Only the unmodified key is
+  // guaranteed to be local. Numpad digits depend on Num Lock: captured with
+  // Num Lock on they are VK_NUMPAD0-9; with Num Lock off the same keys
+  // arrive as navigation keys (Insert, End...) and are not local.
+  typedef std::bitset<512> LocalKeySet;
+  static unsigned localKeyIndex(DWORD vkCode, bool extended);
+  // Stored form: comma separated hexadecimal virtual keys, exactly two
+  // digits each, "e" after the two digits of an extended key ("6D,2De").
+  // Invalid entries (a lone "e", one digit...) are ignored, duplicates
+  // merged.
+  static LocalKeySet parseLocalKeys(const TCHAR *text);
+  static StringStorage formatLocalKeys(const LocalKeySet &keys);
+  // Local keys of the hook and of the viewer windows. May be called from any
+  // UI thread: the set is stored as atomic words that the hook reads
+  // without a lock.
+  static void setLocalKeys(const LocalKeySet &keys);
+  static bool isLocalKey(DWORD vkCode, bool extended);
+
   // Routes each physical key event so that a key-up takes the same path as
   // its key-down. A key pressed while the viewer owned the keyboard is posted
   // to the viewer until it is released, even if the focus moved meanwhile. A
@@ -64,15 +94,41 @@ public:
     void reset();
     // viewerOwnsKeyboard: the viewer is the foreground window, has the focus
     // and sends keys to the server (or is in full screen).
-    HookKeyAction route(DWORD vkCode, DWORD flags, bool viewerOwnsKeyboard);
+    // systemHasKeyDown: Windows already has this key down (GetAsyncKeyState
+    // inside the hook, which reports the state before the current event). A
+    // key-down of a key without an owner is then an autorepeat (or a late
+    // event) of a key Windows saw pressed, e.g. held across an activation or
+    // passed through while the hook timed out: Windows keeps it until its
+    // key-up. Posting it to the viewer instead swallowed that key-up and left
+    // the key down in Windows (and, at the next focus restoration, on the
+    // server). For the same reason a key-up of a key Windows has down always
+    // reaches Windows.
+    // A local key-down goes to Windows. Modifiers the viewer owns were
+    // swallowed, so Windows sees the bare key (see LocalKeySet). A key-up
+    // still follows its key-down, so a key held while the local keys change
+    // is released where it was pressed.
+    // The owner is kept per localKeyIndex (virtual key plus the extended
+    // flag of flags): Enter and Numpad Enter, Numpad 0 and Insert have
+    // separate owners, like their local key decisions.
+    HookKeyAction route(DWORD vkCode, DWORD flags, bool viewerOwnsKeyboard,
+                        bool systemHasKeyDown);
+    // Not cleared by reset().
+    void setLocalKeys(const LocalKeySet &keys);
+    bool isLocalKey(DWORD vkCode, bool extended) const;
   private:
+    KeyRouter(const KeyRouter &);
+    KeyRouter &operator=(const KeyRouter &);
     enum Owner { OWNER_NONE, OWNER_VIEWER, OWNER_SYSTEM };
-    unsigned char m_owner[256];
+    // Indexed by localKeyIndex(). Only the hook thread touches it.
+    unsigned char m_owner[512];
+    // LocalKeySet as words, read by the hook without a lock.
+    std::atomic<unsigned long long> m_localKeys[512 / 64];
   };
 
   // Routes a key event of the installed hook (see KeyRouter). The routing
   // state starts empty at every registration.
-  static HookKeyAction routeKey(DWORD vkCode, DWORD flags, bool viewerOwnsKeyboard);
+  static HookKeyAction routeKey(DWORD vkCode, DWORD flags, bool viewerOwnsKeyboard,
+                                bool systemHasKeyDown);
 
   // Builds the lParam of a WM_KEYDOWN/WM_KEYUP message from the
   // KBDLLHOOKSTRUCT scanCode and flags fields (unit-testable).

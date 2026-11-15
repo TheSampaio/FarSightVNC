@@ -16,6 +16,7 @@ add_executable(tvnviewer WIN32
   ReconnectDialog.cpp
   HelpDialog.cpp
   main.cpp
+  MarkdownRichEdit.cpp
   NamingDefs.cpp
   NewFolderDialog.cpp
   OptionsDialog.cpp

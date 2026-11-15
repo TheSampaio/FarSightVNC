@@ -25,13 +25,14 @@ typedef unsigned int ThemeColor;
 
 // Design tokens of the window chrome drawn with Direct2D (title bar, toolbar,
 // pages). Sizes are in DIPs (1/96 inch); the renderer scales them to the DPI
-// of the window. Only the light theme exists for now; the dark one comes with
-// the theme phase.
+// of the window. There is a light and a dark palette; Theme::tokens()
+// (gui/d2d/Theme.h) gives the one in use.
 struct ThemeTokens
 {
   // Colors.
   ThemeColor background;   // Window and page background.
   ThemeColor surface;      // Title bar, toolbar, cards.
+  ThemeColor field;        // Background of a native input or a drawn field box.
   ThemeColor border;       // Separators and outlines.
   ThemeColor text;         // Primary text and glyphs.
   ThemeColor mutedText;    // Secondary text, disabled glyphs.
@@ -71,6 +72,7 @@ struct ThemeTokens
 inline constexpr ThemeTokens kLightTheme = {
   .background     = 0xFFFFFF,
   .surface        = 0xF4F4F5,
+  .field          = 0xFFFFFF,
   .border         = 0xE4E4E7,
   .text           = 0x18181B,
   .mutedText      = 0x71717A,
@@ -88,6 +90,44 @@ inline constexpr ThemeTokens kLightTheme = {
   .selectedPressed = 0x93C5FD,
   .selectedText   = 0x1D4ED8,
   .disabledText   = 0xA1A1AA,
+
+  .cornerRadius   = 6.0f,
+  .titleBarHeight = 40.0f,
+  .toolbarHeight  = 36.0f,
+  .buttonSize     = 28.0f,
+  .glyphSize      = 16.0f,
+  .spacingSmall   = 4.0f,
+  .spacing        = 8.0f,
+  .spacingLarge   = 16.0f,
+
+  .fontFamily     = L"Segoe UI",
+  .fontSizeSmall  = 12.0f,
+  .fontSizeBody   = 14.0f,
+  .fontSizeTitle  = 16.0f,
+};
+
+// Neutral, modern dark palette: the same sizes and typography, other colors.
+inline constexpr ThemeTokens kDarkTheme = {
+  .background     = 0x18181B,
+  .surface        = 0x27272A,
+  .field          = 0x27272A,
+  .border         = 0x3F3F46,
+  .text           = 0xFAFAFA,
+  .mutedText      = 0xA1A1AA,
+  .accent         = 0x3B82F6,
+  .accentHover    = 0x60A5FA,
+  .accentPressed  = 0x2563EB,
+  .accentText     = 0xFFFFFF,
+  .hover          = 0x3F3F46,
+  .closeHover     = 0xE81123,
+  .closeHoverText = 0xFFFFFF,
+  .pressed        = 0x52525B,
+  .closePressed   = 0xF1707A,
+  .selected       = 0x1E3A8A,
+  .selectedHover  = 0x1D4ED8,
+  .selectedPressed = 0x2563EB,
+  .selectedText   = 0x93C5FD,
+  .disabledText   = 0x52525B,
 
   .cornerRadius   = 6.0f,
   .titleBarHeight = 40.0f,

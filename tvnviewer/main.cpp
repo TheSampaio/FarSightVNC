@@ -23,9 +23,11 @@
 //
 // Modified for FarSightVNC on 2026-11-11: without a host the viewer starts on the Home page instead of the login dialog.
 // Modified for FarSightVNC on 2026-11-11: command line connections start from the options of new connections.
+// Modified for FarSightVNC on 2026-11-12: the stored theme is applied before any window exists.
 //
 
 #include "client-config-lib/ViewerConfig.h"
+#include "gui/d2d/Theme.h"
 #include "log-writer/LogWriter.h"
 #include "TvnViewer.h"
 #include "ConnectionData.h"
@@ -43,6 +45,8 @@ int APIENTRY _tWinMain(HINSTANCE hInstance, HINSTANCE,
 
   ViewerConfig config(RegistryPaths::VIEWER_PATH);
   config.loadFromStorage(sm);
+  // Before any window exists, so none of them is created light and repainted.
+  Theme::setMode(config.getTheme());
 
   // A connection from the command line starts from the options of new
   // connections (Settings); the command line options apply over them.

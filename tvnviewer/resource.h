@@ -164,6 +164,7 @@
 #define IDC_UPDATE_RELEASES             1120
 #define IDC_UPDATE_CANCEL_DOWNLOAD      1121
 #define IDC_UPDATE_CANCEL_STAGED        1122
+#define IDC_UPDATE_RESTART              1123
 #define ID_CONN_OPTIONS                 40001
 #define ID_CONN_INFO                    40002
 #define ID_SHOW_TOOLBAR                 40004

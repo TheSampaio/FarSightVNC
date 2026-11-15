@@ -117,6 +117,9 @@
     <ClCompile Include="d2d\SvgIcons.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="d2d\Theme.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="MessageWindow.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -240,6 +243,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="d2d\SvgIcons.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="d2d\Theme.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="d2d\ThemeTokens.h">

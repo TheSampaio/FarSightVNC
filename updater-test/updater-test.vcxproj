@@ -327,6 +327,7 @@
     <ClCompile Include="TestUpdateService.cpp" />
     <ClCompile Include="TestInstaller.cpp" />
     <ClCompile Include="TestHttp.cpp" />
+    <ClCompile Include="TestMarkdown.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="TestHarness.h" />

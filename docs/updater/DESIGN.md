@@ -16,7 +16,7 @@ Public interfaces: `updater-lib/*.h` (the contract; change them only through the
 PCSX2 is GPLv3. None of its code is copied; FarSightVNC is GPLv2-or-later.
 
 What we keep from it:
-- The three-button dialog: Download and Install / Skip This Version / Remind Me Later.
+- The three-button dialog: Install Update / Skip This Version / Remind Me Later (PCSX2 says "Download and Install").
 - Skip is persisted per version.
 - Background checks stay quiet on errors and do not pop up over a running session.
 
@@ -76,11 +76,15 @@ Why a separate updater exe: the files must be replaced after the viewer exits, t
 
 ## Check policy (`UpdateService.h`)
 
-- An automatic check runs at most once per launch, only when the policy is due:
+- Automatic checks run only when the policy is due (`isAutomaticCheckDue`, schedule in `NextCheckNotBefore`):
   - every 24 h after an up-to-date result;
   - every 6 h after a failure;
   - after a rate limit, respecting the `X-RateLimit-Reset` time.
-- If an update was found but not acted on ("Remind Me Later"), the next launch checks again and offers it again.
+- The viewer evaluates the policy 5 s after start and then every 30 min (`TvnViewer::TIMER_UPDATE_STARTUP`, re-armed with `TIMER_UPDATE_PERIOD`), so a viewer left open for days still checks once a day. Only one check runs at a time per process.
+- Cross-process: `runCheck` takes the named mutex `Local\FarSightVNC-UpdateCheck` without waiting (held by another viewer process: this tick is skipped), re-reads the settings from the registry and re-evaluates the policy just before the request, and records the outcome before releasing it. Several viewer processes therefore make one request per interval in total. Recording re-reads the settings right before saving, so only `LastCheck`/`NextCheckNotBefore`/`PendingRelease` change; the dialog's Skip and option toggles likewise reload, change one value and save. If the mutex itself cannot be created or waited on, the tick is skipped and the Win32 error is logged (not reported as "another process"). A request cancelled because the viewer is exiting records nothing (the next launch checks again).
+- An update found by a check also schedules the next request 24 h later. The release (tag, notes capped at 64 KiB, assets) is cached as GitHub-style JSON in `PendingRelease` (REG_BINARY, at most 128 KiB). If it is not acted on ("Remind Me Later"), every later launch, and every other viewer process, offers it again from that cache without a request (`CheckRun::Status::Cached`), as long as it is still newer than the running version, allowed by the channel and not skipped; otherwise the cache is dropped. An up-to-date result clears it. The same process does not offer it again for 24 h.
+- Manual checks ("Check for Updates" in Settings > Updates) ignore the interval, the lock and the skipped version; their outcome is recorded the same way.
+- Every automatic outcome is written to the viewer log (`Update: automatic check ...`: up to date, found vX, failed with the reason, skipped because it is not due or because another process is checking).
 - Requests send only the User-Agent `FarSightVNC-Updater/<ver>` and `Accept`. There is no telemetry.
 - Administrator kill switch: `HKLM\SOFTWARE\Policies\FarSightVNC\Viewer\Updater\DisableUpdateCheck = 1`.
 - Settings are stored in `HKCU\Software\FarSightVNC\Viewer\Updater`, alongside the existing FarSightVNC key `...\Viewer\Favorites`. The TightVNC keys are untouched.
@@ -104,15 +108,19 @@ Why a separate updater exe: the files must be replaced after the viewer exits, t
 ## Flow
 
 1. **Check** (viewer worker thread): `checkForUpdate`, then `PostMessage` to the TvnViewer hidden window, then `UpdateDialog`.
-   - Automatic results are shown without activation (no focus stealing) and only when an update exists.
-   - Automatic failures are silent; only manual checks report errors.
-2. **Download and Install** (viewer worker thread): `stageUpdate` into `%LOCALAPPDATA%\FarSightVNC\Updates\<hash(root)>\pending`. The dialog shows progress and a Cancel button. Sessions keep running.
+   - Automatic results are shown without activation (no focus stealing) and only when an update exists. The dialog is owned by the foreground shell window of this process (else the first visible shell; unowned when only the tray icon is left), raised with `SetWindowPos(HWND_TOP, SWP_NOACTIVATE)`, and the taskbar button flashes (`FLASHW_TRAY | FLASHW_TIMERNOFG`) until FarSightVNC comes to the foreground. An owned dialog always stays above its shell, so it cannot be hidden behind it.
+   - Never over a full screen session: while any visible shell is in full screen, the notification waits (a 2 s timer, `TIMER_UPDATE_DEFERRED`) and appears when no shell is in full screen any more. Polling was chosen over a hook in `ShellWindow` because it needs no change to the shell and costs nothing measurable. A dialog that was already open when the user enters full screen stays where it is.
+   - Closing the shell that owns the dialog does not close it: a thread `WH_CBT` hook (`HCBT_DESTROYWND`) re-owns the dialog to another visible shell, or to none, before the shell is destroyed, so a Downloading or Ready dialog survives closing one session window. The dialog also forgets its window handle in `WM_DESTROY`.
+   - Automatic failures are not shown; they are logged. Only manual checks report errors.
+2. **Install Update** (viewer worker thread): `stageUpdate` into `%LOCALAPPDATA%\FarSightVNC\Updates\<hash(root)>\pending`. The dialog shows progress and a Cancel button. Sessions keep running.
    - Before downloading, the viewer probes `canWriteDirectory(root)`. If the folder is not writable, the dialog says administrator approval will be requested at install time.
-3. **Ready**: the dialog says the update will be installed after all FarSightVNC windows are closed. The user can cancel, which discards the staged update.
+3. **Ready**: the dialog offers **Restart and Install Now**, **Install When I Close FarSightVNC** (the default; it only closes the dialog) and **Cancel Update** (discards the staged update).
+   - Restart and Install Now: if any shell shows a session, a confirmation names how many connections will be closed (default No). Then the viewer stops listening and posts `WM_CLOSE` to every shell window, the normal close path (a session that refuses to close, for example during a file transfer, keeps the process alive; the update then installs whenever it exits). When the process exits, step 4 adds `--relaunch`. Nothing is terminated forcibly, and other viewer processes are not touched: the updater waits for them by image path, so with a second viewer process open the install (and the relaunch) happens when that one exits too.
 4. **Viewer exit** (`main.cpp`, after `TvnViewer::run()` returns), if `pending\ready` exists:
    - copy `fsvncupdater.exe` from the viewer folder to `<state>\bin\` (if it is missing there, use the verified staged copy `pending\files\fsvncupdater.exe`);
    - launch it detached:
-     `fsvncupdater.exe --protocol 1 --install --state "<stateDir>" --viewer "<full path of fsvncviewer.exe>" --arch x64 --parent-pid <pid>`
+     `fsvncupdater.exe --protocol 1 --install --state "<stateDir>" --viewer "<full path of fsvncviewer.exe>" --arch x64 --parent-pid <pid> [--relaunch]`
+   - The grammar is parsed by `updater-lib/UpdaterCommandLine.h` (covered by updater-test). `--relaunch` together with `--elevated` is refused.
 5. **fsvncupdater** (unelevated):
    1. take the per-root mutex `Local\FarSightVNC-Updater-<hash>` (a second instance exits);
    2. run `loadStagedUpdate`, which re-verifies the signature and file hashes;
@@ -122,9 +130,11 @@ Why a separate updater exe: the files must be replaced after the viewer exits, t
    6. if `canWriteDirectory`/`canReplaceFile` fails, relaunch itself with `ShellExecuteEx("runas")` and the same arguments plus `--elevated`, then wait for it.
       - UAC cancelled: a message offers to open the release page, and the staged update is kept. The next viewer start shows "ready" again.
    7. `applyInstall`;
-   8. on success, delete `pending` (guarded `removeTree`) and write `<state>\last-result.txt`. No dialog is shown on success.
+   8. on success, delete `pending` (guarded `removeTree`) and write `<state>\last-result.txt` (`ok <version>`). No dialog is shown by the updater on success. With `--relaunch`, the unelevated updater then starts `<root>\fsvncviewer.exe` with no arguments (`CreateProcess`, working directory = root), also when the elevated child did the install, and also after a failure, a declined UAC prompt or nothing to install (the previous version is intact); only a failed rollback or repair (exit 6, `kExitBroken`) leaves it closed. If `<root>\fsvncviewer.exe` is missing, the relaunch is skipped and logged. The viewer must run as the user: the `--elevated` child never starts it, and the updater also checks its own token (`TokenElevation`) and skips the relaunch when it is elevated. The command line parser refuses duplicate options, a second mode flag and option values that start with `--`.
+   - Every step and failure (with the install error name and detail) is appended to `<state>\updater.log` (reset above 256 KiB); failures also write `failed <error>` to `last-result.txt`.
    9. on failure, show a message box with the error, "previous version restored", and an offer to open the release page.
-6. **Recovery**: if the viewer starts and `<root>\.fsv-update\journal` exists, an install was interrupted. The viewer schedules `fsvncupdater --recover` at exit, the same way as step 4.
+6. **Confirmation**: on the first timer tick after start the viewer reads `<state>\last-result.txt`. If it records a successful install of exactly the running version, a small notice "FarSightVNC was updated to vX." is shown without activation (the update dialog in its Updated state, same ownership and full screen rules as step 1), and the file is renamed to `last-result.ack`, so the notice appears once.
+7. **Recovery**: if the viewer starts and `<root>\.fsv-update\journal` exists, an install was interrupted. The viewer schedules `fsvncupdater --recover` at exit, the same way as step 4.
 
 ## Install transaction (`applyInstall`)
 
@@ -170,3 +180,6 @@ Journal: `<root>\.fsv-update\journal`, a text file flushed after each line.
 - v0.2.1a and older have no updater. v1.0.0a (the first release with it; v0.3.0a was never published) must be installed manually once, into a new folder because the layout changed (flat, 64-bit only).
 - The `fsvncupdater` waiting process stays alive while other viewer processes of the same installation are still open. It does so by design and uses negligible resources.
 - No GUI progress during install; replacing the few files takes well under a second.
+- The full screen deferral only sees the shells of the viewer process that shows the notice; a full screen session in another viewer process does not delay it.
+- Elevated install path (pre-existing, not changed by the restart work): the unelevated viewer copies `fsvncupdater.exe` into the user-writable `<state>\bin` and starts it there, and the elevated child writes `last-result.txt` and removes `pending` in the user-writable state directory. A same-user attacker is out of scope (see above), but over-the-shoulder UAC (a standard user approving with an administrator's credentials) weakens that assumption: the administrator elevates a binary the standard user could have replaced. Unattended or silent installs stay out of scope until this is closed (for example by running the elevated part from a protected location).
+- With `--relaunch`, the viewer is started again after every outcome except a failed rollback or repair (exit 6); if another updater of the same installation is already waiting, the relaunched viewer keeps it waiting and the update installs when that viewer exits.

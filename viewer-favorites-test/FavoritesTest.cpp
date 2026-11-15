@@ -21,6 +21,8 @@
 // of the full screen toolbar (FullScreenToolbarLogic).
 // Modified for FarSightVNC on 2026-11-03: also covers the assisted reconnect
 // decisions (ReconnectPolicy).
+// Modified for FarSightVNC on 2026-11-14: also runs the Home page list
+// geometry checks (HomeLayoutTest.cpp).
 
 // Deterministic test for the in-memory logic of ConnectionFavorites (the
 // favorite and recent hosts of the login dialog): case-insensitive host
@@ -33,6 +35,9 @@
 
 #include <stdio.h>
 #include <vector>
+
+// HomeLayoutTest.cpp.
+void testHomeLayout(void (*check)(bool, const char *));
 
 namespace {
 
@@ -282,6 +287,7 @@ int main()
   testReconnectOffer();
   testReconnectBackoff();
   testReconnectCountdown();
+  testHomeLayout(check);
   printf("viewer-favorites-test: %d passed, %d failed\n", g_passed, g_failed);
   return g_failed == 0 ? 0 : 1;
 }

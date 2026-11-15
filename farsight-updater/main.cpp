@@ -6,7 +6,14 @@
 // install (see docs/updater/DESIGN.md, "Flow" steps 5 and 6). Protocol 1:
 //
 //   --protocol 1 --install|--recover --state "<stateDir>" --viewer "<fsvncviewer.exe>"
-//   --arch x64 [--parent-pid N] [--elevated]
+//   --arch x64 [--parent-pid N] [--elevated] [--relaunch]
+//
+// --relaunch ("Restart and Install Now" in the viewer): when the run ends the
+// unelevated updater starts <root>\fsvncviewer.exe again, also when the
+// elevated child did the install, and also after a failure, a declined UAC
+// prompt or nothing to install (the old version is then intact). Only a
+// failed rollback or repair (exit kExitBroken) leaves the viewer closed. The
+// elevated child, or any elevated token, never starts the viewer.
 //
 // No network calls; the only windows are message boxes.
 
@@ -18,6 +25,7 @@
 #include "updater-lib/FsUtil.h"
 #include "updater-lib/Installer.h"
 #include "updater-lib/UpdateService.h"
+#include "updater-lib/UpdaterCommandLine.h"
 #include "updater-lib/Win32Util.h"
 
 #include <cstdint>
@@ -38,6 +46,7 @@ constexpr int kExitOk = 0;
 constexpr int kExitNoUpdate = 3;   // nothing staged / nothing installable
 constexpr int kExitNeedsAdmin = 4; // administrator permission was declined
 constexpr int kExitFailed = 5;     // install or recovery failed
+constexpr int kExitBroken = 6;     // rollback or repair failed: installation may be damaged
 constexpr int kExitUsage = 64;     // unknown or missing arguments
 constexpr int kExitRejected = 65;  // arguments failed validation
 constexpr int kExitInternal = 70;  // unexpected exception
@@ -49,65 +58,10 @@ constexpr wchar_t kAppTitle[] = L"FarSightVNC Updater";
 
 // ----------------------------------------------------------------- options
 
-enum class Mode { Install, Recover };
-
-struct Options {
-  Mode mode = Mode::Install;
-  std::wstring stateDir;
-  std::wstring viewer;
-  std::wstring arch;
-  DWORD parentPid = 0;
-  bool elevated = false;
-};
-
-bool parsePid(const std::wstring &text, DWORD &pid) {
-  if (text.empty() || text.size() > 10) {
-    return false;
-  }
-  wchar_t *end = nullptr;
-  const unsigned long value = std::wcstoul(text.c_str(), &end, 10);
-  if (end == nullptr || *end != L'\0' || value == 0) {
-    return false;
-  }
-  pid = static_cast<DWORD>(value);
-  return true;
-}
-
-// Strict parse; any unknown or missing argument returns nullopt.
-std::optional<Options> parseArguments(const std::vector<std::wstring> &args) {
-  Options options;
-  bool protocolOk = false;
-  bool haveMode = false;
-  for (std::size_t i = 0; i < args.size(); ++i) {
-    const std::wstring &arg = args[i];
-    const bool hasValue = i + 1 < args.size();
-    if (arg == L"--install" || arg == L"--recover") {
-      options.mode = arg == L"--install" ? Mode::Install : Mode::Recover;
-      haveMode = true;
-    } else if (arg == L"--elevated") {
-      options.elevated = true;
-    } else if (arg == L"--protocol" && hasValue) {
-      protocolOk = args[++i] == L"1";
-    } else if (arg == L"--state" && hasValue) {
-      options.stateDir = args[++i];
-    } else if (arg == L"--viewer" && hasValue) {
-      options.viewer = args[++i];
-    } else if (arg == L"--arch" && hasValue) {
-      options.arch = args[++i];
-    } else if (arg == L"--parent-pid" && hasValue) {
-      if (!parsePid(args[++i], options.parentPid)) {
-        return std::nullopt;
-      }
-    } else {
-      return std::nullopt;
-    }
-  }
-  if (!protocolOk || !haveMode || options.stateDir.empty() || options.viewer.empty() ||
-      options.arch.empty()) {
-    return std::nullopt;
-  }
-  return options;
-}
+// The command line grammar lives in updater-lib (UpdaterCommandLine.h) so
+// that updater-test covers it.
+using Options = UpdaterOptions;
+using Mode = UpdaterMode;
 
 std::vector<std::wstring> commandLineArguments() {
   std::vector<std::wstring> args;
@@ -272,6 +226,50 @@ std::vector<std::wstring> recoveryViewers(const Context &context) {
   return viewers;
 }
 
+bool processIsElevated() {
+  HANDLE token = nullptr;
+  if (!::OpenProcessToken(::GetCurrentProcess(), TOKEN_QUERY, &token)) {
+    return true; // unknown: treat as elevated, never relaunch
+  }
+  UniqueHandle owned(token);
+  TOKEN_ELEVATION elevation{};
+  DWORD size = 0;
+  if (!::GetTokenInformation(token, TokenElevation, &elevation, sizeof(elevation), &size)) {
+    return true;
+  }
+  return elevation.TokenIsElevated != 0;
+}
+
+// Starts the installed viewer again after "Restart and Install Now". The
+// viewer must run as the user, never as administrator: an elevated token
+// (the --elevated child, or a user without UAC split token) skips it.
+// CreateProcess with no arguments, working directory = root.
+void relaunchViewer(const Context &context, const Log &log) {
+  if (context.options.elevated || processIsElevated()) {
+    log.write("relaunch skipped: this updater runs elevated");
+    return;
+  }
+  const std::wstring viewer = joinPath(context.target.root, kViewerExeName);
+  if (!fileExists(viewer)) {
+    log.write("relaunch skipped: viewer not found", viewer);
+    return;
+  }
+  std::wstring commandLine = quoteArgument(viewer);
+  std::vector<wchar_t> buffer(commandLine.begin(), commandLine.end());
+  buffer.push_back(L'\0');
+  STARTUPINFOW startup{};
+  startup.cb = sizeof(startup);
+  PROCESS_INFORMATION process{};
+  if (::CreateProcessW(viewer.c_str(), buffer.data(), nullptr, nullptr, FALSE, 0, nullptr,
+                       context.target.root.c_str(), &startup, &process)) {
+    ::CloseHandle(process.hThread);
+    ::CloseHandle(process.hProcess);
+    log.write("relaunched", viewer);
+  } else {
+    log.write("relaunch failed (Win32 error " + std::to_string(::GetLastError()) + ")", viewer);
+  }
+}
+
 // ------------------------------------------------------------- elevation
 
 // Relaunches this exe with the same arguments plus --elevated. Returns the
@@ -365,7 +363,7 @@ int reportInstallFailure(const Context &context, const Log &log, InstallError er
                                   utf8ToWide(version.toString()) + L". " + outcome +
                                   L"Open the releases page to update manually?",
                               MB_ICONWARNING);
-  return kExitFailed;
+  return error == InstallError::RollbackFailed ? kExitBroken : kExitFailed;
 }
 
 // applyInstall with the "viewer restarted meanwhile" retry.
@@ -472,13 +470,13 @@ int runRecover(const Context &context, const Log &log) {
       L"FarSightVNC could not finish repairing an interrupted update. It will try again the "
       L"next time FarSightVNC closes. Open the releases page to update manually?",
       MB_ICONWARNING);
-  return kExitFailed;
+  return kExitBroken;
 }
 
 // --------------------------------------------------------------------- main
 
 int run(const std::vector<std::wstring> &args) {
-  const std::optional<Options> parsed = parseArguments(args);
+  const std::optional<Options> parsed = parseUpdaterArguments(args);
   if (!parsed) {
     return kExitUsage;
   }
@@ -489,7 +487,7 @@ int run(const std::vector<std::wstring> &args) {
   }
   context.options.stateDir = fullPath(context.options.stateDir);
   context.pendingDir = joinPath(context.options.stateDir, kPendingDirName);
-  context.lastResultPath = joinPath(context.options.stateDir, L"last-result.txt");
+  context.lastResultPath = joinPath(context.options.stateDir, kLastResultFileName);
 
   // One updater per installation; the elevated child runs under its parent's lock.
   UniqueHandle mutex;
@@ -497,6 +495,12 @@ int run(const std::vector<std::wstring> &args) {
     mutex.reset(::CreateMutexW(
         nullptr, FALSE, (std::wstring(kMutexPrefix) + fileName(context.options.stateDir)).c_str()));
     if (mutex.valid() && ::GetLastError() == ERROR_ALREADY_EXISTS) {
+      // Another updater of this installation is already waiting; it installs
+      // when the viewer started here exits again.
+      if (context.options.relaunch) {
+        ensureDirectory(context.options.stateDir);
+        relaunchViewer(context, Log(joinPath(context.options.stateDir, L"updater.log")));
+      }
       return kExitOk;
     }
   }
@@ -507,8 +511,14 @@ int run(const std::vector<std::wstring> &args) {
             (context.options.elevated ? " (elevated)" : ""));
   log.write("viewer", context.options.viewer);
 
-  return context.options.mode == Mode::Install ? runInstall(context, log)
-                                               : runRecover(context, log);
+  const int code = context.options.mode == Mode::Install ? runInstall(context, log)
+                                                         : runRecover(context, log);
+  // Every terminal outcome leaves the old or the new version intact, except a
+  // failed rollback/repair. relaunchViewer() refuses an elevated process.
+  if (context.options.relaunch && code != kExitBroken) {
+    relaunchViewer(context, log);
+  }
+  return code;
 }
 
 } // namespace

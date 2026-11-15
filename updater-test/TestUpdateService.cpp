@@ -7,6 +7,7 @@
 #include "updater-lib/Crypto.h"
 #include "updater-lib/FsUtil.h"
 #include "updater-lib/UpdateService.h"
+#include "updater-lib/UpdaterCommandLine.h"
 
 #include <windows.h>
 
@@ -18,6 +19,7 @@
 #include <map>
 #include <optional>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -295,14 +297,24 @@ void testPolicy() {
     CHECK(!isAutomaticCheckDue(s, now + 3600));
     CHECK(isAutomaticCheckDue(s, now + day));
   }
-  { // update available: no waiting recorded
+  { // update available: next request after the interval, the release is cached
     UpdateSettings s;
     s.skipped = versionOf("0.1.0a");
-    recordCheckOutcome(s, resultOf(CheckResult::Kind::UpdateAvailable), now);
+    CheckResult found = resultOf(CheckResult::Kind::UpdateAvailable);
+    ReleaseInfo release;
+    release.tag = "v0.3.0a";
+    release.version = versionOf("0.3.0a");
+    found.release = release;
+    recordCheckOutcome(s, found, now);
     CHECK(s.lastCheckUnix == now);
-    CHECK(s.nextCheckNotBeforeUnix == now);
-    CHECK(isAutomaticCheckDue(s, now + 60)); // "Remind Me Later": offered on the next launch
+    CHECK(s.nextCheckNotBeforeUnix == now + day);
+    CHECK(!isAutomaticCheckDue(s, now + 60));
+    CHECK(!s.pendingRelease.empty());
     CHECK(s.skipped && *s.skipped == versionOf("0.1.0a"));
+    recordCheckOutcome(s, resultOf(CheckResult::Kind::Failed), now + day);
+    CHECK(!s.pendingRelease.empty()); // a failure keeps the pending release
+    recordCheckOutcome(s, resultOf(CheckResult::Kind::UpToDate), now + day);
+    CHECK(s.pendingRelease.empty());
   }
   { // failure: retry after 6 h, last successful check untouched
     UpdateSettings s;
@@ -348,6 +360,335 @@ void testPolicy() {
     const std::string name = httpErrorName(static_cast<HttpError>(i));
     CHECK(!name.empty() && name != "unknown");
   }
+}
+
+// ------------------------------------------------------ guarded check run
+
+class MemoryStore final : public IUpdateSettingsStore {
+public:
+  mutable UpdateSettings stored;
+  mutable int saves = 0;
+  UpdateSettings load() const override { return stored; }
+  bool save(const UpdateSettings &settings) const override {
+    stored = settings;
+    ++saves;
+    return true;
+  }
+};
+
+class FakeLock final : public ICheckLock {
+public:
+  bool heldElsewhere = false;
+  int acquired = 0;
+  int released = 0;
+  bool tryAcquire() override {
+    if (heldElsewhere) {
+      return false;
+    }
+    ++acquired;
+    return true;
+  }
+  void release() override { ++released; }
+  unsigned long lastError() const override { return heldElsewhere ? error : 0; }
+  unsigned long error = 0; // with heldElsewhere: simulate a mutex failure
+};
+
+struct CheckBench {
+  MemoryStore store;
+  FakeLock lock;
+  FakeHttpClient http;
+  std::uint64_t now = 1'800'000'000;
+  Version current = versionOf("0.2.1a");
+
+  CheckRun run(CheckTrigger trigger) {
+    return runCheck(trigger, http, store, lock, current, [this] { return now; });
+  }
+  int requests() const { return static_cast<int>(http.requests.size()); }
+};
+
+void testGuardedCheck() {
+  const std::string url = kReleasesApiUrl;
+  const std::string newer = "[" + releaseJson("v0.3.0a", true) + "]";
+  const std::string same = "[" + releaseJson("v0.2.1a", true) + "]";
+  constexpr std::uint64_t day = kCheckIntervalSeconds;
+
+  { // up to date: next automatic check exactly 24 h later
+    CheckBench b;
+    b.http.routes[url] = okRoute(same);
+    const std::uint64_t start = b.now;
+    CheckRun run = b.run(CheckTrigger::Automatic);
+    CHECK(run.status == CheckRun::Status::Checked);
+    CHECK(run.result.kind == CheckResult::Kind::UpToDate);
+    CHECK(b.store.stored.lastCheckUnix == start);
+    CHECK(b.store.stored.nextCheckNotBeforeUnix == start + day);
+    CHECK(b.lock.acquired == 1 && b.lock.released == 1);
+    b.now = start + day - 1;
+    CHECK(b.run(CheckTrigger::Automatic).status == CheckRun::Status::NotDue);
+    CHECK(b.requests() == 1);
+    CHECK(b.lock.acquired == 2 && b.lock.released == 2); // released when not due too
+    b.now = start + day;
+    CHECK(b.run(CheckTrigger::Automatic).status == CheckRun::Status::Checked);
+    CHECK(b.requests() == 2);
+    CHECK(b.store.stored.nextCheckNotBeforeUnix == start + 2 * day);
+  }
+  { // failure: retried after 6 h, not before
+    CheckBench b;
+    b.http.routes[url] = errorRoute(HttpError::Offline);
+    const std::uint64_t start = b.now;
+    CheckRun run = b.run(CheckTrigger::Automatic);
+    CHECK(run.status == CheckRun::Status::Checked);
+    CHECK(run.result.kind == CheckResult::Kind::Failed);
+    CHECK(b.store.stored.lastCheckUnix == 0);
+    CHECK(b.store.stored.nextCheckNotBeforeUnix == start + kRetryAfterFailureSeconds);
+    b.now = start + kRetryAfterFailureSeconds - 1;
+    CHECK(b.run(CheckTrigger::Automatic).status == CheckRun::Status::NotDue);
+    b.now = start + kRetryAfterFailureSeconds;
+    CHECK(b.run(CheckTrigger::Automatic).status == CheckRun::Status::Checked);
+    CHECK(b.requests() == 2);
+  }
+  { // rate limit: the reset time is respected
+    CheckBench b;
+    FakeHttpClient::Route route = errorRoute(HttpError::RateLimited, 403);
+    route.rateLimitReset = b.now + 2 * 3600;
+    b.http.routes[url] = route;
+    const std::uint64_t start = b.now;
+    CHECK(b.run(CheckTrigger::Automatic).result.kind == CheckResult::Kind::RateLimited);
+    CHECK(b.store.stored.nextCheckNotBeforeUnix == start + 2 * 3600);
+    b.now = start + 2 * 3600 - 1;
+    CHECK(b.run(CheckTrigger::Automatic).status == CheckRun::Status::NotDue);
+    b.now = start + 2 * 3600;
+    CHECK(b.run(CheckTrigger::Automatic).status == CheckRun::Status::Checked);
+  }
+  { // found: offered again on the next launch from the cache, one request per interval
+    CheckBench b;
+    b.http.routes[url] = okRoute(newer);
+    const std::uint64_t start = b.now;
+    CheckRun run = b.run(CheckTrigger::Automatic);
+    CHECK(run.result.kind == CheckResult::Kind::UpdateAvailable);
+    CHECK(run.result.release && run.result.release->tag == "v0.3.0a");
+    CHECK(b.store.stored.nextCheckNotBeforeUnix == start + day);
+    b.now += 60; // another process, or the next launch
+    CheckRun again = b.run(CheckTrigger::Automatic);
+    CHECK(again.status == CheckRun::Status::Cached);
+    CHECK(again.result.kind == CheckResult::Kind::UpdateAvailable);
+    CHECK(again.result.release && again.result.release->tag == "v0.3.0a");
+    CHECK(again.result.release && again.result.release->htmlUrl.find("v0.3.0a") != std::string::npos);
+    CHECK(b.requests() == 1);
+    // Skipped meanwhile: not offered and dropped from the cache.
+    b.store.stored.skipped = versionOf("0.3.0a");
+    CHECK(b.run(CheckTrigger::Automatic).status == CheckRun::Status::NotDue);
+    CHECK(b.store.stored.pendingRelease.empty());
+    b.now = start + day;
+    CHECK(b.run(CheckTrigger::Automatic).status == CheckRun::Status::Checked);
+    CHECK(b.requests() == 2);
+  }
+  { // the cached release is not offered once it is installed (running version >= it)
+    CheckBench b;
+    b.http.routes[url] = okRoute(newer);
+    b.run(CheckTrigger::Automatic);
+    b.current = versionOf("0.3.0a");
+    b.now += 60;
+    CHECK(b.run(CheckTrigger::Automatic).status == CheckRun::Status::NotDue);
+    CHECK(b.store.stored.pendingRelease.empty());
+  }
+  { // round trip of the cache keeps notes with quotes, backslashes and control characters
+    ReleaseInfo release;
+    release.tag = "v0.3.0a";
+    release.version = versionOf("0.3.0a");
+    release.githubPrerelease = true;
+    release.publishedAt = "2026-11-14T10:00:00Z";
+    release.htmlUrl = "https://github.com/TheSampaio/FarSightVNC/releases/tag/v0.3.0a";
+    release.notes = "line \"one\"\r\n\tback\\slash \xc3\xa9";
+    release.assets.push_back({"farsightvnc-update.manifest", "https://example.invalid/m", 123});
+    const std::optional<std::vector<ReleaseInfo>> parsed =
+        parseGitHubReleases(serializeReleaseForCache(release));
+    CHECK(parsed && parsed->size() == 1);
+    if (parsed && parsed->size() == 1) {
+      const ReleaseInfo &back = parsed->front();
+      CHECK(back.tag == release.tag && back.notes == release.notes);
+      CHECK(back.githubPrerelease && back.publishedAt == release.publishedAt);
+      CHECK(back.assets.size() == 1 && back.assets[0].size == 123 &&
+            back.assets[0].downloadUrl == "https://example.invalid/m");
+    }
+    release.notes.assign(kMaxCachedNotesBytes + 10, 'x');
+    CHECK(serializeReleaseForCache(release).size() < kMaxPendingReleaseBytes);
+  }
+  { // manual ignores the interval and the skipped version; automatic honours both
+    CheckBench b;
+    b.http.routes[url] = okRoute(newer);
+    b.store.stored.nextCheckNotBeforeUnix = b.now + day;
+    b.store.stored.skipped = versionOf("0.3.0a");
+    CHECK(b.run(CheckTrigger::Automatic).status == CheckRun::Status::NotDue);
+    CHECK(b.requests() == 0);
+    CheckRun manual = b.run(CheckTrigger::Manual);
+    CHECK(manual.status == CheckRun::Status::Checked);
+    CHECK(manual.result.kind == CheckResult::Kind::UpdateAvailable);
+    CHECK(b.requests() == 1);
+    CHECK(b.lock.acquired == 1); // only the automatic run took the lock
+    b.store.stored.nextCheckNotBeforeUnix = 0;
+    CHECK(b.run(CheckTrigger::Automatic).result.kind == CheckResult::Kind::UpToDate);
+  }
+  { // manual check while automatic checks are off
+    CheckBench b;
+    b.http.routes[url] = okRoute(same);
+    b.store.stored.autoCheck = false;
+    CHECK(b.run(CheckTrigger::Automatic).status == CheckRun::Status::NotDue);
+    CHECK(b.run(CheckTrigger::Manual).status == CheckRun::Status::Checked);
+    CHECK(!b.store.stored.autoCheck);
+  }
+  { // another process holds the lock: nothing is requested or saved
+    CheckBench b;
+    b.http.routes[url] = okRoute(same);
+    b.lock.heldElsewhere = true;
+    CHECK(b.run(CheckTrigger::Automatic).status == CheckRun::Status::Busy);
+    CHECK(b.requests() == 0);
+    CHECK(b.store.saves == 0);
+    CHECK(b.lock.released == 0);
+    b.lock.error = 87; // the mutex could not be created: reported as such
+    CheckRun failed = b.run(CheckTrigger::Automatic);
+    CHECK(failed.status == CheckRun::Status::LockFailed);
+    CHECK(failed.result.detail.find("87") != std::string::npos);
+    CHECK(b.requests() == 0);
+    b.lock.error = 0;
+    // ...and when it checked meanwhile, this process finds it not due.
+    b.lock.heldElsewhere = false;
+    b.store.stored.nextCheckNotBeforeUnix = b.now + day;
+    CHECK(b.run(CheckTrigger::Automatic).status == CheckRun::Status::NotDue);
+    CHECK(b.requests() == 0);
+  }
+  { // a cancelled request (viewer exiting) records nothing
+    CheckBench b;
+    b.http.routes[url] = errorRoute(HttpError::Cancelled);
+    CheckRun run = b.run(CheckTrigger::Automatic);
+    CHECK(run.status == CheckRun::Status::Checked);
+    CHECK(run.result.httpError == HttpError::Cancelled);
+    CHECK(b.store.saves == 0);
+    CHECK(b.lock.released == 1);
+  }
+  { // the real named mutex: a second owner (another thread here) is refused
+    wchar_t name[96];
+    swprintf_s(name, L"Local\\FarSightVNC-UpdateCheck-test-%lu-%llu", ::GetCurrentProcessId(),
+               static_cast<unsigned long long>(::GetTickCount64()));
+    NamedMutexCheckLock first(name);
+    CHECK(first.tryAcquire());
+    bool otherGot = true;
+    std::thread([&] {
+      NamedMutexCheckLock second(name);
+      otherGot = second.tryAcquire();
+    }).join();
+    CHECK(!otherGot);
+    first.release();
+    bool otherAfter = false;
+    std::thread([&] {
+      NamedMutexCheckLock second(name);
+      otherAfter = second.tryAcquire();
+      second.release();
+    }).join();
+    CHECK(otherAfter);
+  }
+}
+
+// --------------------------------------------- updater command line, results
+
+std::vector<std::wstring> baseUpdaterArgs() {
+  return {L"--protocol", L"1",    L"--install", L"--state", L"C:\\s", L"--viewer",
+          L"C:\\v\\fsvncviewer.exe", L"--arch", L"x64",     L"--parent-pid", L"42"};
+}
+
+std::vector<std::wstring> plus(std::vector<std::wstring> args, const wchar_t *extra) {
+  args.push_back(extra);
+  return args;
+}
+
+void testUpdaterCommandLine() {
+  const std::optional<UpdaterOptions> base = parseUpdaterArguments(baseUpdaterArgs());
+  CHECK(base.has_value());
+  CHECK(base && base->mode == UpdaterMode::Install && !base->relaunch && !base->elevated);
+  CHECK(base && base->parentPid == 42u && base->stateDir == L"C:\\s" && base->arch == L"x64");
+
+  const std::optional<UpdaterOptions> relaunch =
+      parseUpdaterArguments(plus(baseUpdaterArgs(), L"--relaunch"));
+  CHECK(relaunch && relaunch->relaunch && !relaunch->elevated);
+  const std::optional<UpdaterOptions> elevated =
+      parseUpdaterArguments(plus(baseUpdaterArgs(), L"--elevated"));
+  CHECK(elevated && elevated->elevated && !elevated->relaunch);
+  // The elevated child never relaunches the viewer.
+  CHECK(!parseUpdaterArguments(plus(plus(baseUpdaterArgs(), L"--relaunch"), L"--elevated")));
+
+  std::vector<std::wstring> recover = baseUpdaterArgs();
+  recover[2] = L"--recover";
+  const std::optional<UpdaterOptions> recovered = parseUpdaterArguments(plus(recover, L"--relaunch"));
+  CHECK(recovered && recovered->mode == UpdaterMode::Recover && recovered->relaunch);
+
+  CHECK(!parseUpdaterArguments(plus(baseUpdaterArgs(), L"--relaunch=1")));
+  // duplicates, a second mode, and values that look like options
+  CHECK(!parseUpdaterArguments(plus(plus(baseUpdaterArgs(), L"--relaunch"), L"--relaunch")));
+  CHECK(!parseUpdaterArguments(plus(baseUpdaterArgs(), L"--recover")));
+  CHECK(!parseUpdaterArguments(plus(baseUpdaterArgs(), L"--install")));
+  CHECK(!parseUpdaterArguments(plus(plus(baseUpdaterArgs(), L"--state"), L"C:\\other")));
+  CHECK(!parseUpdaterArguments(plus(plus(baseUpdaterArgs(), L"--parent-pid"), L"7")));
+  std::vector<std::wstring> dashValue = baseUpdaterArgs();
+  dashValue[4] = L"--relaunch"; // --state --relaunch
+  CHECK(!parseUpdaterArguments(dashValue));
+  CHECK(!parseUpdaterArguments(plus(baseUpdaterArgs(), L"--unknown")));
+  CHECK(!parseUpdaterArguments(plus(baseUpdaterArgs(), L"--state"))); // option without value
+  std::vector<std::wstring> wrongProtocol = baseUpdaterArgs();
+  wrongProtocol[1] = L"2";
+  CHECK(!parseUpdaterArguments(wrongProtocol));
+  std::vector<std::wstring> noMode = baseUpdaterArgs();
+  noMode.erase(noMode.begin() + 2);
+  CHECK(!parseUpdaterArguments(noMode));
+  for (const wchar_t *pid : {L"0", L"-1", L"12x", L"", L"4294967296", L"12345678901"}) {
+    std::vector<std::wstring> bad = baseUpdaterArgs();
+    bad[10] = pid;
+    CHECK(!parseUpdaterArguments(bad));
+  }
+  std::vector<std::wstring> maxPid = baseUpdaterArgs();
+  maxPid[10] = L"4294967295";
+  CHECK(parseUpdaterArguments(maxPid) && parseUpdaterArguments(maxPid)->parentPid == 4294967295u);
+  std::vector<std::wstring> noPid = baseUpdaterArgs();
+  noPid.resize(9);
+  CHECK(parseUpdaterArguments(noPid) && parseUpdaterArguments(noPid)->parentPid == 0u);
+  CHECK(!parseUpdaterArguments({}));
+}
+
+void testInstallOutcome(const TempDir &temp) {
+  const std::optional<InstallOutcome> ok = parseInstallOutcome("ok 1.3.0a");
+  CHECK(ok && ok->kind == InstallOutcome::Kind::Installed && ok->version == versionOf("1.3.0a"));
+  CHECK(parseInstallOutcome("  ok 1.3.0a\r\n").has_value());
+  const std::optional<InstallOutcome> failed = parseInstallOutcome("failed rolled-back");
+  CHECK(failed && failed->kind == InstallOutcome::Kind::Failed && failed->detail == "rolled-back");
+  const std::optional<InstallOutcome> declined = parseInstallOutcome("declined 1.3.0a");
+  CHECK(declined && declined->kind == InstallOutcome::Kind::Declined && declined->version);
+  const std::optional<InstallOutcome> unknown = parseInstallOutcome("declined unknown");
+  CHECK(unknown && unknown->kind == InstallOutcome::Kind::Declined && !unknown->version);
+  for (const char *bad : {"", "ok", "ok ", "ok banana", "ok 1.3.0a extra", "done 1.3.0a",
+                          "OK 1.3.0a", "declined nope"}) {
+    CHECK(!parseInstallOutcome(bad));
+  }
+
+  const std::wstring state = joinPath(temp.path(), L"result-state");
+  CHECK(ensureDirectory(state));
+  const std::wstring resultPath = joinPath(state, kLastResultFileName);
+  const std::wstring ackPath = joinPath(state, kLastResultAckFileName);
+  const Version running = versionOf("1.3.0a");
+
+  CHECK(!acknowledgeInstalledUpdate(state, running)); // no file
+  CHECK(writeFileAtomic(resultPath, "ok 1.2.0a"));    // an older install
+  CHECK(!acknowledgeInstalledUpdate(state, running));
+  CHECK(fileExists(resultPath));
+  CHECK(writeFileAtomic(resultPath, "failed rolled-back"));
+  CHECK(!acknowledgeInstalledUpdate(state, running));
+  CHECK(fileExists(resultPath) && !fileExists(ackPath));
+
+  CHECK(writeFileAtomic(resultPath, "ok 1.3.0a"));
+  CHECK(acknowledgeInstalledUpdate(state, running)); // told once...
+  CHECK(!fileExists(resultPath) && fileExists(ackPath));
+  CHECK(!acknowledgeInstalledUpdate(state, running)); // ...never again
+  CHECK(writeFileAtomic(resultPath, "ok 1.3.0a"));    // a later install replaces the ack
+  CHECK(acknowledgeInstalledUpdate(state, running));
+  CHECK(!fileExists(resultPath) && fileExists(ackPath));
+  CHECK(!acknowledgeInstalledUpdate(std::wstring(), running));
 }
 
 // ----------------------------------------------------------------- settings
@@ -405,6 +746,15 @@ void testSettings() {
     CHECK(loaded.skipped && *loaded.skipped == versionOf("0.3.0b"));
     CHECK(loaded.lastCheckUnix == settings.lastCheckUnix);
     CHECK(loaded.nextCheckNotBeforeUnix == settings.nextCheckNotBeforeUnix);
+  }
+  { // the pending release round-trips as bytes; empty deletes it
+    UpdateSettings settings;
+    settings.pendingRelease = std::string("[{\"tag_name\":\"v9.9.9\"}]\x01\xc3\xa9", 26);
+    CHECK(store.save(settings));
+    CHECK(store.load().pendingRelease == settings.pendingRelease);
+    settings.pendingRelease.clear();
+    CHECK(store.save(settings));
+    CHECK(store.load().pendingRelease.empty());
   }
   { // explicit false is distinct from unset
     UpdateSettings settings;
@@ -982,6 +1332,9 @@ void runUpdateServiceTests() {
   CHECK(probe.valid());
   testCheck();
   testPolicy();
+  testGuardedCheck();
+  testUpdaterCommandLine();
+  testInstallOutcome(temp);
   testSettings();
   testStageSuccess(temp);
   testStageAssetErrors(temp);

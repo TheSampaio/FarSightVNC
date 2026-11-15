@@ -29,6 +29,8 @@
 // ones that were not loaded before are unloaded at exit.
 //
 // Modified for FarSightVNC on 2026-11-11: Ctrl shortcuts and key-up routing of the keyboard hook; Print Screen stays local.
+// Modified for FarSightVNC on 2026-11-14: held keys routed to Windows, focus restoration never presses modifiers, whole-session scenarios.
+// Modified for FarSightVNC on 2026-11-14: local keys (parse/format, routing, sessions).
 
 #include "rfb/RfbKeySym.h"
 #include "win-system/WinHooks.h"
@@ -1002,53 +1004,56 @@ void testKeyRouter()
   const DWORD UP = LLKHF_UP;
   {
     WinHooks::KeyRouter r;
-    bool ok = r.route(VK_LCONTROL, 0, true) == POST && r.route('C', 0, true) == POST &&
-              r.route('C', UP, true) == POST && r.route(VK_LCONTROL, UP, true) == POST;
+    bool ok = r.route(VK_LCONTROL, 0, true, false) == POST && r.route('C', 0, true, false) == POST &&
+              r.route('C', UP, true, false) == POST && r.route(VK_LCONTROL, UP, true, false) == POST;
     checkTrue("K1 Ctrl+C typed in the viewer is posted, key-ups included", ok);
   }
   {
+    // Activating the viewer installs the hook again (reset): the autorepeat
+    // of the Ctrl held meanwhile has no owner, but Windows has it down.
     WinHooks::KeyRouter r;
-    bool ok = r.route(VK_RCONTROL, EXT, false) == PASS &&     // pressed in another window
-              r.route(VK_RCONTROL, EXT, true) == PASS &&      // autorepeat in the viewer
-              r.route(VK_RCONTROL, EXT | UP, true) == PASS;   // released in the viewer
+    bool ok = r.route(VK_RCONTROL, EXT, false, false) == PASS;     // pressed in another window
+    r.reset();                                                      // the viewer is activated
+    ok = ok && r.route(VK_RCONTROL, EXT, true, true) == PASS &&    // autorepeat in the viewer
+         r.route(VK_RCONTROL, EXT | UP, true, true) == PASS;       // released in the viewer
     checkTrue("K2 Ctrl pressed elsewhere and released in the viewer reaches Windows", ok);
   }
   {
     WinHooks::KeyRouter r;
-    bool ok = r.route(VK_LMENU, 0, false) == PASS &&
-              r.route(VK_LMENU, LLKHF_ALTDOWN | UP, true) == PASS;
+    bool ok = r.route(VK_LMENU, 0, false, false) == PASS &&
+              r.route(VK_LMENU, LLKHF_ALTDOWN | UP, true, false) == PASS;
     checkTrue("K3 Alt pressed elsewhere and released in the viewer reaches Windows", ok);
   }
   {
     WinHooks::KeyRouter r;
     checkTrue("K4 key-up of a key held when the hook was installed reaches Windows",
-              r.route(VK_LWIN, EXT | UP, true) == PASS);
+              r.route(VK_LWIN, EXT | UP, true, false) == PASS);
   }
   {
     WinHooks::KeyRouter r;
-    bool ok = r.route(VK_LCONTROL, 0, true) == POST &&
-              r.route(VK_LCONTROL, 0, false) == POST &&       // autorepeat after the focus left
-              r.route(VK_LCONTROL, UP, false) == POST;
+    bool ok = r.route(VK_LCONTROL, 0, true, false) == POST &&
+              r.route(VK_LCONTROL, 0, false, false) == POST &&       // autorepeat after the focus left
+              r.route(VK_LCONTROL, UP, false, false) == POST;
     checkTrue("K5 Ctrl pressed in the viewer and released elsewhere stays out of Windows", ok);
   }
   {
     WinHooks::KeyRouter r;
-    r.route(VK_LCONTROL, 0, true);
+    r.route(VK_LCONTROL, 0, true, false);
     r.reset();
-    bool ok = r.route(VK_LCONTROL, UP, true) == PASS && r.route('A', 0, true) == POST;
+    bool ok = r.route(VK_LCONTROL, UP, true, false) == PASS && r.route('A', 0, true, false) == POST;
     checkTrue("K6 reset forgets the keys pressed under the previous hook", ok);
   }
   {
     WinHooks::KeyRouter r;
-    bool ok = r.route(VK_LCONTROL, 0, false) == PASS && r.route(VK_LCONTROL, UP, false) == PASS &&
-              r.route(VK_LCONTROL, 0, true) == POST && r.route(VK_LCONTROL, UP, true) == POST;
+    bool ok = r.route(VK_LCONTROL, 0, false, false) == PASS && r.route(VK_LCONTROL, UP, false, false) == PASS &&
+              r.route(VK_LCONTROL, 0, true, false) == POST && r.route(VK_LCONTROL, UP, true, false) == POST;
     checkTrue("K7 a released key is routed again on its next press", ok);
   }
   {
     WinHooks::KeyRouter r;
-    bool ok = r.route('A', LLKHF_INJECTED, true) == PASS &&
-              r.route('A', LLKHF_INJECTED | UP, true) == PASS &&
-              r.route(VK_CAPITAL, 0, true) == PASS && r.route(VK_CAPITAL, UP, true) == PASS;
+    bool ok = r.route('A', LLKHF_INJECTED, true, false) == PASS &&
+              r.route('A', LLKHF_INJECTED | UP, true, false) == PASS &&
+              r.route(VK_CAPITAL, 0, true, false) == PASS && r.route(VK_CAPITAL, UP, true, false) == PASS;
     checkTrue("K8 injected and lock keys stay with Windows", ok);
   }
 }
@@ -1070,8 +1075,8 @@ void testPrintScreen(LogWriter *log)
   {
     WinHooks::KeyRouter r;
     checkTrue("P3 routing leaves Print Screen to Windows while the viewer has the keyboard",
-              r.route(VK_SNAPSHOT, EXT, true) == WinHooks::HOOK_KEY_PASS &&
-              r.route(VK_SNAPSHOT, EXT | LLKHF_UP, true) == WinHooks::HOOK_KEY_PASS);
+              r.route(VK_SNAPSHOT, EXT, true, false) == WinHooks::HOOK_KEY_PASS &&
+              r.route(VK_SNAPSHOT, EXT | LLKHF_UP, true, false) == WinHooks::HOOK_KEY_PASS);
   }
   {
     Harness h(g_abnt2->hkl, log);
@@ -1161,6 +1166,590 @@ void testSyntheticModifierFocus(LogWriter *log)
   expected.d(XK_Meta_L).u(XK_Meta_L);
   finish("Alt release preserves Meta when Scroll Lock changes", meta, expected);
 }
+
+//----------------------------------------------------------------------------
+// K9: a key Windows already has down when the router sees it first (held
+// across an activation, or passed through while the hook timed out) stays
+// with Windows until its key-up. Before, it was posted to the viewer, its
+// key-up was swallowed, Windows kept it down and the next focus restoration
+// pressed it on the server for good.
+
+void testHeldKeyRouting()
+{
+  const WinHooks::HookKeyAction PASS = WinHooks::HOOK_KEY_PASS;
+  const WinHooks::HookKeyAction POST = WinHooks::HOOK_KEY_POST;
+  const DWORD UP = LLKHF_UP;
+  {
+    WinHooks::KeyRouter r;
+    r.reset();
+    bool ok = r.route(VK_LCONTROL, 0, true, true) == PASS &&
+              r.route(VK_LCONTROL, UP, true, false) == PASS;
+    checkTrue("K9 Ctrl held by Windows when the hook is installed: key-down and key-up reach Windows", ok);
+  }
+  {
+    WinHooks::KeyRouter r;
+    r.reset();
+    bool ok = r.route(VK_LCONTROL, 0, true, true) == PASS &&   // first autorepeat
+              r.route(VK_LCONTROL, 0, true, true) == PASS &&   // next autorepeat
+              r.route('C', 0, true, false) == POST &&          // a new key goes to the viewer
+              r.route('C', UP, true, false) == POST &&
+              r.route(VK_LCONTROL, UP, true, true) == PASS;
+    checkTrue("K9 autorepeat of a held Ctrl keeps Windows as its owner", ok);
+  }
+  {
+    WinHooks::KeyRouter r;
+    bool ok = r.route(VK_LCONTROL, 0, true, false) == POST &&
+              r.route(VK_LCONTROL, 0, true, true) == POST &&   // owner already recorded
+              r.route(VK_LCONTROL, UP, true, false) == POST;
+    checkTrue("K9 the Windows state does not change the owner of a key pressed in the viewer", ok);
+  }
+  {
+    // A key-down that bypassed the hook (time-out) after the viewer took the
+    // key: Windows has it down and must get its key-up.
+    WinHooks::KeyRouter r;
+    bool ok = r.route('V', 0, true, false) == POST &&
+              r.route('V', UP, true, true) == PASS &&
+              r.route('V', 0, true, false) == POST;   // the next press is routed again
+    checkTrue("K9 key-up of a key Windows has down reaches Windows", ok);
+  }
+}
+
+//----------------------------------------------------------------------------
+// FR: focus restoration never presses a modifier on the server.
+
+void testFocusRestoration(LogWriter *log)
+{
+  {
+    Harness h(g_us->hkl, log);
+    BYTE async[256] = {0};
+    async[VK_LCONTROL] = async[VK_CONTROL] = 0x80;
+    h.ks().setAsyncKeyStateOverride(async);
+    h.ks().processFocusRestoration();
+    finish("FR1 Ctrl down in GetAsyncKeyState is not pressed on the server", h, Seq());
+  }
+  {
+    Harness h(g_us->hkl, log);
+    BYTE async[256] = {0};
+    h.ks().setAsyncKeyStateOverride(async);
+    h.down(VK_LCONTROL, SC_CTRL);
+    h.down(VK_SHIFT, SC_LSHIFT);
+    h.ks().processFocusRestoration();   // both released meanwhile, no key-up came
+    h.up(VK_LCONTROL, SC_CTRL);         // late key-ups are ignored
+    h.up(VK_SHIFT, SC_LSHIFT);
+    Seq e;
+    e.d(XK_Control_L).d(XK_Shift_L).u(XK_Control_L).u(XK_Shift_L);
+    finish("FR2 focus restoration releases modifiers no longer held", h, e);
+  }
+  {
+    Harness h(g_us->hkl, log);
+    BYTE async[256] = {0};
+    async[VK_RMENU] = 0x80;
+    h.ks().setAsyncKeyStateOverride(async);
+    h.down(VK_MENU, SC_ALT, true);
+    h.ks().processFocusRestoration();
+    h.up(VK_MENU, SC_ALT, true);
+    Seq e;
+    e.d(XK_Alt_R).u(XK_Alt_R);
+    finish("FR3 focus restoration keeps a modifier that is still held", h, e);
+  }
+  {
+    // A Ctrl key-down posted by the hook and processed between WM_KILLFOCUS
+    // and WM_SETFOCUS: GetAsyncKeyState never saw it (the hook swallowed
+    // it), but the user still holds Ctrl and its key-up comes to the viewer.
+    Harness h(g_us->hkl, log);
+    BYTE async[256] = {0};
+    h.ks().setAsyncKeyStateOverride(async);
+    h.ks().processFocusLoss();
+    h.down(VK_LCONTROL, SC_CTRL);
+    h.ks().processFocusRestoration();
+    bool kept = h.events().size() == 1;
+    h.up(VK_LCONTROL, SC_CTRL);
+    Seq e;
+    e.d(XK_Control_L).u(XK_Control_L);
+    finish("FR4 a modifier pressed after the focus loss is not released at restoration", h, e);
+    checkTrue("FR4 nothing is released at restoration", kept);
+  }
+}
+
+//----------------------------------------------------------------------------
+// S: whole sessions through the hook router and RfbKeySym. Session models
+// the parts of Windows that matter: the asynchronous key state (only events
+// the hook passes change it), the focus (a passed key reaches the viewer only
+// when it has the focus), the hook registration at every activation and the
+// focus loss / restoration of the viewer window.
+
+class Session
+{
+public:
+  explicit Session(LogWriter *log) : h(g_us->hkl, log), owns(true)
+  {
+    memset(async, 0, sizeof(async));
+    memset(held, 0, sizeof(held));
+    h.ks().setAsyncKeyStateOverride(async);
+    h.ks().setWinKeyIgnore(false);
+  }
+
+  // A physical key event seen by the low level hook. hookVk is the L/R
+  // specific key the hook reports.
+  void phys(unsigned hookVk, bool up)
+  {
+    unsigned scan = scanOf(hookVk);
+    bool ext = isExt(hookVk);
+    held[hookVk] = !up;
+    DWORD flags = (ext ? LLKHF_EXTENDED : 0) | (up ? LLKHF_UP : 0);
+    bool systemHasKeyDown = (async[hookVk] & 0x80) != 0;
+    if (router.route(hookVk, flags, owns, systemHasKeyDown) == WinHooks::HOOK_KEY_PASS) {
+      passToWindows(hookVk, scan, ext, up);
+    } else if (owns || up) {
+      // Posted by the hook to the viewer window.
+      deliver(hookVk, scan, ext, up);
+    }
+  }
+  // An event that bypasses the hook (LowLevelHooksTimeout stall).
+  void stall(unsigned hookVk, bool up)
+  {
+    held[hookVk] = !up;
+    passToWindows(hookVk, scanOf(hookVk), isExt(hookVk), up);
+  }
+  void down(unsigned vk) { phys(vk, false); }
+  void up(unsigned vk) { phys(vk, true); }
+  void tap(unsigned vk) { down(vk); up(vk); }
+  void combo(unsigned mod, unsigned key) { down(mod); tap(key); up(mod); }
+
+  void loseFocus()
+  {
+    if (!owns) return;
+    owns = false;
+    h.ks().processFocusLoss();
+  }
+  void gainFocus()
+  {
+    if (owns) return;
+    owns = true;
+    router.reset();                     // registerKeyboardHook()
+    h.ks().processFocusRestoration();   // WM_SETFOCUS
+  }
+
+  // Releases every key still physically held.
+  void releaseAll()
+  {
+    for (unsigned vk = 1; vk < 256; vk++) {
+      if (held[vk]) up(vk);
+    }
+  }
+  bool windowsHasKeysDown() const
+  {
+    for (unsigned vk = 1; vk < 256; vk++) {
+      if (async[vk] & 0x80) return true;
+    }
+    return false;
+  }
+  bool serverHasModifierDown()
+  {
+    std::vector<std::pair<UINT32, bool> > state;
+    const std::vector<Rec> &ev = h.events();
+    for (size_t i = 0; i < ev.size(); i++) {
+      if (!isModifierSym(ev[i].sym)) continue;
+      size_t j = 0;
+      while (j < state.size() && state[j].first != ev[i].sym) j++;
+      if (j == state.size()) state.push_back(std::make_pair(ev[i].sym, false));
+      state[j].second = ev[i].down;
+    }
+    for (size_t j = 0; j < state.size(); j++) {
+      if (state[j].second) return true;
+    }
+    return false;
+  }
+  // With every physical key released: no key (modifier or not) remains
+  // pressed on the server or in Windows.
+  void check(const std::string &name)
+  {
+    bool balanced = isBalanced(h.events());
+    bool modifier = serverHasModifierDown();
+    bool windows = windowsHasKeysDown();
+    checkTrue(name, balanced && !modifier && !windows,
+              std::string(balanced ? "" : "UNBALANCED ") + (modifier ? "MODIFIER-STUCK " : "") +
+              (windows ? "WINDOWS-KEY-STUCK " : "") +
+              (h.events().size() < 64 ? toString(h.events()) : std::string()));
+  }
+
+  Harness h;
+  WinHooks::KeyRouter router;
+  BYTE async[256];
+  bool held[256];
+  bool owns;
+
+private:
+  static bool isExt(unsigned vk)
+  {
+    return vk == VK_RCONTROL || vk == VK_RMENU || vk == VK_LWIN || vk == VK_RWIN ||
+           vk == VK_INSERT || vk == VK_DELETE || vk == VK_HOME || vk == VK_END ||
+           vk == VK_LEFT || vk == VK_RIGHT || vk == VK_UP || vk == VK_DOWN;
+  }
+  unsigned scanOf(unsigned vk) const
+  {
+    switch (vk) {
+    case VK_LCONTROL: case VK_RCONTROL: return SC_CTRL;
+    case VK_LMENU: case VK_RMENU: return SC_ALT;
+    case VK_LSHIFT: return SC_LSHIFT;
+    case VK_RSHIFT: return SC_RSHIFT;
+    case VK_LWIN: return 0x5B;
+    case VK_RWIN: return 0x5C;
+    default: return h.scanOf(vk);
+    }
+  }
+  void passToWindows(unsigned vk, unsigned scan, bool ext, bool up)
+  {
+    async[vk] = up ? 0 : 0x80;
+    async[VK_SHIFT] = async[VK_LSHIFT] | async[VK_RSHIFT];
+    async[VK_CONTROL] = async[VK_LCONTROL] | async[VK_RCONTROL];
+    async[VK_MENU] = async[VK_LMENU] | async[VK_RMENU];
+    // A passed key reaches the focused window as an ordinary key message,
+    // with the generic modifier virtual key.
+    if (!owns) return;
+    unsigned msgVk = vk;
+    if (vk == VK_LCONTROL || vk == VK_RCONTROL) msgVk = VK_CONTROL;
+    if (vk == VK_LMENU || vk == VK_RMENU) msgVk = VK_MENU;
+    if (vk == VK_LSHIFT || vk == VK_RSHIFT) msgVk = VK_SHIFT;
+    deliver(msgVk, scan, ext, up);
+  }
+  void deliver(unsigned vk, unsigned scan, bool ext, bool up)
+  {
+    // DesktopWindow::onKey does not send the key-down of a local key.
+    if (!up && router.isLocalKey(vk, ext)) return;
+    if (up) h.up(vk, scan, ext); else h.down(vk, scan, ext);
+  }
+};
+
+void testSessions(LogWriter *log)
+{
+  const unsigned LCTRL = VK_LCONTROL, LALT = VK_LMENU, LSHIFT = VK_LSHIFT, LWIN = VK_LWIN;
+  {
+    Session s(log);
+    s.combo(LWIN, 'R');
+    Seq e;
+    e.d(XK_Super_L).d(symOf(L'r')).u(symOf(L'r')).u(XK_Super_L);
+    finish("S1 Win+R is sent to the server", s.h, e);
+  }
+  {
+    // Win+R, "cmd", Enter, then Ctrl+C and Ctrl+V in the remote console.
+    Session s(log);
+    s.combo(LWIN, 'R');
+    s.tap('C'); s.tap('M'); s.tap('D'); s.tap(VK_RETURN);
+    s.combo(LCTRL, 'C');
+    s.combo(LCTRL, 'V');
+    s.combo(LCTRL, 'C');
+    s.combo(LCTRL, 'V');
+    s.check("S2 Win+R, cmd, Enter, Ctrl+C, Ctrl+V leave nothing pressed");
+  }
+  {
+    Session s(log);
+    for (int i = 0; i < 20; i++) {
+      s.combo(LWIN, 'R');
+      s.tap(VK_ESCAPE);
+    }
+    s.check("S3 Win+R twenty times leaves nothing pressed");
+  }
+  {
+    Session s(log);
+    s.down(LALT); s.tap(VK_TAB); s.tap(VK_TAB); s.up(LALT);
+    Seq e;
+    e.d(XK_Alt_L).press(XK_Tab).press(XK_Tab).u(XK_Alt_L);
+    finish("S4 Alt+Tab with the keyboard goes to the server", s.h, e);
+  }
+  {
+    // Alt+Tab while the viewer does not own the keyboard switches locally;
+    // then a remote Alt+Tab interrupted by a local focus change.
+    Session s(log);
+    s.loseFocus();
+    s.down(LALT); s.tap(VK_TAB); s.up(LALT);
+    s.gainFocus();
+    s.down(LALT); s.down(VK_TAB);
+    s.loseFocus();
+    s.up(VK_TAB); s.up(LALT);
+    s.gainFocus();
+    s.check("S5 Alt+Tab locally and across a focus change leaves nothing pressed");
+  }
+  {
+    Session s(log);
+    s.combo(LWIN, 'E');
+    s.down(LCTRL); s.down(LSHIFT); s.tap(VK_ESCAPE); s.up(LSHIFT); s.up(LCTRL);
+    s.check("S6 Win+E and Ctrl+Shift+Esc leave nothing pressed");
+  }
+  {
+    // Rapid interleaved shortcuts with overlapping releases.
+    Session s(log);
+    for (int i = 0; i < 200; i++) {
+      s.down(LCTRL); s.down('C'); s.up(LCTRL); s.up('C');
+      s.down(LCTRL); s.down('V'); s.up('V'); s.up(LCTRL);
+      s.down(LWIN); s.down('R'); s.up(LWIN); s.up('R');
+      s.down(LALT); s.down(VK_TAB); s.up(LALT); s.up(VK_TAB);
+      s.down(LCTRL); s.down(LSHIFT); s.down(VK_ESCAPE); s.up(LCTRL); s.up(VK_ESCAPE); s.up(LSHIFT);
+    }
+    s.check("S7 200 rounds of interleaved shortcuts leave nothing pressed");
+  }
+  {
+    // Ctrl held across a focus loss and restoration, released afterwards.
+    Session s(log);
+    s.down(LCTRL);
+    s.loseFocus();
+    s.gainFocus();
+    s.up(LCTRL);
+    s.check("S8 Ctrl held across a focus loss and restoration is released once");
+  }
+  {
+    // The root cause: Ctrl pressed in another window, the viewer activated
+    // (hook installed again) while it is held, then released in the viewer.
+    // Another activation must not press it on the server again.
+    Session s(log);
+    s.loseFocus();
+    s.down(LCTRL);
+    s.gainFocus();
+    s.down(LCTRL);   // autorepeat
+    s.tap('C');
+    s.up(LCTRL);
+    s.loseFocus();
+    s.gainFocus();
+    s.check("S9 Ctrl held while the viewer is activated is not stuck locally or remotely");
+  }
+  {
+    // A Ctrl key-down passed through while the hook timed out.
+    Session s(log);
+    s.stall(LCTRL, false);
+    s.down(LCTRL);   // autorepeat through the hook
+    s.tap('V');
+    s.up(LCTRL);
+    s.loseFocus();
+    s.gainFocus();
+    s.check("S10 Ctrl passed through a hook time-out is not stuck");
+  }
+  {
+    // Interrupted sequence: the key-up of the right Shift is never sent
+    // (both Shifts held), then the focus goes and comes back.
+    Session s(log);
+    s.down(LSHIFT); s.down(VK_RSHIFT);
+    s.held[VK_RSHIFT] = false;
+    s.h.lostUp(VK_SHIFT, SC_RSHIFT);
+    s.tap('A');
+    s.up(LSHIFT);
+    s.loseFocus();
+    s.gainFocus();
+    s.check("S11 a lost Shift key-up leaves nothing pressed");
+  }
+  {
+    // Long pseudo-random session (fixed seed): keys, shortcuts, focus
+    // changes and hook time-outs.
+    Session s(log);
+    const unsigned keys[] = {LCTRL, VK_RCONTROL, LALT, LSHIFT, LWIN, 'C', 'V', 'R', 'E',
+                             VK_TAB, VK_ESCAPE, VK_RETURN};
+    const unsigned KEY_COUNT = sizeof(keys) / sizeof(keys[0]);
+    unsigned seed = 12345;
+    for (int i = 0; i < 5000; i++) {
+      seed = seed * 1103515245u + 12345u;
+      unsigned r = (seed >> 16) & 0x7fff;
+      unsigned vk = keys[r % KEY_COUNT];
+      unsigned what = (r / KEY_COUNT) % 20;
+      if (what == 0) {
+        s.loseFocus();
+      } else if (what == 1) {
+        s.gainFocus();
+      } else if (what == 2) {
+        s.stall(vk, s.held[vk]);
+      } else {
+        s.phys(vk, s.held[vk] && what % 2 == 0);
+      }
+    }
+    s.releaseAll();
+    s.gainFocus();
+    s.check("S12 5000 pseudo-random events leave nothing pressed");
+  }
+}
+
+//----------------------------------------------------------------------------
+// L: local keys (Settings > Input > Local shortcuts) stay with Windows and are
+// never sent to the server.
+
+std::string narrow(const TCHAR *text)
+{
+  std::string s;
+  for (const TCHAR *c = text; c != 0 && *c != 0; c++) s += (char)*c;
+  return s;
+}
+
+void testLocalKeys(LogWriter *log)
+{
+  const WinHooks::HookKeyAction PASS = WinHooks::HOOK_KEY_PASS;
+  const WinHooks::HookKeyAction POST = WinHooks::HOOK_KEY_POST;
+  const DWORD EXT = LLKHF_EXTENDED;
+  const DWORD UP = LLKHF_UP;
+  {
+    WinHooks::LocalKeySet k = WinHooks::parseLocalKeys(_T("6D,2De"));
+    std::string text = narrow(WinHooks::formatLocalKeys(k).getString());
+    checkTrue("L1 parse and format round trip (Numpad Minus, extended Insert)",
+              k.count() == 2 && k.test(0x6D) && k.test(0x12D) && text == "6D,2De", text);
+  }
+  {
+    WinHooks::LocalKeySet k =
+      WinHooks::parseLocalKeys(_T("zz, 6d ,,123,0,FF,6De,6D,xyz,1G,g,6e e, 2c E"));
+    std::string text = narrow(WinHooks::formatLocalKeys(k).getString());
+    checkTrue("L1 invalid entries are ignored and duplicates merged",
+              text == "6D,6De", text);
+  }
+  {
+    std::string a = narrow(WinHooks::formatLocalKeys(WinHooks::parseLocalKeys(_T(""))).getString());
+    std::string b = narrow(WinHooks::formatLocalKeys(WinHooks::parseLocalKeys(0)).getString());
+    checkTrue("L1 empty and missing values give no local key", a.empty() && b.empty());
+  }
+  {
+    WinHooks::LocalKeySet k;
+    for (unsigned i = 1; i < 0xFF; i += 7) k.set(WinHooks::localKeyIndex(i, (i & 1) != 0));
+    WinHooks::LocalKeySet back =
+      WinHooks::parseLocalKeys(WinHooks::formatLocalKeys(k).getString());
+    checkTrue("L1 every stored set reads back the same", back == k);
+  }
+  {
+    WinHooks::LocalKeySet k = WinHooks::parseLocalKeys(_T("BE,BEe,E,0e"));
+    checkTrue("L1 a hex digit E is not the extended suffix",
+              k.count() == 3 && k.test(0xBE) && k.test(0x1BE) && k.test(0x0E));
+  }
+  {
+    WinHooks::LocalKeySet k = WinHooks::parseLocalKeys(_T("e,E, e ,Ee,eE,6,6De"));
+    std::string text = narrow(WinHooks::formatLocalKeys(k).getString());
+    // "Ee" and "eE" are two hex digits (0xEE): only entries without two digits
+    // before the suffix are dropped.
+    checkTrue("L1 a lone suffix or a single digit is not a key", text == "EE,6De", text);
+  }
+
+  WinHooks::LocalKeySet numpadMinus;
+  numpadMinus.set(WinHooks::localKeyIndex(VK_SUBTRACT, false));
+  {
+    WinHooks::KeyRouter r;
+    r.setLocalKeys(numpadMinus);
+    bool ok = r.route(VK_SUBTRACT, 0, true, false) == PASS &&
+              r.route(VK_SUBTRACT, UP, true, false) == PASS;
+    checkTrue("L2 a local key and its key-up reach Windows while the viewer has the keyboard", ok);
+  }
+  {
+    WinHooks::KeyRouter r;
+    r.setLocalKeys(numpadMinus);
+    bool ok = r.route(VK_LCONTROL, 0, true, false) == POST &&
+              r.route(VK_LSHIFT, 0, true, false) == POST &&
+              r.route(VK_SUBTRACT, 0, true, false) == PASS &&
+              r.route(VK_SUBTRACT, UP, true, false) == PASS &&
+              r.route(VK_LSHIFT, UP, true, false) == POST &&
+              r.route(VK_LCONTROL, UP, true, false) == POST;
+    checkTrue("L2 a local key stays local with modifiers held", ok);
+  }
+  {
+    WinHooks::KeyRouter r;
+    r.setLocalKeys(numpadMinus);
+    bool ok = r.route(VK_OEM_MINUS, 0, true, false) == POST &&
+              r.route(VK_OEM_MINUS, UP, true, false) == POST &&
+              r.isLocalKey(VK_SUBTRACT, false) && !r.isLocalKey(VK_OEM_MINUS, false);
+    checkTrue("L2 Numpad Minus (0x6D) local does not make the '-' key (0xBD) local", ok);
+  }
+  {
+    WinHooks::KeyRouter r;
+    WinHooks::LocalKeySet insert;
+    insert.set(WinHooks::localKeyIndex(VK_INSERT, true));
+    r.setLocalKeys(insert);
+    bool ok = r.route(VK_INSERT, EXT, true, false) == PASS &&
+              r.route(VK_INSERT, EXT | UP, true, false) == PASS &&
+              r.route(VK_INSERT, 0, true, false) == POST &&      // Numpad 0 without Num Lock
+              r.route(VK_INSERT, UP, true, false) == POST;
+    checkTrue("L2 extended Insert local, Numpad 0 (Insert without the extended flag) is not", ok);
+  }
+  {
+    // Enter and Numpad Enter share VK_RETURN; each key-up follows the owner
+    // of its own key-down.
+    WinHooks::KeyRouter r;
+    WinHooks::LocalKeySet numpadEnter;
+    numpadEnter.set(WinHooks::localKeyIndex(VK_RETURN, true));
+    r.setLocalKeys(numpadEnter);
+    bool ok = r.route(VK_RETURN, 0, true, false) == POST &&      // Enter: server
+              r.route(VK_RETURN, EXT, true, false) == PASS &&    // Numpad Enter: local
+              r.route(VK_RETURN, 0, true, false) == POST &&      // Enter autorepeat
+              r.route(VK_RETURN, EXT | UP, true, false) == PASS &&
+              r.route(VK_RETURN, UP, true, false) == POST;
+    // The other order of the key-ups.
+    ok = ok && r.route(VK_RETURN, EXT, true, false) == PASS &&
+         r.route(VK_RETURN, 0, true, false) == POST &&
+         r.route(VK_RETURN, UP, true, false) == POST &&
+         r.route(VK_RETURN, EXT | UP, true, false) == PASS;
+    checkTrue("L2 Enter and Numpad Enter held together keep separate owners", ok);
+  }
+  {
+    // Insert (extended) and Numpad 0 without Num Lock (VK_INSERT, not
+    // extended): pressed for different owners, each released by its own.
+    WinHooks::KeyRouter r;
+    bool ok = r.route(VK_INSERT, 0, true, false) == POST;           // Numpad 0: server
+    WinHooks::LocalKeySet insert;
+    insert.set(WinHooks::localKeyIndex(VK_INSERT, true));
+    r.setLocalKeys(insert);
+    ok = ok && r.route(VK_INSERT, EXT, true, false) == PASS &&      // Insert: local
+         r.route(VK_INSERT, UP, true, false) == POST &&
+         r.route(VK_INSERT, EXT | UP, true, false) == PASS;
+    checkTrue("L2 Insert and Numpad 0 keep separate owners", ok);
+  }
+  {
+    WinHooks::KeyRouter r;
+    bool ok = r.route(VK_SUBTRACT, 0, true, false) == POST;      // pressed for the server
+    r.setLocalKeys(numpadMinus);                                  // becomes local meanwhile
+    ok = ok && r.route(VK_SUBTRACT, 0, true, false) == POST &&    // autorepeat keeps the owner
+         r.route(VK_SUBTRACT, UP, true, false) == POST &&         // released where pressed
+         r.route(VK_SUBTRACT, 0, true, false) == PASS;            // next press is local
+    r.route(VK_SUBTRACT, UP, true, false);
+    checkTrue("L3 a key held while it becomes local is released on the server", ok);
+  }
+  {
+    WinHooks::KeyRouter r;
+    r.setLocalKeys(numpadMinus);
+    bool ok = r.route(VK_SUBTRACT, 0, true, false) == PASS;
+    r.setLocalKeys(WinHooks::LocalKeySet());                      // no longer local
+    ok = ok && r.route(VK_SUBTRACT, UP, true, false) == PASS &&   // released in Windows
+         r.route(VK_SUBTRACT, 0, true, false) == POST;
+    r.route(VK_SUBTRACT, UP, true, false);
+    checkTrue("L3 a local key held while the list is cleared is released in Windows", ok);
+  }
+  {
+    WinHooks::KeyRouter r;
+    r.setLocalKeys(numpadMinus);
+    r.reset();
+    checkTrue("L4 reset keeps the local keys", r.route(VK_SUBTRACT, 0, true, false) == PASS);
+  }
+  {
+    WinHooks::setLocalKeys(numpadMinus);
+    bool ok = WinHooks::isLocalKey(VK_SUBTRACT, false) && !WinHooks::isLocalKey(VK_SUBTRACT, true) &&
+              !WinHooks::isLocalKey(VK_OEM_MINUS, false);
+    WinHooks::setLocalKeys(WinHooks::LocalKeySet());
+    ok = ok && !WinHooks::isLocalKey(VK_SUBTRACT, false);
+    checkTrue("L5 the local keys of the hook are set and cleared", ok);
+  }
+  {
+    // Whole session: Ctrl+Numpad Minus with Numpad Minus local, Print Screen,
+    // then the key becomes local while held.
+    Session s(log);
+    s.router.setLocalKeys(numpadMinus);
+    s.down(VK_LCONTROL); s.tap(VK_SUBTRACT); s.up(VK_LCONTROL);
+    s.tap(VK_SUBTRACT);
+    s.tap(VK_SNAPSHOT);
+    Seq e;
+    e.d(XK_Control_L).u(XK_Control_L);
+    finish("L6 Numpad Minus local: only Ctrl reaches the server", s.h, e);
+  }
+  {
+    Session s(log);
+    s.down(VK_SUBTRACT);
+    s.router.setLocalKeys(numpadMinus);
+    s.down(VK_SUBTRACT);   // autorepeat
+    s.up(VK_SUBTRACT);
+    s.loseFocus();
+    s.down(VK_SUBTRACT);   // local, in another window
+    s.gainFocus();
+    s.up(VK_SUBTRACT);
+    s.check("L6 a key that becomes local while held leaves nothing pressed");
+  }
+}
 } // namespace
 
 int main()
@@ -1197,6 +1786,10 @@ int main()
   testStateTable();
   testHookOwnership();
   testSyntheticModifierFocus(&log);
+  testHeldKeyRouting();
+  testFocusRestoration(&log);
+  testSessions(&log);
+  testLocalKeys(&log);
 
   unloadLayouts();
   printf("\n%d passed, %d failed\n", g_passed, g_failed);

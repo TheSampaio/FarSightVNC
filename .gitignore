@@ -27,3 +27,7 @@
 
 # Local build logs (tools/build.ps1)
 /build-logs/
+
+# Update-signing private keys must never be committed (docs/updater/RELEASING.md)
+*.private.blob
+.farsightvnc-signing/

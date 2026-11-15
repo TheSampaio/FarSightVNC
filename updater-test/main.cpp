@@ -34,6 +34,7 @@ void runZipTests();
 void runUpdateServiceTests();
 void runInstallerTests();
 void runHttpTests();
+void runMarkdownTests();
 
 namespace {
 
@@ -198,6 +199,7 @@ int main(int argc, char **argv) {
   runSuite(runUpdateServiceTests);
   runSuite(runInstallerTests);
   runSuite(runHttpTests);
+  runSuite(runMarkdownTests);
 
   const fsv::test::Counters &counters = fsv::test::counters();
   std::printf("updater-test: %d suites, %d checks, %d failures, %d notes\n", counters.suites,

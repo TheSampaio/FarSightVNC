@@ -17,11 +17,15 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //
 // Modified for FarSightVNC on 2026-11-12: Third-party notices (Lucide) in About.
+// Modified for FarSightVNC on 2026-11-12: the Appearance theme is applied, not only stored.
+// Modified for FarSightVNC on 2026-11-14: Local shortcuts (keys never sent to the server) in Input.
+// Modified for FarSightVNC on 2026-11-14: the Local shortcuts note says that only the bare key is local and that Numpad keys depend on Num Lock.
 //
 
 #include "SettingsSections.h"
 
 #include "SettingsForm.h"
+#include "gui/d2d/Theme.h"
 #include "client-config-lib/ViewerConfig.h"
 #include "client-config-lib/ViewerSettingsManager.h"
 #include "file-lib/File.h"
@@ -29,12 +33,14 @@
 #include "win-system/Environment.h"
 #include "win-system/Process.h"
 #include "win-system/Shell.h"
+#include "win-system/WinHooks.h"
 #include "../ConnectionOptionsForm.h"
 #include "../DefaultConnectionConfig.h"
 #include "../NamingDefs.h"
 #include "../RenderSettings.h"
 #include "../resource.h"
 
+#include <bitset>
 #include <ctime>
 #include <string>
 #include <vector>
@@ -42,7 +48,8 @@
 namespace {
 
 // Texts of the sections (the viewer UI is in English).
-const wchar_t kAppearanceSubtitle[] = L"Theme support arrives in a later build.";
+const wchar_t kAppearanceSubtitle[] =
+  L"Choose how FarSightVNC looks. Auto follows the Windows app theme.";
 const wchar_t kConnectionSubtitle[] =
   L"Options of new connections. A computer you connected to before keeps the "
   L"options it was last used with.";
@@ -116,7 +123,10 @@ enum ControlId
   CTL_PRERELEASES,
   CTL_CHECK_NOW,
   CTL_WEB_SITE,
-  CTL_LICENSE
+  CTL_LICENSE,
+  CTL_LOCAL_KEYS,
+  CTL_LOCAL_ADD,
+  CTL_LOCAL_CLEAR
 };
 
 std::wstring toWide(const TCHAR *text)
@@ -229,12 +239,236 @@ public:
         !isChecked(m_form->control(controlId))) {
       return;
     }
-    ViewerConfig::getInstance()->setTheme(controlId - CTL_THEME_AUTO);
+    int theme = controlId - CTL_THEME_AUTO;
+    ViewerConfig::getInstance()->setTheme(theme);
     saveViewerConfig();
+    // Repaints every window of the viewer with the new palette.
+    Theme::setMode(theme);
   }
 
 private:
   SettingsForm *m_form;
+};
+
+// ------------------------------------------------------------- Local keys
+
+// Name of a local key ("Num -", "Insert"), from the keyboard layout.
+std::wstring localKeyName(unsigned index)
+{
+  unsigned vk = index & 0xff;
+  bool extended = (index & 0x100) != 0;
+  UINT scan = MapVirtualKeyW(vk, MAPVK_VK_TO_VSC);
+  wchar_t name[64] = L"";
+  wchar_t plain[64] = L"";
+  LONG lParam = static_cast<LONG>(scan << 16);
+  if (scan == 0 || GetKeyNameTextW(lParam | (extended ? 0x1000000 : 0), name, 64) <= 0) {
+    swprintf_s(name, L"Key %02X", vk);
+  }
+  std::wstring result(name);
+  // The same name for the extended and the plain key: tell them apart.
+  if (extended && scan != 0 && GetKeyNameTextW(lParam, plain, 64) > 0 && result == plain) {
+    result += L" (ext)";
+  }
+  return result;
+}
+
+// Keys that cannot be local: modifiers (shortcuts) and the keys that always
+// stay with Windows (lock keys, Print Screen).
+bool canBeLocalKey(unsigned vk)
+{
+  switch (vk) {
+  case VK_SHIFT: case VK_LSHIFT: case VK_RSHIFT:
+  case VK_CONTROL: case VK_LCONTROL: case VK_RCONTROL:
+  case VK_MENU: case VK_LMENU: case VK_RMENU:
+  case VK_LWIN: case VK_RWIN:
+  case VK_CAPITAL: case VK_NUMLOCK: case VK_SCROLL: case VK_SNAPSHOT:
+  case VK_PROCESSKEY: case VK_PACKET: case 0: case 0xFF:
+    return false;
+  }
+  return true;
+}
+
+// "Local shortcuts" rows of the Input section: the list of local keys,
+// "Add key..." that takes the next key pressed and "Clear". The keys are
+// app-wide (ViewerConfig), saved and applied to the keyboard hook at once.
+class LocalKeysEditor
+{
+public:
+  LocalKeysEditor()
+  : m_form(0),
+    m_addButton(0),
+    m_capturing(false)
+  {
+  }
+
+  ~LocalKeysEditor()
+  {
+    if (m_addButton != 0 && IsWindow(m_addButton)) {
+      RemoveWindowSubclass(m_addButton, captureProc, kSubclassId);
+    }
+  }
+
+  void build(SettingsForm *form)
+  {
+    m_form = form;
+    form->header(L"Local shortcuts");
+    form->note(L"Keys listed here go to Windows and the applications of this computer "
+               L"(a screenshot tool, for example) and are never sent to the remote "
+               L"computer, in every session. Only the key alone is local: with Ctrl, Alt "
+               L"or Shift held the modifier still goes to the remote computer. Numpad keys "
+               L"depend on Num Lock. Print Screen is always local.");
+    form->textField(CTL_LOCAL_KEYS, L"Local keys");
+    m_addButton = form->button(CTL_LOCAL_ADD, L"Add key\u2026");
+    form->button(CTL_LOCAL_CLEAR, L"Clear", true);
+    if (m_addButton != 0) {
+      SetWindowSubclass(m_addButton, captureProc, kSubclassId, reinterpret_cast<DWORD_PTR>(this));
+    }
+    StringStorage stored;
+    ViewerConfig::getInstance()->getLocalKeys(&stored);
+    m_keys = WinHooks::parseLocalKeys(stored.getString());
+    showKeys();
+  }
+
+  // True when the command was one of these rows.
+  bool onCommand(UINT controlId, UINT notification)
+  {
+    if (controlId != CTL_LOCAL_ADD && controlId != CTL_LOCAL_CLEAR && controlId != CTL_LOCAL_KEYS) {
+      return false;
+    }
+    if (notification != BN_CLICKED) {
+      return true;
+    }
+    if (controlId == CTL_LOCAL_ADD) {
+      startCapture();
+    } else if (controlId == CTL_LOCAL_CLEAR) {
+      stopCapture();
+      m_keys.reset();
+      apply();
+    }
+    return true;
+  }
+
+private:
+  static const UINT_PTR kSubclassId = 0x4C4B;   // Not the form's own subclass ID.
+
+  void startCapture()
+  {
+    // The keys held now (Space or Enter that pressed the button) are not
+    // the key to add: their key-ups are ignored.
+    m_heldAtStart.reset();
+    for (unsigned vk = 1; vk < 256; vk++) {
+      if (GetAsyncKeyState(vk) & 0x8000) m_heldAtStart.set(vk);
+    }
+    m_capturing = true;
+    SetFocus(m_addButton);
+    SetWindowTextW(m_form->control(CTL_LOCAL_KEYS), L"Press a key\u2026 (Esc cancels)");
+  }
+
+  void stopCapture()
+  {
+    if (m_capturing) {
+      m_capturing = false;
+      showKeys();
+    }
+  }
+
+  // A key is taken at its key-up: a local application that registered it as
+  // a hot key (RegisterHotKey) consumes the key-down.
+  void onCapturedKey(unsigned vk, bool extended)
+  {
+    m_capturing = false;
+    if (canBeLocalKey(vk)) {
+      m_keys.set(WinHooks::localKeyIndex(vk, extended));
+      apply();
+    } else {
+      MessageBeep(MB_ICONWARNING);
+      showKeys();
+    }
+  }
+
+  void apply()
+  {
+    StringStorage text = WinHooks::formatLocalKeys(m_keys);
+    ViewerConfig::getInstance()->setLocalKeys(text.getString());
+    saveViewerConfig();
+    WinHooks::setLocalKeys(m_keys);
+    showKeys();
+  }
+
+  void showKeys()
+  {
+    std::wstring text;
+    for (unsigned i = 0; i < m_keys.size(); i++) {
+      if (!m_keys.test(i)) continue;
+      if (!text.empty()) text += L", ";
+      text += localKeyName(i);
+    }
+    if (text.empty()) {
+      text = L"None";
+    }
+    SetWindowTextW(m_form->control(CTL_LOCAL_KEYS), text.c_str());
+  }
+
+  static LRESULT CALLBACK captureProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam,
+                                      UINT_PTR id, DWORD_PTR data)
+  {
+    LocalKeysEditor *editor = reinterpret_cast<LocalKeysEditor *>(data);
+    switch (message) {
+    case WM_GETDLGCODE:
+      // While capturing, every key (Tab, Enter, Esc...) comes to the button
+      // instead of the dialog manager.
+      if (editor->m_capturing) {
+        return DLGC_WANTALLKEYS | DefSubclassProc(hwnd, message, wParam, lParam);
+      }
+      break;
+    case WM_KEYDOWN:
+    case WM_SYSKEYDOWN:
+      if (editor->m_capturing) {
+        if (wParam == VK_ESCAPE) {
+          editor->m_heldAtStart.set(VK_ESCAPE);   // Its key-up is not a key to add.
+          editor->stopCapture();
+        }
+        return 0;
+      }
+      break;
+    case WM_KEYUP:
+    case WM_SYSKEYUP:
+      if (editor->m_capturing) {
+        unsigned vk = static_cast<unsigned>(wParam) & 0xff;
+        if (editor->m_heldAtStart.test(vk)) {
+          editor->m_heldAtStart.reset(vk);
+        } else {
+          editor->onCapturedKey(vk, (lParam & 0x1000000) != 0);
+        }
+        return 0;
+      } else if (editor->m_heldAtStart.test(static_cast<unsigned>(wParam) & 0xff)) {
+        // Key-up of the Esc that cancelled: not a click of the button.
+        editor->m_heldAtStart.reset(static_cast<unsigned>(wParam) & 0xff);
+        return 0;
+      }
+      break;
+    case WM_CHAR:
+    case WM_SYSCHAR:
+      if (editor->m_capturing) {
+        return 0;
+      }
+      break;
+    case WM_KILLFOCUS:
+      editor->stopCapture();
+      break;
+    case WM_NCDESTROY:
+      RemoveWindowSubclass(hwnd, captureProc, id);
+      editor->m_addButton = 0;
+      break;
+    }
+    return DefSubclassProc(hwnd, message, wParam, lParam);
+  }
+
+  SettingsForm *m_form;
+  HWND m_addButton;
+  bool m_capturing;
+  WinHooks::LocalKeySet m_keys;
+  std::bitset<256> m_heldAtStart;
 };
 
 // ------------------------------------------------- Connection and Input
@@ -263,6 +497,9 @@ public:
 
   virtual void onCommand(UINT controlId, UINT notification)
   {
+    if (m_localKeys.onCommand(controlId, notification)) {
+      return;
+    }
     if (m_options.onCommand(controlId, notification)) {
       save();
     }
@@ -310,6 +547,7 @@ private:
     form->checkBox(IDC_CDISCLIP, L"Disable clipboard transfer");
     form->header(L"Mouse");
     form->checkBox(IDC_CSWAPMOUSE, L"Swap the right and middle buttons");
+    m_localKeys.build(form);
   }
 
   void save()
@@ -321,6 +559,8 @@ private:
   SettingsSectionId m_id;
   ConnectionConfig *m_defaults;
   ConnectionOptionsForm m_options;
+  // Input only.
+  LocalKeysEditor m_localKeys;
 };
 
 // ------------------------------------------------------------------- Display

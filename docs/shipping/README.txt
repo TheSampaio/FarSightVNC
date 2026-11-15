@@ -1,14 +1,16 @@
-FarSightVNC Viewer v1.1.0a (alpha)
+FarSightVNC Viewer v1.2.1a (alpha)
 ==================================
 
 VNC client for Windows based on TightVNC Viewer 2.8.90.
 License: GNU GPL version 2 or later (see LICENSE.txt).
-Date: 2026-11-12 - branch feature/ui-layout.
+Date: 2026-11-14 - branch develop.
 
 
-New interface release (v1.1.0a): a redesigned window with its own title bar,
-a Home screen, a Settings page and a "+" button for new connections. It also
-includes the keyboard fixes of v1.0.1a. See CHANGES IN v1.1.0a below.
+Bug fixes and a complete in-app updater (v1.2.1a). Updates can now be
+installed from inside the viewer, the remote Ctrl key no longer gets stuck,
+and you can keep keys such as Numpad Minus local. Everything from v1.2.0a
+(themes, icon) and v1.1.0a (new interface) is still here. See CHANGES IN
+v1.2.1a below.
 
 
 *** BREAKING CHANGE in v1.0.0a (still applies) ***
@@ -79,6 +81,54 @@ can ignore it and keep the files where they are.
   fsvncviewer.exe and fsvncupdater.exe are replaced or added; no document
   (README.txt, ...) is ever written there, so a README.txt of your own stays
   as it is.
+
+
+CHANGES IN v1.2.1a (bug fixes and in-app updater)
+-------------------------------------------------
+- Install updates from inside the viewer: the update window shows the version
+  and the release notes, with Install Update, Skip This Version and Remind Me
+  Later. After the download is verified you choose Restart and Install Now or
+  Install When I Close FarSightVNC. The updater then starts the viewer again
+  and the next start tells you once that the update was applied. Nothing is
+  installed without your confirmation; a failed install restores the previous
+  version.
+- Release notes are shown formatted (headings, bold, italic, lists, links,
+  code), in the Light and Dark themes. Only https links are clickable.
+- Automatic update checks: on start and every 30 minutes while the viewer
+  stays open, but GitHub is asked at most once every 24 hours. A manual check
+  always works.
+- Local shortcuts (Settings > Input): keys you list there, such as Numpad
+  Minus, are never sent to the remote computer and reach Windows and your
+  local tools, for example a screenshot program. Print Screen stays local as
+  before.
+- Home screen: only the list of recent connections scrolls; the address
+  field, Connect and the Options and Listen row stay in place.
+- Fix: the remote Ctrl key no longer gets stuck (a key held while the
+  keyboard hook was re-armed lost its key-up).
+- Fix: update notices are no longer hidden behind other windows; in full
+  screen they wait until you leave full screen.
+- Fix: update checks no longer happen only once per start.
+- The updater refuses repeated or conflicting command-line options and never
+  restarts the viewer from an elevated process.
+- Updating from v1.2.0a or older runs the old updater, so the viewer may not
+  restart by itself after that one update.
+- Protocol, server side, .vnc files and command-line options are unchanged.
+  Tests (x64 Release): keyboard 519/0, input queue 39/0, favorites 121/0,
+  updater 2384/0, keyboard end-to-end 42/42, release scripts 31/31.
+
+
+CHANGES IN v1.2.0a (new interface, phase 2: themes and icons)
+------------------------------------------------------------
+- The Auto, Light and Dark themes of Settings > Appearance really work now.
+  Auto follows the Windows app theme and changes with it, right away.
+- The dark theme covers the whole window: title bar, Home screen, Settings,
+  session toolbar, full screen bar, fields, lists and the window border.
+- Switching the theme repaints every open viewer window at once, with no need
+  to close and reopen the program.
+- The icon in the top left corner of the window is now the application icon,
+  in place of the placeholder square.
+- Nothing else changed: protocol, server side, updater, .vnc files, command
+  line options and saved settings are the same as in v1.1.0a.
 
 
 CHANGES IN v1.1.0a (new interface, phase 1: layout)

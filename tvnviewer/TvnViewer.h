@@ -27,6 +27,9 @@
 // Modified for FarSightVNC on 2026-11-11: the Settings page of a shell window (SettingsActions).
 // Modified for FarSightVNC on 2026-11-11: the Settings page replaces the configuration and about dialogs.
 // Modified for FarSightVNC on 2026-11-11: the messages of the removed configuration and about dialogs are gone.
+// Modified for FarSightVNC on 2026-11-14: the automatic update check timer repeats; update notifications are owned by a shell and wait for full screen to end.
+// Modified for FarSightVNC on 2026-11-14: "Restart and Install Now" closes every shell window to install a staged update.
+// Modified for FarSightVNC on 2026-11-14: a CBT hook re-owns the update dialog before its owner shell is destroyed.
 //
 
 #ifndef _TVN_VIEWER_H_
@@ -46,6 +49,8 @@
 #include <list>
 #include <map>
 #include <memory>
+#include <string>
+#include <vector>
 
 class ViewerCollector;
 class ControlTrayIcon;
@@ -53,7 +58,8 @@ class UpdateController;
 
 class TvnViewer : public WindowsApplication,
                   public HomeActions,
-                  public SettingsActions
+                  public SettingsActions,
+                  public UpdateController::Host
 {
 public:
   TvnViewer(HINSTANCE appInstance,
@@ -104,6 +110,12 @@ public:
   virtual void setUpdateAutoCheck(bool enabled);
   virtual void setUpdatePrereleases(bool enabled);
   virtual void checkForUpdates();
+
+  // UpdateController::Host implementation.
+  virtual std::vector<UpdateController::Host::Shell> updateShells();
+  virtual void updateLog(const std::wstring &line);
+  virtual int updateOpenSessions();
+  virtual void updateCloseAllWindows();
 
   // Shows the Settings page on section in the foreground shell window, or
   // in a new one on the Home page (tray menu).
@@ -166,9 +178,16 @@ public:
   static const int TIMER_DELETE_DEAD_INSTANCE = 1;
   static const int TIMER_DELETE_DEAD_INSTANCE_DELAY = 50;
 
-  // One-shot timer of the automatic update check (FarSightVNC).
+  // Timer of the automatic update check (FarSightVNC): the first tick comes
+  // a few seconds after start, then one every TIMER_UPDATE_PERIOD; the update
+  // policy decides whether a check is due.
   static const int TIMER_UPDATE_STARTUP = 2;
   static const int TIMER_UPDATE_STARTUP_DELAY = 5000;
+  static const int TIMER_UPDATE_PERIOD = 30 * 60 * 1000;
+
+  // While an automatic update notification waits for full screen to end.
+  static const int TIMER_UPDATE_DEFERRED = 3;
+  static const int TIMER_UPDATE_DEFERRED_DELAY = 2000;
 
 protected:
   void startListeningServer(const int listeningPort);
@@ -196,6 +215,12 @@ protected:
   ShellWindow *findShell(HWND hwnd) const;
 
   bool onTimer(WPARAM idTimer);
+
+  // Thread WH_CBT hook: tells the update controller that a shell window is
+  // about to be destroyed, before Windows destroys the windows it owns.
+  static LRESULT CALLBACK cbtHookProc(int code, WPARAM wParam, LPARAM lParam);
+  static TvnViewer *s_hookOwner;
+  HHOOK m_cbtHook;
 
   ViewerCollector m_instances;
   // Top-level windows of the sessions. A shell is deleted after its window

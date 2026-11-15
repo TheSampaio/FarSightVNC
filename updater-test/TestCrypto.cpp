@@ -185,7 +185,7 @@ void testEcdsa() {
   badMagic[0] = 'X';
   CHECK(!verifyEcdsaP256(badMagic, asBytes(message), signature));
   std::vector<std::uint8_t> privateMagic = key.publicBlob();
-  privateMagic[3] = '2'; // "ECS2" is the P-384 magic
+  privateMagic[3] = '2'; // "ECS2" is the P-256 private-key magic
   CHECK(!verifyEcdsaP256(privateMagic, asBytes(message), signature));
   std::vector<std::uint8_t> badLength = key.publicBlob();
   badLength[4] = 31; // cbKey

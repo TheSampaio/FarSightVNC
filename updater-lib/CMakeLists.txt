@@ -7,6 +7,7 @@ add_library(updater-lib STATIC
   Installer.cpp
   Json.cpp
   Manifest.cpp
+  MarkdownLite.cpp
   ProcessScan.cpp
   Releases.cpp
   TrustedKeys.cpp
