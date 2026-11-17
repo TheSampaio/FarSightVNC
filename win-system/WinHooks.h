@@ -54,7 +54,7 @@ public:
   };
 
   // Pure decision function of the low level hook (unit-testable): keys that
-  // always stay with Windows (injected, lock keys, Print Screen).
+  // always stay with Windows (injected, lock keys).
   static HookKeyAction decideKeyAction(DWORD vkCode, DWORD flags);
 
   // Local keys: keys the user keeps for Windows and local applications (a

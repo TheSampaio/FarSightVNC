@@ -110,9 +110,8 @@ unsigned char WinHooks::applyKeyToStateTable(BYTE *keys, WPARAM virtKey, LPARAM 
 
 WinHooks::HookKeyAction WinHooks::decideKeyAction(DWORD vkCode, DWORD flags)
 {
-  // Print Screen (also Alt+Print Screen) is for the local screenshot tools.
   if ((flags & LLKHF_INJECTED) || vkCode == VK_CAPITAL ||
-      vkCode == VK_NUMLOCK || vkCode == VK_SCROLL || vkCode == VK_SNAPSHOT) {
+      vkCode == VK_NUMLOCK || vkCode == VK_SCROLL) {
     return HOOK_KEY_PASS;
   }
   // Post every physical key to the same queue, then swallow the source event.
@@ -146,9 +145,8 @@ WinHooks::KeyCapture::Action WinHooks::KeyCapture::Filter::filter(DWORD vkCode, 
   if (flags & LLKHF_INJECTED) {
     return CAPTURE_PASS;
   }
-  // Print Screen stays with the local screenshot tools and the lock keys keep
-  // their state (as in decideKeyAction); the capture stays armed for the next key.
-  if (vkCode == VK_SNAPSHOT || vkCode == VK_CAPITAL || vkCode == VK_NUMLOCK ||
+  // Lock keys keep their state; the capture stays armed for the next key.
+  if (vkCode == VK_CAPITAL || vkCode == VK_NUMLOCK ||
       vkCode == VK_SCROLL) {
     return CAPTURE_PASS;
   }

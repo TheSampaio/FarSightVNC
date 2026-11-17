@@ -274,7 +274,7 @@ std::wstring localKeyName(unsigned index)
 }
 
 // Keys that cannot be local: modifiers (shortcuts) and the keys that always
-// stay with Windows (lock keys, Print Screen).
+// stay with Windows (lock keys).
 bool canBeLocalKey(unsigned vk)
 {
   switch (vk) {
@@ -282,7 +282,7 @@ bool canBeLocalKey(unsigned vk)
   case VK_CONTROL: case VK_LCONTROL: case VK_RCONTROL:
   case VK_MENU: case VK_LMENU: case VK_RMENU:
   case VK_LWIN: case VK_RWIN:
-  case VK_CAPITAL: case VK_NUMLOCK: case VK_SCROLL: case VK_SNAPSHOT:
+  case VK_CAPITAL: case VK_NUMLOCK: case VK_SCROLL:
   case VK_PROCESSKEY: case VK_PACKET: case 0: case 0xFF:
     return false;
   }
@@ -327,7 +327,8 @@ public:
                L"(a screenshot tool, for example) and are never sent to the remote "
                L"computer, in every session. Only the key alone is local: with Ctrl, Alt "
                L"or Shift held the modifier still goes to the remote computer. Numpad keys "
-               L"depend on Num Lock. Print Screen is always local.");
+               L"depend on Num Lock. Print Screen is local by default and can be removed "
+               L"with Clear, then added again with Add key.");
     form->textField(CTL_LOCAL_KEYS, L"Local keys");
     m_addButton = form->button(CTL_LOCAL_ADD, L"Add key…");
     form->button(CTL_LOCAL_CLEAR, L"Clear", true);

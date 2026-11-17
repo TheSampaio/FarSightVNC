@@ -1060,21 +1060,20 @@ void testKeyRouter()
 }
 
 //----------------------------------------------------------------------------
-// P: Print Screen is not sent to the server and the hook leaves it to Windows
-// (screenshots, Snipping Tool), also with Alt.
+// P: Print Screen follows the editable local-key policy, like any other key.
 
 void testPrintScreen(LogWriter *log)
 {
   const unsigned SC_SNAPSHOT = 0x37;   // E0 37
   const DWORD EXT = LLKHF_EXTENDED;
-  checkTrue("P1 hook leaves Print Screen to Windows",
-            WinHooks::decideKeyAction(VK_SNAPSHOT, EXT) == WinHooks::HOOK_KEY_PASS &&
-            WinHooks::decideKeyAction(VK_SNAPSHOT, EXT | LLKHF_UP) == WinHooks::HOOK_KEY_PASS);
-  checkTrue("P2 hook leaves Alt+Print Screen to Windows",
-            WinHooks::decideKeyAction(VK_SNAPSHOT, EXT | LLKHF_ALTDOWN) == WinHooks::HOOK_KEY_PASS &&
-            WinHooks::decideKeyAction(VK_SNAPSHOT, EXT | LLKHF_ALTDOWN | LLKHF_UP) == WinHooks::HOOK_KEY_PASS);
+  checkTrue("P1 Print Screen is no longer hardcoded in the hook",
+            WinHooks::decideKeyAction(VK_SNAPSHOT, EXT) == WinHooks::HOOK_KEY_POST &&
+            WinHooks::decideKeyAction(VK_SNAPSHOT, EXT | LLKHF_UP) == WinHooks::HOOK_KEY_POST);
+  checkTrue("P2 Alt+Print Screen follows the same configurable policy",
+            WinHooks::decideKeyAction(VK_SNAPSHOT, EXT | LLKHF_ALTDOWN) == WinHooks::HOOK_KEY_POST);
   {
     WinHooks::KeyRouter r;
+    r.setLocalKeys(WinHooks::parseLocalKeys(_T("2C,2Ce")));
     checkTrue("P3 routing leaves Print Screen to Windows while the viewer has the keyboard",
               r.route(VK_SNAPSHOT, EXT, true, false) == WinHooks::HOOK_KEY_PASS &&
               r.route(VK_SNAPSHOT, EXT | LLKHF_UP, true, false) == WinHooks::HOOK_KEY_PASS);
@@ -1083,7 +1082,9 @@ void testPrintScreen(LogWriter *log)
     Harness h(g_abnt2->hkl, log);
     h.tap(VK_SNAPSHOT, SC_SNAPSHOT, true);
     h.up(VK_SNAPSHOT, SC_SNAPSHOT, true);   // Windows often sends only the key-up
-    finish("P4 Print Screen sends nothing to the server", h, Seq());
+    Seq e;
+    e.d(XK_Print).u(XK_Print);
+    finish("P4 Print Screen removed from local keys can be sent remotely", h, e);
   }
   {
     Harness h(g_abnt2->hkl, log);
@@ -1091,8 +1092,8 @@ void testPrintScreen(LogWriter *log)
     h.tap(VK_SNAPSHOT, SC_SNAPSHOT, true);
     h.up(VK_MENU, SC_ALT);
     Seq e;
-    e.d(XK_Alt_L).u(XK_Alt_L);
-    finish("P5 Alt+Print Screen sends only Alt", h, e);
+    e.d(XK_Alt_L).d(XK_Print).u(XK_Print).u(XK_Alt_L);
+    finish("P5 Alt+Print Screen removed from local keys reaches the server", h, e);
   }
 }
 
@@ -1730,7 +1731,7 @@ void testLocalKeys(LogWriter *log)
     // Whole session: Ctrl+Numpad Minus with Numpad Minus local, Print Screen,
     // then the key becomes local while held.
     Session s(log);
-    s.router.setLocalKeys(numpadMinus);
+    s.router.setLocalKeys(numpadMinus | WinHooks::parseLocalKeys(_T("2C,2Ce")));
     s.down(VK_LCONTROL); s.tap(VK_SUBTRACT); s.up(VK_LCONTROL);
     s.tap(VK_SUBTRACT);
     s.tap(VK_SNAPSHOT);
@@ -1851,8 +1852,8 @@ void testKeyCapture()
   }
 
   {
-    // Print Screen and the lock keys are never taken: they stay armed and pass.
-    const DWORD passed[] = {VK_SNAPSHOT, VK_CAPITAL, VK_NUMLOCK, VK_SCROLL};
+    // Lock keys are never taken: they stay armed and pass.
+    const DWORD passed[] = {VK_CAPITAL, VK_NUMLOCK, VK_SCROLL};
     bool ok = true;
     for (size_t i = 0; i < sizeof(passed) / sizeof(passed[0]); i++) {
       KC::Filter f;
@@ -1863,23 +1864,22 @@ void testKeyCapture()
            f.filter('A', 0, false) == KC::CAPTURE_TAKE &&   // still armed
            f.filter('A', UP, false) == KC::CAPTURE_SWALLOW && f.isFinished();
     }
-    checkTrue("C5b Print Screen and the lock keys pass and leave the capture armed", ok);
+    checkTrue("C5b the lock keys pass and leave the capture armed", ok);
   }
   {
     KC c;
     c.arm(0, CAPTURE_MSG, 5000);
-    LRESULT ps = callCaptureHook(VK_SNAPSHOT, 0);
-    LRESULT psUp = callCaptureHook(VK_SNAPSHOT, UP);
     LRESULT caps = callCaptureHook(VK_CAPITAL, 0);
     bool armed = c.isArmed() && KC::isHookInstalled();
     std::vector<Posted> none = pumpCapture(30);
-    LRESULT key = callCaptureHook(CAPTURE_VK, 0);
+    LRESULT key = callCaptureHook(VK_SNAPSHOT, LLKHF_EXTENDED);
     std::vector<Posted> posted = pumpCapture(30);
-    callCaptureHook(CAPTURE_VK, UP);
-    checkTrue("C5c the hook lets Print Screen and CapsLock through, posts nothing, stays armed",
-              ps == 0 && psUp == 0 && caps == 0 && armed && none.empty());
-    checkTrue("C5c the next ordinary key is still taken",
-              key != 0 && posted.size() == 1 && posted[0].vk == CAPTURE_VK && !KC::isHookInstalled());
+    callCaptureHook(VK_SNAPSHOT, LLKHF_EXTENDED | UP);
+    checkTrue("C5c the hook lets CapsLock through, posts nothing, stays armed",
+              caps == 0 && armed && none.empty());
+    checkTrue("C5c Print Screen can be added back as a configurable local key",
+              key != 0 && posted.size() == 1 && posted[0].vk == VK_SNAPSHOT &&
+              posted[0].extended && !KC::isHookInstalled());
   }
 
   checkTrue("C6 no capture hook at start", !KC::isHookInstalled());

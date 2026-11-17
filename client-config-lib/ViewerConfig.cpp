@@ -40,6 +40,7 @@ ViewerConfig::ViewerConfig(const TCHAR registryPath[])
 : m_logLevel(0), m_listenPort(5500), m_historyLimit(32),
   m_showToolbar(true), m_promptOnFullscreen(true), m_theme(THEME_AUTO),
   m_conHistory(&m_conHistoryKey, m_historyLimit),
+  m_localKeys(_T("2C,2Ce")),
   m_logger(0)
 {
   StringStorage registryKey;
@@ -90,6 +91,14 @@ bool ViewerConfig::loadFromStorage(SettingsManager *storage)
   }
   StringStorage localKeys;
   if (storage->getString(_T("LocalKeys"), &localKeys)) {
+    int policyVersion = 0;
+    storage->getInt(_T("LocalKeysPolicyVersion"), &policyVersion);
+    if (policyVersion < 1) {
+      // Older viewers always kept Print Screen local, even when LocalKeys
+      // was empty. Preserve that policy once; later Clear must stay empty.
+      if (!localKeys.isEmpty()) localKeys.appendString(_T(","));
+      localKeys.appendString(_T("2C,2Ce"));
+    }
     setLocalKeys(localKeys.getString());
   }
 
@@ -108,7 +117,12 @@ bool ViewerConfig::saveToStorage(SettingsManager *storage) const
   TEST_FAIL(storage->setInt(_T("Theme"), m_theme), saveAllOk);
   {
     AutoLock l(&m_cs);
-    TEST_FAIL(storage->setString(_T("LocalKeys"), m_localKeys.getString()), saveAllOk);
+    // Persist the marker only after the matching key list was saved.
+    if (storage->setString(_T("LocalKeys"), m_localKeys.getString())) {
+      TEST_FAIL(storage->setInt(_T("LocalKeysPolicyVersion"), 1), saveAllOk);
+    } else {
+      saveAllOk = false;
+    }
   }
 
   return saveAllOk;

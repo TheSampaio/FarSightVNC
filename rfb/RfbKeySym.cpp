@@ -75,8 +75,6 @@ void RfbKeySym::processKeyEvent(unsigned short virtKey,
                                 unsigned int addKeyData)
 {
   m_log->debug(_T("Keyboard VK=%04x data=%08x LShift=%d RShift=%d"), virtKey, addKeyData, (int)isKeyHeld(VK_LSHIFT), (int)isKeyHeld(VK_RSHIFT));
-  // Print Screen stays local (screenshots, Snipping Tool), also with Alt.
-  if (virtKey == VK_SNAPSHOT) return;
   bool down = (addKeyData & 0x80000000) == 0;
   unsigned int scanCode = (addKeyData >> 16) & 0xff;
   bool extended = (addKeyData & 0x1000000) != 0; // 24 bit
