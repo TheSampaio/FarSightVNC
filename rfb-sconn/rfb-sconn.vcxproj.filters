@@ -20,6 +20,9 @@
     <ClCompile Include="ClipboardExchange.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="ClipboardFilesExchange.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="RfbClient.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -86,6 +89,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="ClipboardExchange.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ClipboardFilesExchange.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="RfbClient.h">

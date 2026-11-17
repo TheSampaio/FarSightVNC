@@ -27,6 +27,8 @@
 #include "RfbCodeRegistrator.h"
 #include "ft-server-lib/FileTransferRequestHandler.h"
 #include "EchoExtensionRequestHandler.h"
+// Modified for FarSightVNC on 2026-11-16: clipboard file paste.
+#include "ClipboardFilesExchange.h"
 #include "network/socket/SocketStream.h"
 #include "RfbInitializer.h"
 #include "ClientAuthListener.h"
@@ -186,6 +188,7 @@ void RfbClient::execute()
 
   FileTransferRequestHandler *fileTransfer = 0;
   EchoExtensionRequestHandler *echoExtension = 0;
+  ClipboardFilesExchange *clipboardFiles = 0;
 
   RfbInitializer rfbInitializer(&sockStream, m_extAuthListener, this,
                                 !m_isOutgoing);
@@ -245,13 +248,21 @@ void RfbClient::execute()
     m_log->debug(_T("ClipboardExchange has been created"));
 
     // FileTransfers initialization
-    if (config->isFileTransfersEnabled() &&
-        rfbInitializer.getTightEnabledFlag()) {
+    bool fileTransferAllowed = config->isFileTransfersEnabled() &&
+                               rfbInitializer.getTightEnabledFlag();
+    if (fileTransferAllowed) {
       fileTransfer = new FileTransferRequestHandler(&codeRegtor, &output, m_desktop, m_log, !m_viewOnly);
       m_log->debug(_T("File transfer has been created"));
     } else {
       m_log->info(_T("File transfer is not allowed"));
     }
+    // Clipboard file paste initialization. It stages its files through the
+    // file transfer, so it is gated by exactly the same condition and is
+    // never offered in view-only mode.
+    clipboardFiles = new ClipboardFilesExchange(&codeRegtor, m_desktop, &output,
+                                                fileTransferAllowed && !m_viewOnly,
+                                                m_log);
+    m_log->debug(_T("Clipboard file paste handler has been created"));
     // echo extension initialization
     echoExtension = new EchoExtensionRequestHandler(&codeRegtor, &output, m_log);
     m_log->debug(_T("Echo extension handler has been created"));
@@ -288,6 +299,7 @@ void RfbClient::execute()
   // After this call, we are guaranteed not to be used by other threads.
   notifyAbStateChanging(IN_PENDING_TO_REMOVE);
 
+  if (clipboardFiles)       delete clipboardFiles;
   if (fileTransfer)         delete fileTransfer;
   if (echoExtension)        delete echoExtension;
   if (m_clipboardExchange)  delete m_clipboardExchange;
