@@ -3,6 +3,7 @@ add_library(viewer-core STATIC
   AuthHandler.cpp
   CapabilitiesManager.cpp
   CapsContainer.cpp
+  ClipboardFilesCapability.cpp
   CoreEventsAdapter.cpp
   CursorPainter.cpp
   DecoderOfRectangle.cpp

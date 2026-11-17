@@ -223,6 +223,7 @@
     <ClCompile Include="AuthHandler.cpp" />
     <ClCompile Include="CapabilitiesManager.cpp" />
     <ClCompile Include="CapsContainer.cpp" />
+    <ClCompile Include="ClipboardFilesCapability.cpp" />
     <ClCompile Include="CoreEventsAdapter.cpp" />
     <ClCompile Include="CursorPainter.cpp" />
     <ClCompile Include="DecoderOfRectangle.cpp" />
@@ -263,6 +264,7 @@
     <ClInclude Include="AuthHandler.h" />
     <ClInclude Include="CapabilitiesManager.h" />
     <ClInclude Include="CapsContainer.h" />
+    <ClInclude Include="ClipboardFilesCapability.h" />
     <ClInclude Include="CoreEventsAdapter.h" />
     <ClInclude Include="CursorPainter.h" />
     <ClInclude Include="DecoderOfRectangle.h" />
