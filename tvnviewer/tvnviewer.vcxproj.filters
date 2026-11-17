@@ -115,6 +115,12 @@
     <ClCompile Include="ConnectionListener.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="ClipboardPasteDialog.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ClipboardFilePaste.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="FsWarningDialog.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -268,6 +274,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="ConnectionListener.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ClipboardPasteDialog.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ClipboardFilePaste.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="FsWarningDialog.h">

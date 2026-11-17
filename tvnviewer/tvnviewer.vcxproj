@@ -310,6 +310,8 @@
     <ClCompile Include="BuildTime.cpp" />
     <ClCompile Include="ConnectionData.cpp" />
     <ClCompile Include="ConnectionListener.cpp" />
+    <ClCompile Include="ClipboardPasteDialog.cpp" />
+    <ClCompile Include="ClipboardFilePaste.cpp" />
     <ClCompile Include="ControlTrayIcon.cpp" />
     <ClCompile Include="DesktopWindow.cpp" />
     <ClCompile Include="GpuPresenter.cpp" />
@@ -353,6 +355,8 @@
     <ClInclude Include="BuildTime.h" />
     <ClInclude Include="ConnectionData.h" />
     <ClInclude Include="ConnectionListener.h" />
+    <ClInclude Include="ClipboardPasteDialog.h" />
+    <ClInclude Include="ClipboardFilePaste.h" />
     <ClInclude Include="ControlTrayIcon.h" />
     <ClInclude Include="DesktopWindow.h" />
     <ClInclude Include="GpuPresenter.h" />

@@ -34,11 +34,13 @@
 // Modified for FarSightVNC on 2026-11-11: the full screen toolbar is a floating pill with the session actions and state.
 // Modified for FarSightVNC on 2026-11-11: the remote screen always fits the window (no scale modes, no scroll bars).
 // Modified for FarSightVNC on 2026-11-11: the Settings page of the shell covers the running session.
+// Modified for FarSightVNC on 2026-11-16: clipboard file paste (Ctrl+V over files copied on the local machine).
 //
 
 #ifndef _VIEWER_WINDOW_H_
 #define _VIEWER_WINDOW_H_
 
+#include "ClipboardFilePaste.h"
 #include "ConnectionData.h"
 #include "DesktopWindow.h"
 #include "FileTransferMainDialog.h"
@@ -50,6 +52,7 @@
 #include "shell/SessionHost.h"
 #include "shell/SessionToolbar.h"
 #include "log-writer/LogWriter.h"
+#include "viewer-core/ClipboardFilesCapability.h"
 #include "viewer-core/FileTransferCapability.h"
 #include "viewer-core/RemoteViewerCore.h"
 #include "viewer-core/CoreEventsAdapter.h"
@@ -61,6 +64,7 @@ class ViewerWindow : public BaseWindow,
                      public CoreEventsAdapter,
                      private HookEventListener,
                      private DesktopPointerListener,
+                     private DesktopFilePasteListener,
                      private SessionToolbarListener
 {
 public:
@@ -71,6 +75,8 @@ public:
   virtual ~ViewerWindow();
 
   void setFileTransfer(FileTransferCapability *ft);
+  // Modified for FarSightVNC on 2026-11-16: clipboard file paste.
+  void setClipboardFiles(ClipboardFilesCapability *clipboardFiles);
   void setRemoteViewerCore(RemoteViewerCore *pCore);
 
   //
@@ -178,6 +184,16 @@ protected:
   void onFrameBufferPropChange(const FrameBuffer *fb);
   void onCutText(const StringStorage *cutText);
 
+  //
+  // It is implementation of DesktopFilePasteListener functions (clipboard
+  // file paste, local machine -> remote machine).
+  //
+  virtual bool isFilePasteSupported() const;
+  virtual bool isFileTransferSupported() const;
+  virtual bool isFilePasteInProgress() const;
+  virtual bool isFileTransferBusy() const;
+  virtual bool startFilePaste(const std::vector<StringStorage> *localFiles);
+
   int translateAccelToTB(int val);
   void applyScreenChanges(bool isFullScreen);
   
@@ -192,6 +208,10 @@ protected:
   RemoteViewerCore *m_viewerCore;
   FileTransferCapability *m_fileTransfer;
   FileTransferMainDialog *m_ftDialog;
+  // Clipboard file paste; the paste object is created with the first paste
+  // of the session, because it needs the remote desktop window.
+  ClipboardFilesCapability *m_clipboardFiles;
+  std::unique_ptr<ClipboardFilePaste> m_clipboardPaste;
   DesktopWindow m_dsktWnd;
   SessionToolbar m_toolbar;
   ViewerMenu m_menu;

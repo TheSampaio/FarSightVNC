@@ -70,6 +70,7 @@
 #define IDS_TB_CONFIGURATION            216
 #define IDS_CHECK_FOR_UPDATES           217
 #define IDD_FS_WARNING                  230
+#define IDD_CLIPBOARD_PASTE             237
 #define IDD_OPTIONS_DISPLAY             232
 #define IDD_OPTIONS_INPUT               233
 #define IDD_OPTIONS_NETWORK             234
@@ -165,6 +166,8 @@
 #define IDC_UPDATE_CANCEL_DOWNLOAD      1121
 #define IDC_UPDATE_CANCEL_STAGED        1122
 #define IDC_UPDATE_RESTART              1123
+#define IDC_CLIPPASTE_STATUS            1124
+#define IDC_CLIPPASTE_PROGRESS          1125
 #define ID_CONN_OPTIONS                 40001
 #define ID_CONN_INFO                    40002
 #define ID_SHOW_TOOLBAR                 40004
@@ -177,9 +180,9 @@
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        237
+#define _APS_NEXT_RESOURCE_VALUE        238
 #define _APS_NEXT_COMMAND_VALUE         40010
-#define _APS_NEXT_CONTROL_VALUE         1124
+#define _APS_NEXT_CONTROL_VALUE         1126
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

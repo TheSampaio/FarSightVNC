@@ -28,6 +28,7 @@
 // Modified for FarSightVNC on 2026-11-11: the remote screen always fits the window (no scale modes, no scroll bars).
 // Modified for FarSightVNC on 2026-11-14: local keys (Settings, Input) are not sent to the server.
 // Modified for FarSightVNC on 2026-11-14: the WM_CHAR of a dropped local key-down is dropped too.
+// Modified for FarSightVNC on 2026-11-16: Ctrl+V over files on the local clipboard becomes a clipboard file paste.
 //
 
 #include "DesktopWindow.h"
@@ -52,6 +53,7 @@ DesktopWindow::DesktopWindow(LogWriter *logWriter, ConnectionConfig *conConf)
   m_previousMouseState(0),
   m_isBackgroundDirty(false),
   m_pointerListener(0),
+  m_filePasteListener(0),
   m_isConnected(false)
 {
   m_rfbKeySym = std::unique_ptr<RfbKeySym>(new RfbKeySym(this, m_logWriter));
@@ -149,7 +151,13 @@ bool DesktopWindow::onMessage(UINT message, WPARAM wParam, LPARAM lParam)
     case WM_KILLFOCUS:
       m_ctrlDown = false;
       m_altDown = false;
+      // The key-up of a dropped key-down may go to another window now, so
+      // the scan code is forgotten instead of dropping a later WM_CHAR.
+      m_droppedLocalScan = -1;
       m_rfbKeySym->processFocusLoss();
+      return true;
+    case WM_USER_FILE_PASTE:
+      sendCtrlV();
       return true;
   }
   return false;
@@ -324,11 +332,66 @@ bool DesktopWindow::onKey(WPARAM wParam, LPARAM lParam)
   if (!isDown && scan == m_droppedLocalScan) {
     m_droppedLocalScan = -1;
   }
+  // Ctrl+V over files on the local clipboard is not sent now: the files are
+  // staged on the remote machine first and the keystroke is synthesized
+  // afterwards (WM_USER_FILE_PASTE). Everything else, and every peer that
+  // does not offer the extension, is unaffected.
+  if (isDown && virtualKey == 'V' && tryStartFilePaste()) {
+    m_droppedLocalScan = scan; // TranslateMessage would still make a WM_CHAR
+    return true;
+  }
   if (!m_conConf->isViewOnly()) {
     m_rfbKeySym->processKeyEvent(virtualKey,
                                  additionalInfo);
   }
   return true;
+}
+
+bool DesktopWindow::tryStartFilePaste()
+{
+  // Only a plain Ctrl+V: Ctrl+Shift+V and Ctrl+Alt+V mean something else in
+  // the remote application.
+  if (m_filePasteListener == 0 || !m_ctrlDown || m_altDown) {
+    return false;
+  }
+  if ((GetKeyState(VK_SHIFT) & 0x8000) != 0) {
+    return false;
+  }
+
+  ClipboardFilesCapability::PasteContext context;
+  context.capabilityEnabled = m_filePasteListener->isFilePasteSupported();
+  context.fileTransferEnabled = m_filePasteListener->isFileTransferSupported();
+  context.viewOnly = m_conConf->isViewOnly();
+  context.connected = m_isConnected;
+  context.clipboardEnabled = m_conConf->isClipboardEnabled();
+  context.clipboardHasFiles = m_clipboard.hasFileList();
+  context.pasteInProgress = m_filePasteListener->isFilePasteInProgress();
+  context.fileTransferBusy = m_filePasteListener->isFileTransferBusy();
+
+  if (!ClipboardFilesCapability::shouldInterceptPaste(context)) {
+    return false;
+  }
+
+  std::vector<StringStorage> localFiles;
+  if (!m_clipboard.getFileList(&localFiles)) {
+    return false;
+  }
+  return m_filePasteListener->startFilePaste(&localFiles);
+}
+
+void DesktopWindow::sendCtrlV()
+{
+  if (m_conConf->isViewOnly() || m_viewerCore == 0) {
+    return;
+  }
+  // The pair is sent complete, whether or not the user still holds the real
+  // Ctrl: its key-up is ignored by RfbKeySym when it did not press the key,
+  // so nothing stays pressed on the remote machine.
+  unsigned int scan = MapVirtualKey('V', MAPVK_VK_TO_VSC) & 0xff;
+  m_rfbKeySym->sendModifier(VK_CONTROL, true);
+  m_rfbKeySym->processKeyEvent('V', scan << 16);
+  m_rfbKeySym->processKeyEvent('V', (scan << 16) | 0x80000000);
+  m_rfbKeySym->sendModifier(VK_CONTROL, false);
 }
 
 bool DesktopWindow::onChar(WPARAM wParam, LPARAM lParam)

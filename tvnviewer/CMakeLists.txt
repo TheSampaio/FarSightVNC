@@ -4,6 +4,8 @@ add_executable(tvnviewer WIN32
   BuildTime.cpp
   ConnectionData.cpp
   ConnectionListener.cpp
+  ClipboardPasteDialog.cpp
+  ClipboardFilePaste.cpp
   ControlTrayIcon.cpp
   DesktopWindow.cpp
   GpuPresenter.cpp

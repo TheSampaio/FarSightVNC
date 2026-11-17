@@ -68,6 +68,7 @@ ViewerWindow::ViewerWindow(WindowsApplication *application,
   m_isFullScr(false),
   m_covered(false),
   m_ftDialog(0),
+  m_clipboardFiles(0),
   m_viewerCore(0),
   m_fileTransfer(0),
   m_conData(conData),
@@ -102,6 +103,7 @@ ViewerWindow::ViewerWindow(WindowsApplication *application,
                          WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_CHILD,
                          getHWnd());
   m_dsktWnd.setPointerListener(this);
+  m_dsktWnd.setFilePasteListener(this);
   // Clicks on the toolbar give the focus back to the remote desktop.
   m_toolbar.setFocusTarget(m_dsktWnd.getHWnd());
 
@@ -125,6 +127,58 @@ ViewerWindow::~ViewerWindow()
 void ViewerWindow::setFileTransfer(FileTransferCapability *ft)
 {
   m_fileTransfer = ft;
+}
+
+void ViewerWindow::setClipboardFiles(ClipboardFilesCapability *clipboardFiles)
+{
+  m_clipboardFiles = clipboardFiles;
+}
+
+//
+// Clipboard file paste (local machine -> remote machine).
+//
+
+bool ViewerWindow::isFilePasteSupported() const
+{
+  return m_clipboardFiles != 0 && m_clipboardFiles->isSupported();
+}
+
+bool ViewerWindow::isFileTransferSupported() const
+{
+  return m_fileTransfer != 0 && m_fileTransfer->isEnabled();
+}
+
+bool ViewerWindow::isFilePasteInProgress() const
+{
+  return m_clipboardPaste.get() != 0 && m_clipboardPaste->isInProgress();
+}
+
+bool ViewerWindow::isFileTransferBusy() const
+{
+  // The file transfer dialog and the paste share one file transfer core, so
+  // only one of them may use it.
+  return m_ftDialog != 0 && m_ftDialog->isCreated();
+}
+
+bool ViewerWindow::startFilePaste(const std::vector<StringStorage> *localFiles)
+{
+  if (m_clipboardFiles == 0 || m_fileTransfer == 0) {
+    return false;
+  }
+  if (m_clipboardPaste.get() == 0) {
+    m_clipboardPaste.reset(new ClipboardFilePaste(&m_logWriter, m_fileTransfer,
+                                                  m_clipboardFiles, &m_control,
+                                                  m_dsktWnd.getHWnd()));
+  }
+  if (!m_clipboardPaste->begin(localFiles)) {
+    return false;
+  }
+  // The progress window is modeless, like the file transfer dialog.
+  HWND dialogWnd = m_clipboardPaste->getDialogWindow();
+  if (dialogWnd != 0) {
+    m_application->addModelessDialog(dialogWnd);
+  }
+  return true;
 }
 
 void ViewerWindow::setRemoteViewerCore(RemoteViewerCore *pCore)
@@ -745,6 +799,15 @@ bool ViewerWindow::onCommand(WPARAM wParam, LPARAM lParam)
 
 void ViewerWindow::showFileTransferDialog()
 {
+  // The file transfer dialog and a clipboard file paste share one file
+  // transfer core, so the dialog waits until the paste is done.
+  if (isFilePasteInProgress()) {
+    MessageBox(getHWnd(),
+               _T("A clipboard file paste is still copying files to the")
+               _T(" remote computer. Try again when it has finished."),
+               _T("File Transfer"), MB_OK | MB_ICONINFORMATION);
+    return;
+  }
   bool canTransfer = m_fileTransfer != 0 && m_fileTransfer->isEnabled() &&
                      !m_conConf->isViewOnly();
   if (canTransfer) {
@@ -889,6 +952,9 @@ bool ViewerWindow::onClose()
 bool ViewerWindow::onDestroy()
 {
   KillTimer(m_hWnd, TIMER_DESKTOP_STATE);
+  // Stops the staging thread of a clipboard file paste while the file
+  // transfer and the viewer core are still alive.
+  m_clipboardPaste.reset();
   // The frame may outlive the session (reconnection): its full screen
   // toolbar goes with the session.
   m_fsToolbar.destroy();
@@ -1139,6 +1205,9 @@ void ViewerWindow::onConnected(RfbOutputGate *output)
 
   // Set output for client-to-server messages in file transfer.
   m_fileTransfer->setOutput(output);
+  if (m_clipboardFiles != 0) {
+    m_clipboardFiles->setOutput(output);
+  }
 
   // Update list of supported operation for file transfer.
   vector<UINT32> clientMsgCodes;
@@ -1148,6 +1217,11 @@ void ViewerWindow::onConnected(RfbOutputGate *output)
   m_viewerCore->getEnabledServerMsgCapabilities(&serverMsgCodes);
 
   m_fileTransfer->getCore()->updateSupportedOperations(&clientMsgCodes, &serverMsgCodes);
+
+  // The clipboard file paste is only offered when the server advertised it.
+  if (m_clipboardFiles != 0) {
+    m_clipboardFiles->updateSupport(&clientMsgCodes);
+  }
 
   // This runs in the thread of the viewer core, which pumps no messages.
   // Full screen created the floating toolbar and the low level keyboard hook

@@ -31,6 +31,7 @@
 #include "network/socket/SocketIPv4.h"
 
 #include "ViewerVncAuthHandler.h"
+#include "viewer-core/ClipboardFilesCapability.h"
 
 
 class ViewerInstance
@@ -66,6 +67,10 @@ protected:
   ConnectionData m_condata;
   ConnectionConfig m_conConf;
 
+  // Modified for FarSightVNC on 2026-11-16: clipboard file paste. Declared
+  // before the window, because the paste object of the window keeps a
+  // pointer to it and unregisters itself from it when it is destroyed.
+  ClipboardFilesCapability m_clipboardFiles;
   ViewerWindow m_viewerWnd;
   RemoteViewerCore m_viewerCore;
   ViewerVncAuthHandler m_vncAuthHandler;

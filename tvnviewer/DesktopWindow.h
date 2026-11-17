@@ -25,6 +25,7 @@
 // Modified for FarSightVNC on 2026-11-03: listener for local pointer movement (full screen toolbar).
 // Modified for FarSightVNC on 2026-11-11: the remote screen always fits the window (no scale modes, no scroll bars).
 // Modified for FarSightVNC on 2026-11-14: scan code of a dropped local key-down (its WM_CHAR is dropped too).
+// Modified for FarSightVNC on 2026-11-16: Ctrl+V over files on the local clipboard becomes a clipboard file paste.
 //
 
 #ifndef _DESKTOP_WINDOW_H_
@@ -41,10 +42,12 @@
 #include "gui/drawing/SolidBrush.h"
 #include "gui/drawing/Graphics.h"
 #include "rfb/RfbKeySym.h"
+#include "viewer-core/ClipboardFilesCapability.h"
 #include "viewer-core/RemoteViewerCore.h"
 #include "GpuPresenter.h"
 
 #include <memory>
+#include <vector>
 
 // Receives the local pointer position over the desktop window (client
 // coordinates), also in view-only mode and before it is sent to the server.
@@ -54,6 +57,30 @@ public:
   virtual void onDesktopPointerMove(POINT clientPoint) = 0;
 protected:
   ~DesktopPointerListener() {}
+};
+
+// Lets the desktop window turn a Ctrl+V over files on the local clipboard
+// into a clipboard file paste (local machine -> remote machine). The window
+// only decides whether to swallow the keystroke; the session window runs the
+// paste and asks for the keystroke again when the remote clipboard is set.
+class DesktopFilePasteListener
+{
+public:
+  // True when the server advertised the clipboard file paste capability.
+  virtual bool isFilePasteSupported() const = 0;
+  // True when the server advertised the file transfer, which stages the
+  // files on the remote machine.
+  virtual bool isFileTransferSupported() const = 0;
+  // True while a clipboard file paste of this session is still running.
+  virtual bool isFilePasteInProgress() const = 0;
+  // True while the file transfer dialog is using the file transfer core.
+  virtual bool isFileTransferBusy() const = 0;
+  // Starts the paste of the files on the local clipboard. Returns false when
+  // nothing was started; the keystroke is then let through unchanged.
+  virtual bool startFilePaste(const std::vector<StringStorage> *localFiles) = 0;
+
+protected:
+  ~DesktopFilePasteListener() {}
 };
 
 class DesktopWindow : public PaintWindow,
@@ -104,6 +131,17 @@ public:
   void setWinKeyIgnore(bool winKeyIgnore) { m_rfbKeySym->setWinKeyIgnore(winKeyIgnore); }
 
   void setPointerListener(DesktopPointerListener *listener) { m_pointerListener = listener; }
+
+  void setFilePasteListener(DesktopFilePasteListener *listener) { m_filePasteListener = listener; }
+
+  // Posted by the clipboard file paste once the remote clipboard holds the
+  // staged files: the window then synthesizes the Ctrl+V it swallowed.
+  static const UINT WM_USER_FILE_PASTE = WM_USER + 1;
+
+  // Sends a complete Ctrl+V to the server (Ctrl down, V down, V up, Ctrl
+  // up), so that no modifier is left pressed on the remote machine even
+  // though the real Ctrl was held while the files were staged.
+  void sendCtrlV();
 
 protected:
   //
@@ -189,6 +227,7 @@ protected:
 
   RemoteViewerCore *m_viewerCore;
   ConnectionConfig *m_conConf;
+  DesktopFilePasteListener *m_filePasteListener;
   bool m_isBackgroundDirty;
   DesktopPointerListener *m_pointerListener;
 
@@ -199,6 +238,10 @@ private:
   void drawImage(const RECT *src, const RECT *dst);
   void repaint(const Rect *repaintRect);
   void calcClientArea();
+  // True when this key-down was a plain Ctrl+V over files on the local
+  // clipboard and a clipboard file paste was started for it. The key-down
+  // must then be swallowed.
+  bool tryStartFilePaste();
 };
 
 #endif

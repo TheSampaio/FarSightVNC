@@ -112,10 +112,12 @@ void ViewerInstance::start()
 
 
   m_viewerWnd.setFileTransfer(&m_fileTransfer);
+  m_viewerWnd.setClipboardFiles(&m_clipboardFiles);
 
   m_vncAuthHandler.addAuthCapability(&m_viewerCore);
 
   m_fileTransfer.addCapabilities(&m_viewerCore);
+  m_clipboardFiles.addCapabilities(&m_viewerCore);
 
   if (m_socket) {
     m_viewerCore.start(m_socket,
