@@ -20,6 +20,7 @@
 // Modified for FarSightVNC on 2026-11-12: the Appearance theme is applied, not only stored.
 // Modified for FarSightVNC on 2026-11-14: Local shortcuts (keys never sent to the server) in Input.
 // Modified for FarSightVNC on 2026-11-14: the Local shortcuts note says that only the bare key is local and that Numpad keys depend on Num Lock.
+// Modified for FarSightVNC on 2026-11-16: Add key... takes the key-down through a swallowing keyboard hook (a screenshot tool no longer fires during the capture).
 //
 
 #include "SettingsSections.h"
@@ -291,6 +292,15 @@ bool canBeLocalKey(unsigned vk)
 // "Local shortcuts" rows of the Input section: the list of local keys,
 // "Add key..." that takes the next key pressed and "Clear". The keys are
 // app-wide (ViewerConfig), saved and applied to the keyboard hook at once.
+//
+// "Add key..." arms a WinHooks::KeyCapture: a low level keyboard hook that
+// takes the next key-down and swallows it. The window messages cannot be used:
+// a screenshot tool (Lightshot, the Snipping Tool) registers its key as a
+// system hot key, so it fires, and its overlay takes the focus, before the
+// key reaches any window. The hook posts the key to the "Add key..." button.
+// It is removed when the key was taken (after the key-up), on Esc, when the
+// button loses the focus (which also covers another application taking the
+// foreground), when the button is destroyed and after kCaptureTimeoutMs.
 class LocalKeysEditor
 {
 public:
@@ -306,6 +316,7 @@ public:
     if (m_addButton != 0 && IsWindow(m_addButton)) {
       RemoveWindowSubclass(m_addButton, captureProc, kSubclassId);
     }
+    // m_capture removes the hook if it is still armed.
   }
 
   void build(SettingsForm *form)
@@ -318,7 +329,7 @@ public:
                L"or Shift held the modifier still goes to the remote computer. Numpad keys "
                L"depend on Num Lock. Print Screen is always local.");
     form->textField(CTL_LOCAL_KEYS, L"Local keys");
-    m_addButton = form->button(CTL_LOCAL_ADD, L"Add key\u2026");
+    m_addButton = form->button(CTL_LOCAL_ADD, L"Add key…");
     form->button(CTL_LOCAL_CLEAR, L"Clear", true);
     if (m_addButton != 0) {
       SetWindowSubclass(m_addButton, captureProc, kSubclassId, reinterpret_cast<DWORD_PTR>(this));
@@ -341,7 +352,7 @@ public:
     if (controlId == CTL_LOCAL_ADD) {
       startCapture();
     } else if (controlId == CTL_LOCAL_CLEAR) {
-      stopCapture();
+      cancelCapture();
       m_keys.reset();
       apply();
     }
@@ -350,21 +361,38 @@ public:
 
 private:
   static const UINT_PTR kSubclassId = 0x4C4B;   // Not the form's own subclass ID.
+  // Posted by the capture hook to the button: wParam is the virtual key
+  // (0: the capture timed out), lParam bit 0 the extended flag.
+  static const UINT kCaptureMessage = WM_APP + 0x4B;
+  // A capture that is never answered ends by itself, so the global keyboard
+  // hook cannot stay installed.
+  static const DWORD kCaptureTimeoutMs = 10000;
 
   void startCapture()
   {
-    // The keys held now (Space or Enter that pressed the button) are not
-    // the key to add: their key-ups are ignored.
-    m_heldAtStart.reset();
-    for (unsigned vk = 1; vk < 256; vk++) {
-      if (GetAsyncKeyState(vk) & 0x8000) m_heldAtStart.set(vk);
+    // The Enter that pressed the button is already down: the hook ignores the
+    // keys Windows has down, so no snapshot of them is needed.
+    if (!m_capture.arm(m_addButton, kCaptureMessage, kCaptureTimeoutMs)) {
+      MessageBeep(MB_ICONWARNING);
+      return;
     }
     m_capturing = true;
+    // The focus loss of the button ends the capture.
     SetFocus(m_addButton);
-    SetWindowTextW(m_form->control(CTL_LOCAL_KEYS), L"Press a key\u2026 (Esc cancels)");
+    SetWindowTextW(m_form->control(CTL_LOCAL_KEYS), L"Press a key… (Esc to cancel)");
   }
 
-  void stopCapture()
+  // Ends the capture from outside (focus lost, Clear, button destroyed):
+  // removes the hook at once.
+  void cancelCapture()
+  {
+    m_capture.disarm();
+    endCapture();
+  }
+
+  // Back to the list of keys. The hook stays until the key-up of the key it
+  // took, so that no other application sees that key-up alone.
+  void endCapture()
   {
     if (m_capturing) {
       m_capturing = false;
@@ -372,12 +400,17 @@ private:
     }
   }
 
-  // A key is taken at its key-up: a local application that registered it as
-  // a hot key (RegisterHotKey) consumes the key-down.
-  void onCapturedKey(unsigned vk, bool extended)
+  // The message of the hook: the key taken (or 0 on timeout), already
+  // swallowed. A message of a capture that already ended is ignored.
+  void onCaptureMessage(unsigned vk, bool extended)
   {
+    if (!m_capturing) {
+      return;
+    }
     m_capturing = false;
-    if (canBeLocalKey(vk)) {
+    if (vk == 0 || vk == VK_ESCAPE) {
+      showKeys();
+    } else if (canBeLocalKey(vk)) {
       m_keys.set(WinHooks::localKeyIndex(vk, extended));
       apply();
     } else {
@@ -414,49 +447,16 @@ private:
   {
     LocalKeysEditor *editor = reinterpret_cast<LocalKeysEditor *>(data);
     switch (message) {
-    case WM_GETDLGCODE:
-      // While capturing, every key (Tab, Enter, Esc...) comes to the button
-      // instead of the dialog manager.
-      if (editor->m_capturing) {
-        return DLGC_WANTALLKEYS | DefSubclassProc(hwnd, message, wParam, lParam);
-      }
-      break;
-    case WM_KEYDOWN:
-    case WM_SYSKEYDOWN:
-      if (editor->m_capturing) {
-        if (wParam == VK_ESCAPE) {
-          editor->m_heldAtStart.set(VK_ESCAPE);   // Its key-up is not a key to add.
-          editor->stopCapture();
-        }
-        return 0;
-      }
-      break;
-    case WM_KEYUP:
-    case WM_SYSKEYUP:
-      if (editor->m_capturing) {
-        unsigned vk = static_cast<unsigned>(wParam) & 0xff;
-        if (editor->m_heldAtStart.test(vk)) {
-          editor->m_heldAtStart.reset(vk);
-        } else {
-          editor->onCapturedKey(vk, (lParam & 0x1000000) != 0);
-        }
-        return 0;
-      } else if (editor->m_heldAtStart.test(static_cast<unsigned>(wParam) & 0xff)) {
-        // Key-up of the Esc that cancelled: not a click of the button.
-        editor->m_heldAtStart.reset(static_cast<unsigned>(wParam) & 0xff);
-        return 0;
-      }
-      break;
-    case WM_CHAR:
-    case WM_SYSCHAR:
-      if (editor->m_capturing) {
-        return 0;
-      }
-      break;
+    case kCaptureMessage:
+      editor->onCaptureMessage(static_cast<unsigned>(wParam), (lParam & 1) != 0);
+      return 0;
     case WM_KILLFOCUS:
-      editor->stopCapture();
+      editor->cancelCapture();
       break;
     case WM_NCDESTROY:
+      // The form is going away: no row left to restore.
+      editor->m_capture.disarm();
+      editor->m_capturing = false;
       RemoveWindowSubclass(hwnd, captureProc, id);
       editor->m_addButton = 0;
       break;
@@ -468,7 +468,7 @@ private:
   HWND m_addButton;
   bool m_capturing;
   WinHooks::LocalKeySet m_keys;
-  std::bitset<256> m_heldAtStart;
+  WinHooks::KeyCapture m_capture;
 };
 
 // ------------------------------------------------- Connection and Input

@@ -26,6 +26,7 @@
 // Modified for FarSightVNC on 2026-11-14: a key already held by Windows when the hook sees it first stays with Windows (no remote Ctrl stuck).
 // Modified for FarSightVNC on 2026-11-14: user-configurable local keys (Settings, Input, Local shortcuts) stay with Windows.
 // Modified for FarSightVNC on 2026-11-14: key owners per extended key (Enter/Numpad Enter); stricter LocalKeys parsing.
+// Modified for FarSightVNC on 2026-11-16: key capture hook (Settings, Add key...) that takes the next key-down and swallows it.
 //
 
 #include "WinHooks.h"
@@ -116,6 +117,159 @@ WinHooks::HookKeyAction WinHooks::decideKeyAction(DWORD vkCode, DWORD flags)
   }
   // Post every physical key to the same queue, then swallow the source event.
   return HOOK_KEY_POST;
+}
+
+// ------------------------------------------------------------ Key capture
+
+HHOOK WinHooks::KeyCapture::s_hook = 0;
+UINT_PTR WinHooks::KeyCapture::s_timer = 0;
+HWND WinHooks::KeyCapture::s_target = 0;
+UINT WinHooks::KeyCapture::s_message = 0;
+const WinHooks::KeyCapture *WinHooks::KeyCapture::s_owner = 0;
+WinHooks::KeyCapture::Filter WinHooks::KeyCapture::s_filter;
+
+WinHooks::KeyCapture::Filter::Filter()
+{
+  reset();
+}
+
+void WinHooks::KeyCapture::Filter::reset()
+{
+  m_state = WAITING;
+  m_taken = 0;
+}
+
+WinHooks::KeyCapture::Action WinHooks::KeyCapture::Filter::filter(DWORD vkCode, DWORD flags,
+                                                                   bool systemHasKeyDown)
+{
+  // A synthetic key neither drives the capture nor is hidden from Windows.
+  if (flags & LLKHF_INJECTED) {
+    return CAPTURE_PASS;
+  }
+  // Print Screen stays with the local screenshot tools and the lock keys keep
+  // their state (as in decideKeyAction); the capture stays armed for the next key.
+  if (vkCode == VK_SNAPSHOT || vkCode == VK_CAPITAL || vkCode == VK_NUMLOCK ||
+      vkCode == VK_SCROLL) {
+    return CAPTURE_PASS;
+  }
+  bool isUp = (flags & LLKHF_UP) != 0;
+  unsigned index = localKeyIndex(vkCode, (flags & LLKHF_EXTENDED) != 0);
+  switch (m_state) {
+  case WAITING:
+    // A key-up is of a key pressed before the capture (the Enter that pressed
+    // the button) and so is a key Windows has down (its autorepeat).
+    if (isUp || systemHasKeyDown) {
+      return CAPTURE_PASS;
+    }
+    m_taken = index;
+    m_state = TAKEN;
+    return CAPTURE_TAKE;
+  case TAKEN:
+    if (index != m_taken) {
+      return CAPTURE_PASS;
+    }
+    if (isUp) {
+      m_state = FINISHED;
+    }
+    return CAPTURE_SWALLOW;
+  default:
+    break;
+  }
+  return CAPTURE_PASS;
+}
+
+WinHooks::KeyCapture::KeyCapture()
+{
+}
+
+WinHooks::KeyCapture::~KeyCapture()
+{
+  disarm();
+}
+
+bool WinHooks::KeyCapture::arm(HWND target, UINT message, DWORD timeoutMs)
+{
+  if (s_owner != 0 && s_owner != this) {
+    return false;
+  }
+  release();
+  s_filter.reset();
+  s_target = target;
+  s_message = message;
+  s_hook = SetWindowsHookEx(WH_KEYBOARD_LL, hookProc, GetModuleHandle(0), 0);
+  if (s_hook == 0) {
+    return false;
+  }
+  s_timer = SetTimer(0, 0, timeoutMs, timerProc);
+  if (s_timer == 0) {
+    release();
+    return false;
+  }
+  s_owner = this;
+  return true;
+}
+
+void WinHooks::KeyCapture::disarm()
+{
+  if (s_owner == this) {
+    release();
+  }
+}
+
+bool WinHooks::KeyCapture::isArmed() const
+{
+  return s_owner == this && s_hook != 0;
+}
+
+bool WinHooks::KeyCapture::isHookInstalled()
+{
+  return s_hook != 0;
+}
+
+void WinHooks::KeyCapture::release()
+{
+  if (s_timer != 0) {
+    KillTimer(0, s_timer);
+  }
+  s_timer = 0;
+  if (s_hook != 0) {
+    UnhookWindowsHookEx(s_hook);
+  }
+  s_hook = 0;
+  s_owner = 0;
+}
+
+LRESULT CALLBACK WinHooks::KeyCapture::hookProc(int nCode, WPARAM wParam, LPARAM lParam)
+{
+  if (nCode == HC_ACTION && s_hook != 0) {
+    const KBDLLHOOKSTRUCT *key = reinterpret_cast<const KBDLLHOOKSTRUCT *>(lParam);
+    // Inside the hook GetAsyncKeyState reports the state before this event.
+    bool systemHasKeyDown = (GetAsyncKeyState(key->vkCode & 0xff) & 0x8000) != 0;
+    Action action = s_filter.filter(key->vkCode, key->flags, systemHasKeyDown);
+    if (action != CAPTURE_PASS) {
+      if (action == CAPTURE_TAKE) {
+        PostMessage(s_target, s_message, key->vkCode,
+                    (key->flags & LLKHF_EXTENDED) ? 1 : 0);
+      }
+      if (s_filter.isFinished()) {
+        release();
+      }
+      return 1;
+    }
+  }
+  return CallNextHookEx(s_hook, nCode, wParam, lParam);
+}
+
+VOID CALLBACK WinHooks::KeyCapture::timerProc(HWND, UINT, UINT_PTR, DWORD)
+{
+  if (s_hook == 0) {
+    return;
+  }
+  HWND target = s_target;
+  UINT message = s_message;
+  release();
+  // Ended without a key.
+  PostMessage(target, message, 0, 0);
 }
 
 unsigned WinHooks::localKeyIndex(DWORD vkCode, bool extended)

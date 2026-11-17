@@ -26,6 +26,7 @@
 // Modified for FarSightVNC on 2026-11-14: a key already held by Windows when the hook sees it first stays with Windows (no remote Ctrl stuck).
 // Modified for FarSightVNC on 2026-11-14: user-configurable local keys (Settings, Input, Local shortcuts) stay with Windows.
 // Modified for FarSightVNC on 2026-11-14: key owners per extended key (Enter/Numpad Enter); stricter LocalKeys parsing.
+// Modified for FarSightVNC on 2026-11-16: key capture hook (Settings, Add key...) that takes the next key-down and swallows it.
 //
 
 #include "util/CommonHeader.h"
@@ -143,6 +144,85 @@ public:
 
   // True when the hook is installed on behalf of this listener.
   static bool isRegisteredFor(HookEventListener *hookEventListener);
+
+  // One-shot capture of the next key pressed, for the "Add key..." button of
+  // the Local shortcuts. A local tool (Lightshot, the Snipping Tool) fires its
+  // own hot key before a window ever sees the key, so the key cannot be read
+  // from window messages. While armed, a dedicated WH_KEYBOARD_LL hook takes
+  // the next key-down and swallows it: the key reaches neither Windows, nor the
+  // hot key table, nor any other application. Its autorepeats and its key-up
+  // are swallowed too, then the hook removes itself.
+  // The hook is independent of the session hook (registerKeyboardHook) and of
+  // KeyRouter: it can be armed with no session, and a swallowed key never
+  // reaches the router. A key held when the capture is armed (the Enter that
+  // pressed the button) and injected keys are never taken.
+  // The hook runs on the thread that armed it, which must pump messages. The
+  // hook only posts a message; nothing else is done inside it.
+  // A global keyboard hook must never outlive its purpose: the object removes
+  // it in its destructor, and arm() sets a timeout.
+  class KeyCapture
+  {
+  public:
+    // What the hook does with a key event.
+    enum Action {
+      CAPTURE_PASS,       // Not ours: Windows and the next hook see it.
+      CAPTURE_SWALLOW,    // The taken key again (autorepeat, key-up).
+      CAPTURE_TAKE        // The key captured: swallowed and reported once.
+    };
+
+    // Pure state of the capture (unit-testable). systemHasKeyDown: Windows
+    // already has the key down (GetAsyncKeyState inside the hook, which
+    // reports the state before the current event).
+    class Filter
+    {
+    public:
+      Filter();
+      void reset();
+      Action filter(DWORD vkCode, DWORD flags, bool systemHasKeyDown);
+      // The key-up of the taken key was swallowed: nothing is left to do.
+      bool isFinished() const { return m_state == FINISHED; }
+    private:
+      enum State { WAITING, TAKEN, FINISHED };
+      State m_state;
+      unsigned m_taken;   // localKeyIndex of the taken key.
+    };
+
+    KeyCapture();
+    // Removes the hook if this object armed it.
+    ~KeyCapture();
+
+    // Installs the hook. The key is posted once to target as
+    // PostMessage(target, message, vk, extended ? 1 : 0). The capture ends
+    // without a key after timeoutMs: the hook is removed and the message is
+    // posted with vk 0. A target of 0 posts to the thread queue. Re-arming an
+    // armed object restarts it. Returns false (nothing installed) when the hook
+    // cannot be installed or another object has the capture armed.
+    bool arm(HWND target, UINT message, DWORD timeoutMs);
+    // Removes the hook and the timeout; harmless when not armed.
+    void disarm();
+    // True while the hook of this object is installed (it stays installed
+    // after the key-down until the key-up of the taken key).
+    bool isArmed() const;
+    // True when a capture hook is installed, whoever owns it.
+    static bool isHookInstalled();
+
+    // Hook procedure (public like lowLevelKeyboardHook, for the tests).
+    static LRESULT CALLBACK hookProc(int nCode, WPARAM wParam, LPARAM lParam);
+
+  private:
+    KeyCapture(const KeyCapture &);
+    KeyCapture &operator=(const KeyCapture &);
+    static VOID CALLBACK timerProc(HWND, UINT, UINT_PTR, DWORD);
+    // Removes the hook and the timer of whichever object armed them.
+    static void release();
+
+    static HHOOK s_hook;
+    static UINT_PTR s_timer;
+    static HWND s_target;
+    static UINT s_message;
+    static const KeyCapture *s_owner;
+    static Filter s_filter;
+  };
 
   // Applies a WM_KEYDOWN/WM_KEYUP style message to a GetKeyboardState table
   // (toggle bits are kept) and returns the left/right specific virtual key.

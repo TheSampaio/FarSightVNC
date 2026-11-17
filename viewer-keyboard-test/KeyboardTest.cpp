@@ -31,6 +31,7 @@
 // Modified for FarSightVNC on 2026-11-11: Ctrl shortcuts and key-up routing of the keyboard hook; Print Screen stays local.
 // Modified for FarSightVNC on 2026-11-14: held keys routed to Windows, focus restoration never presses modifiers, whole-session scenarios.
 // Modified for FarSightVNC on 2026-11-14: local keys (parse/format, routing, sessions).
+// Modified for FarSightVNC on 2026-11-16: key capture hook of Settings, Add key... (filter, real hook install/remove, timeout, RAII).
 
 #include "rfb/RfbKeySym.h"
 #include "win-system/WinHooks.h"
@@ -1750,6 +1751,259 @@ void testLocalKeys(LogWriter *log)
     s.check("L6 a key that becomes local while held leaves nothing pressed");
   }
 }
+
+//----------------------------------------------------------------------------
+// C: key capture ("Add key..." of the Local shortcuts). A local tool fires its
+// own hot key before a window sees the key, so a capture hook takes the
+// key-down and swallows it. The filter is tested without a hook; the real
+// hook is installed only briefly, this thread pumps its own messages and no
+// real key is injected (the hook procedure is called with synthetic data,
+// only for events it swallows, so nothing reaches the next hook).
+
+const UINT CAPTURE_MSG = WM_APP + 1;
+// A key nobody has down and no hot key uses.
+const DWORD CAPTURE_VK = VK_F24;
+
+struct Posted {
+  WPARAM vk;
+  LPARAM extended;
+};
+
+// Pumps this thread's messages (the timeout timer included) for ms and
+// returns the capture messages posted meanwhile.
+std::vector<Posted> pumpCapture(DWORD ms)
+{
+  std::vector<Posted> posted;
+  DWORD end = GetTickCount() + ms;
+  while (static_cast<LONG>(end - GetTickCount()) > 0) {
+    MSG m;
+    if (PeekMessage(&m, 0, 0, 0, PM_REMOVE)) {
+      if (m.hwnd == 0 && m.message == CAPTURE_MSG) {
+        Posted p = {m.wParam, m.lParam};
+        posted.push_back(p);
+      } else {
+        TranslateMessage(&m);
+        DispatchMessage(&m);
+      }
+    } else {
+      Sleep(2);
+    }
+  }
+  return posted;
+}
+
+LRESULT callCaptureHook(DWORD vk, DWORD flags)
+{
+  KBDLLHOOKSTRUCT k = {};
+  k.vkCode = vk;
+  k.flags = flags;
+  return WinHooks::KeyCapture::hookProc(HC_ACTION, (flags & LLKHF_UP) ? WM_KEYUP : WM_KEYDOWN,
+                                        reinterpret_cast<LPARAM>(&k));
+}
+
+void testKeyCapture()
+{
+  typedef WinHooks::KeyCapture KC;
+  const DWORD UP = LLKHF_UP;
+  {
+    KC::Filter f;
+    bool ok = f.filter(CAPTURE_VK, 0, false) == KC::CAPTURE_TAKE &&
+              f.filter(CAPTURE_VK, 0, false) == KC::CAPTURE_SWALLOW &&   // autorepeat
+              !f.isFinished() &&
+              f.filter(CAPTURE_VK, UP, false) == KC::CAPTURE_SWALLOW &&
+              f.isFinished() &&
+              f.filter(CAPTURE_VK, 0, false) == KC::CAPTURE_PASS;        // done
+    checkTrue("C1 a key-down is taken once, its autorepeat and key-up are swallowed", ok);
+  }
+  {
+    KC::Filter f;
+    bool ok = f.filter('A', LLKHF_INJECTED, false) == KC::CAPTURE_PASS &&
+              f.filter('A', LLKHF_INJECTED | UP, false) == KC::CAPTURE_PASS &&
+              f.filter('B', 0, false) == KC::CAPTURE_TAKE &&
+              f.filter('B', LLKHF_INJECTED, false) == KC::CAPTURE_PASS &&
+              f.filter('B', LLKHF_INJECTED | UP, false) == KC::CAPTURE_PASS &&
+              !f.isFinished();
+    checkTrue("C2 an injected key is never taken nor swallowed", ok);
+  }
+  {
+    KC::Filter f;
+    bool ok = f.filter(VK_RETURN, UP, false) == KC::CAPTURE_PASS &&      // key-up of the Enter that pressed the button
+              f.filter(VK_RETURN, 0, true) == KC::CAPTURE_PASS &&        // its autorepeat: Windows has it down
+              f.filter(VK_RETURN, UP, false) == KC::CAPTURE_PASS &&
+              f.filter(VK_SUBTRACT, 0, false) == KC::CAPTURE_TAKE;
+    checkTrue("C3 a key held when the capture starts, and its key-up, are not taken", ok);
+  }
+  {
+    KC::Filter f;
+    bool ok = f.filter(VK_RETURN, LLKHF_EXTENDED, false) == KC::CAPTURE_TAKE &&   // Numpad Enter
+              f.filter(VK_RETURN, 0, false) == KC::CAPTURE_PASS &&                // Enter is another key
+              f.filter(VK_RETURN, UP, false) == KC::CAPTURE_PASS &&
+              !f.isFinished() &&
+              f.filter(VK_RETURN, LLKHF_EXTENDED | UP, false) == KC::CAPTURE_SWALLOW &&
+              f.isFinished();
+    checkTrue("C4 the extended flag tells Numpad Enter from Enter", ok);
+  }
+  {
+    KC::Filter f;
+    bool ok = f.filter(VK_ESCAPE, 0, false) == KC::CAPTURE_TAKE &&
+              f.filter(VK_ESCAPE, UP, false) == KC::CAPTURE_SWALLOW && f.isFinished();
+    checkTrue("C5 Esc is taken like any key (the owner cancels), and swallowed", ok);
+  }
+
+  {
+    // Print Screen and the lock keys are never taken: they stay armed and pass.
+    const DWORD passed[] = {VK_SNAPSHOT, VK_CAPITAL, VK_NUMLOCK, VK_SCROLL};
+    bool ok = true;
+    for (size_t i = 0; i < sizeof(passed) / sizeof(passed[0]); i++) {
+      KC::Filter f;
+      ok = ok && f.filter(passed[i], 0, false) == KC::CAPTURE_PASS &&
+           f.filter(passed[i], UP, false) == KC::CAPTURE_PASS &&
+           f.filter(passed[i], LLKHF_EXTENDED, false) == KC::CAPTURE_PASS &&
+           !f.isFinished() &&
+           f.filter('A', 0, false) == KC::CAPTURE_TAKE &&   // still armed
+           f.filter('A', UP, false) == KC::CAPTURE_SWALLOW && f.isFinished();
+    }
+    checkTrue("C5b Print Screen and the lock keys pass and leave the capture armed", ok);
+  }
+  {
+    KC c;
+    c.arm(0, CAPTURE_MSG, 5000);
+    LRESULT ps = callCaptureHook(VK_SNAPSHOT, 0);
+    LRESULT psUp = callCaptureHook(VK_SNAPSHOT, UP);
+    LRESULT caps = callCaptureHook(VK_CAPITAL, 0);
+    bool armed = c.isArmed() && KC::isHookInstalled();
+    std::vector<Posted> none = pumpCapture(30);
+    LRESULT key = callCaptureHook(CAPTURE_VK, 0);
+    std::vector<Posted> posted = pumpCapture(30);
+    callCaptureHook(CAPTURE_VK, UP);
+    checkTrue("C5c the hook lets Print Screen and CapsLock through, posts nothing, stays armed",
+              ps == 0 && psUp == 0 && caps == 0 && armed && none.empty());
+    checkTrue("C5c the next ordinary key is still taken",
+              key != 0 && posted.size() == 1 && posted[0].vk == CAPTURE_VK && !KC::isHookInstalled());
+  }
+
+  checkTrue("C6 no capture hook at start", !KC::isHookInstalled());
+  {
+    KC c;
+    checkTrue("C6 arming installs the hook", c.arm(0, CAPTURE_MSG, 5000) && c.isArmed() &&
+              KC::isHookInstalled());
+    c.disarm();
+    checkTrue("C6 disarming removes it", !c.isArmed() && !KC::isHookInstalled());
+    c.disarm();   // harmless
+    checkTrue("C6 a second disarm is harmless", !KC::isHookInstalled());
+    pumpCapture(30);   // no stale timer message
+  }
+  {
+    KC c;
+    bool armed = c.arm(0, CAPTURE_MSG, 5000);
+    LRESULT down = callCaptureHook(CAPTURE_VK, 0);
+    LRESULT repeat = callCaptureHook(CAPTURE_VK, 0);
+    bool stillArmed = KC::isHookInstalled();   // waits for the key-up
+    LRESULT up = callCaptureHook(CAPTURE_VK, UP);
+    std::vector<Posted> posted = pumpCapture(30);
+    checkTrue("C7 the key-down is swallowed and posted once, as virtual key and extended flag 0",
+              armed && down != 0 && repeat != 0 && posted.size() == 1 &&
+              posted[0].vk == CAPTURE_VK && posted[0].extended == 0);
+    checkTrue("C7 the hook stays for the key-up, swallows it and removes itself",
+              stillArmed && up != 0 && !KC::isHookInstalled() && !c.isArmed());
+  }
+  {
+    KC c;
+    c.arm(0, CAPTURE_MSG, 5000);
+    LRESULT down = callCaptureHook(VK_RETURN, LLKHF_EXTENDED);
+    std::vector<Posted> posted = pumpCapture(30);
+    callCaptureHook(VK_RETURN, LLKHF_EXTENDED | UP);
+    checkTrue("C8 an extended key is posted with the extended flag",
+              down != 0 && posted.size() == 1 && posted[0].vk == VK_RETURN && posted[0].extended == 1 &&
+              !KC::isHookInstalled());
+  }
+  {
+    {
+      KC c;
+      c.arm(0, CAPTURE_MSG, 5000);
+      checkTrue("C9 the hook is installed inside the scope", KC::isHookInstalled());
+    }
+    checkTrue("C9 the guard removes the hook at scope exit", !KC::isHookInstalled());
+    pumpCapture(30);
+  }
+  {
+    KC a;
+    KC b;
+    bool armedA = a.arm(0, CAPTURE_MSG, 5000);
+    bool armedB = b.arm(0, CAPTURE_MSG, 5000);
+    b.disarm();
+    bool aKept = a.isArmed() && KC::isHookInstalled();
+    {
+      KC c;
+      c.disarm();
+    }
+    checkTrue("C10 a second object cannot arm, nor remove the hook of the first",
+              armedA && !armedB && aKept && a.isArmed() && !b.isArmed() && KC::isHookInstalled());
+    a.disarm();
+    checkTrue("C10 the owner removes it", !KC::isHookInstalled());
+  }
+  {
+    KC c;
+    bool armed = c.arm(0, CAPTURE_MSG, 40);
+    std::vector<Posted> posted = pumpCapture(800);
+    checkTrue("C11 the timeout removes the hook and posts vk 0 once",
+              armed && !KC::isHookInstalled() && !c.isArmed() && posted.size() == 1 &&
+              posted[0].vk == 0 && posted[0].extended == 0);
+  }
+  {
+    KC c;
+    c.arm(0, CAPTURE_MSG, 40);
+    c.disarm();
+    std::vector<Posted> posted = pumpCapture(200);
+    checkTrue("C12 disarming cancels the timeout (nothing is posted)", posted.empty());
+  }
+  {
+    KC c;
+    c.arm(0, CAPTURE_MSG, 40);
+    callCaptureHook(CAPTURE_VK, 0);
+    std::vector<Posted> posted = pumpCapture(800);   // the key-up never comes
+    bool ok = !KC::isHookInstalled() && posted.size() == 2 && posted[0].vk == CAPTURE_VK &&
+              posted[1].vk == 0;
+    checkTrue("C13 a key held past the timeout still removes the hook", ok);
+  }
+  {
+    KC c;
+    c.arm(0, CAPTURE_MSG, 5000);
+    c.arm(0, CAPTURE_MSG, 5000);   // restart
+    checkTrue("C14 re-arming restarts the capture without a second hook",
+              c.isArmed() && KC::isHookInstalled());
+    c.disarm();
+    checkTrue("C14 one disarm removes it", !KC::isHookInstalled());
+  }
+  {
+    // Independent of the session hook and of the local keys.
+    DummyListener session;
+    WinHooks::LocalKeySet keys;
+    keys.set(WinHooks::localKeyIndex(VK_SUBTRACT, false));
+    WinHooks::setLocalKeys(keys);
+    WinHooks::registerKeyboardHook(&session);
+    {
+      KC c;
+      c.arm(0, CAPTURE_MSG, 5000);
+      callCaptureHook(CAPTURE_VK, 0);
+      callCaptureHook(CAPTURE_VK, UP);
+      pumpCapture(30);
+    }
+    bool ok = WinHooks::isRegisteredFor(&session) &&
+              WinHooks::isLocalKey(VK_SUBTRACT, false) && !WinHooks::isLocalKey(CAPTURE_VK, false);
+    WinHooks::unregisterKeyboardHook(&session);
+    WinHooks::setLocalKeys(WinHooks::LocalKeySet());
+    checkTrue("C15 the capture leaves the session hook and the local keys alone", ok);
+  }
+  {
+    // No session at all: the capture works by itself.
+    KC c;
+    DummyListener none;
+    checkTrue("C16 the capture arms with no session hook",
+              !WinHooks::isRegisteredFor(&none) && c.arm(0, CAPTURE_MSG, 5000));
+    c.disarm();
+  }
+}
 } // namespace
 
 int main()
@@ -1790,6 +2044,7 @@ int main()
   testFocusRestoration(&log);
   testSessions(&log);
   testLocalKeys(&log);
+  testKeyCapture();
 
   unloadLayouts();
   printf("\n%d passed, %d failed\n", g_passed, g_failed);
