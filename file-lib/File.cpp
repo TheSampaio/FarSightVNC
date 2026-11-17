@@ -144,13 +144,27 @@ bool File::isDirectory() const
 
 bool File::isReparsePoint() const
 {
-  WIN32_FIND_DATA fileInfo;
-
-  if (!getFileInfo(&fileInfo)) {
-    return false;
+  //
+  // GetFileAttributes asks about this path, while getFileInfo() enumerates the
+  // parent directory with FindFirstFile. The difference matters here: a parent
+  // whose ACL denies enumeration, and the root of a volume, make FindFirstFile
+  // fail, and answering "not a reparse point" because the question could not
+  // be asked is the dangerous direction. A caller uses this to decide whether
+  // writing through the path is safe, so an unanswerable question has to read
+  // as "treat it as one".
+  //
+  DWORD attributes = GetFileAttributes(m_pathName.getString());
+  if (attributes == INVALID_FILE_ATTRIBUTES) {
+    DWORD errCode = GetLastError();
+    //
+    // A path that is really absent is not a reparse point, and saying so is
+    // safe: the caller is about to create it, and the creation itself is what
+    // decides. Any other failure means the answer is unknown.
+    //
+    return !(errCode == ERROR_FILE_NOT_FOUND || errCode == ERROR_PATH_NOT_FOUND);
   }
 
-  return (fileInfo.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
+  return (attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
 }
 
 void File::getPath(StringStorage *pathname) const
