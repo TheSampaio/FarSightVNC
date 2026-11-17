@@ -79,7 +79,9 @@ private:
     std::wstring address;  // Host and port.
     bool favorite;
     bool inHistory;
-    D2D1_RECT_F rect;      // Layout in DIPs, list coordinates (unscrolled).
+    // Layout in DIPs: page coordinates for the pinned favorites, list
+    // coordinates (unscrolled) for the other hosts.
+    D2D1_RECT_F rect;
   };
 
   static bool registerClass();
@@ -99,9 +101,10 @@ private:
   void paintHost(size_t index);
   void paintEmptyState();
 
-  // Rectangle of an item in DIPs: page coordinates for the fixed items, list
-  // coordinates (unscrolled) for the hosts.
+  // Rectangle of a fixed item in DIPs, page coordinates.
   D2D1_RECT_F itemRect(int item) const;
+  // Rectangle of a host in page coordinates, as painted (scroll applied).
+  D2D1_RECT_F hostRect(size_t index) const;
   bool isFocusable(int item) const;
   int hitTest(LPARAM lParam) const;
   void setHover(int item);
@@ -133,13 +136,17 @@ private:
   ConnectionFavorites m_favorites;
   std::vector<HostRow> m_hosts;
   size_t m_favoriteCount;
+  // The first m_pinnedCount hosts (favorites) are pinned: they never scroll.
+  size_t m_pinnedCount;
   // Options set with "Connection options..." for the next connection typed
   // in the field; otherwise the options saved for the host are used.
   ConnectionConfig m_connectionConfig;
   bool m_optionsEdited;
 
-  // Layout in DIPs, page coordinates; the headers and the empty state are in
-  // list coordinates (unscrolled), like the host rows.
+  // Layout in DIPs, page coordinates; the recents header and the empty state
+  // are in list coordinates (unscrolled), like the scrolled host rows. The
+  // favorites header is in page coordinates, in list coordinates when no
+  // favorite is pinned.
   D2D1_RECT_F m_heading;
   D2D1_RECT_F m_subtitle;
   D2D1_RECT_F m_field;
@@ -150,8 +157,8 @@ private:
   D2D1_RECT_F m_favoritesHeader;
   D2D1_RECT_F m_recentsHeader;
   D2D1_RECT_F m_empty;
-  // Viewport of the host list, page coordinates: from below the buttons to
-  // the bottom margin, the hosts are clipped to it.
+  // Viewport of the scrolled host list, page coordinates: from below the
+  // pinned favorites to the bottom margin, the hosts are clipped to it.
   D2D1_RECT_F m_list;
   // Height of the list content and scroll offset inside the list.
   float m_listContent;

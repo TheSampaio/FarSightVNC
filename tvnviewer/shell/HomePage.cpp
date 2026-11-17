@@ -186,6 +186,7 @@ HomePage::HomePage(HWND shell, HomeActions *actions)
   m_fieldBrush(CreateSolidBrush(toColorRef(currentTheme().field))),
   m_actions(actions),
   m_favoriteCount(0),
+  m_pinnedCount(0),
   m_optionsEdited(false),
   m_listContent(0.0f),
   m_scroll(0.0f),
@@ -673,27 +674,51 @@ void HomePage::layout()
   m_listenStatus = D2D1::RectF(m_listen.right + theme.spacing, y, right, y + kLinkHeight);
   y += kLinkHeight + kSectionGap;
 
-  // The hosts scroll inside the list viewport below the fixed part; their
-  // layout is in list coordinates. The viewport ends at the bottom of the
-  // client area at the latest: a short window clips the minimum list height,
-  // and the scroll range, the thumb and Page Up/Down must use what is seen.
+  // The favorites are pinned under the buttons (page coordinates): they never
+  // scroll. The recent list keeps at least kListMinHeight below them, so in a
+  // short window only the favorites that fit stay pinned; the others (all of
+  // them when not even one fits) scroll at the top of the list instead of
+  // being cut off by the window edge.
   float clientHeight = m_chrome.pixelsToDips(client.bottom - client.top);
+  float rowStep = kRowHeight + kRowGap;
+  m_favoritesHeader = m_recentsHeader = m_empty = D2D1::RectF();
+  m_pinnedCount = static_cast<size_t>(fsv::shell::pinnedRowCount(
+    fsv::shell::pinnedBudget(clientHeight, y, kSectionGap - kRowGap, kBottomMargin, kListMinHeight),
+    static_cast<int>(m_favoriteCount), kHeaderHeight, rowStep));
+  if (m_pinnedCount > 0) {
+    m_favoritesHeader = D2D1::RectF(left, y, right, y + kHeaderHeight);
+    y += kHeaderHeight;
+    for (size_t i = 0; i < m_pinnedCount; i++) {
+      m_hosts[i].rect = D2D1::RectF(left, y, right, y + kRowHeight);
+      y += rowStep;
+    }
+    if (m_hosts.size() > m_pinnedCount) {
+      // The row gap is already in; the section gap replaces it.
+      y += kSectionGap - kRowGap;
+    }
+  }
+
+  // The rest of the hosts scroll inside the list viewport below the pinned
+  // part; their layout is in list coordinates. The viewport ends at the
+  // bottom of the client area at the latest: a short window clips the minimum
+  // list height, and the scroll range, the thumb and Page Up/Down must use
+  // what is seen.
   float viewport = fsv::shell::visibleListHeight(clientHeight, y, kBottomMargin, kListMinHeight);
   m_list = D2D1::RectF(left, y, (std::min)(right + kScrollbarGutter, width), y + viewport);
   y = 0.0f;
 
-  m_favoritesHeader = m_recentsHeader = m_empty = D2D1::RectF();
   if (m_hosts.empty()) {
     m_empty = D2D1::RectF(left, y, right, y + kEmptyHeight);
     y += kEmptyHeight;
   }
-  for (size_t i = 0; i < m_hosts.size(); i++) {
+  for (size_t i = m_pinnedCount; i < m_hosts.size(); i++) {
     if (i == 0 && m_favoriteCount > 0) {
+      // No favorite fits pinned: their header scrolls with them.
       m_favoritesHeader = D2D1::RectF(left, y, right, y + kHeaderHeight);
       y += kHeaderHeight;
     }
     if (i == m_favoriteCount) {
-      if (i > 0) {
+      if (i > m_pinnedCount) {
         y += kSectionGap - kRowGap;
       }
       m_recentsHeader = D2D1::RectF(left, y, right, y + kHeaderHeight);
@@ -766,6 +791,15 @@ D2D1_RECT_F HomePage::itemRect(int item) const
   }
 }
 
+D2D1_RECT_F HomePage::hostRect(size_t index) const
+{
+  // A pinned favorite is in page coordinates; the others follow the scroll.
+  if (index < m_pinnedCount) {
+    return m_hosts[index].rect;
+  }
+  return offsetY(m_hosts[index].rect, m_list.top - m_scroll);
+}
+
 bool HomePage::isFocusable(int item) const
 {
   switch (item) {
@@ -796,13 +830,19 @@ int HomePage::hitTest(LPARAM lParam) const
   if (contains(m_listen, x, y)) {
     return ITEM_LISTEN;
   }
-  // The hosts only inside the list viewport, in list coordinates.
+  // The pinned favorites, in page coordinates.
+  for (size_t i = 0; i < m_pinnedCount; i++) {
+    if (contains(m_hosts[i].rect, x, y)) {
+      return ITEM_FIRST_HOST + static_cast<int>(i);
+    }
+  }
+  // The other hosts only inside the list viewport, in list coordinates.
   float listY;
   if (x < m_list.left || x >= m_list.right ||
       !fsv::shell::listPoint(listSpan(m_list), m_scroll, y, &listY)) {
     return ITEM_NONE;
   }
-  for (size_t i = 0; i < m_hosts.size(); i++) {
+  for (size_t i = m_pinnedCount; i < m_hosts.size(); i++) {
     if (contains(m_hosts[i].rect, x, listY)) {
       return ITEM_FIRST_HOST + static_cast<int>(i);
     }
@@ -876,15 +916,19 @@ void HomePage::moveInHosts(int delta)
 
 void HomePage::ensureVisible(int item)
 {
-  // The fixed part never scrolls; a host is shown inside the list viewport.
+  // The fixed part and the pinned favorites never scroll; the other hosts
+  // are shown inside the list viewport.
   if (item < ITEM_FIRST_HOST || static_cast<size_t>(item - ITEM_FIRST_HOST) >= m_hosts.size()) {
     return;
   }
   size_t index = item - ITEM_FIRST_HOST;
+  if (index < m_pinnedCount) {
+    return;
+  }
   D2D1_RECT_F rect = m_hosts[index].rect;
-  // The first host of a section brings its header along.
+  // The first host of the list and of a section bring their header along.
   float top = rect.top;
-  if (index == 0) {
+  if (index == m_pinnedCount) {
     top = 0.0f;
   } else if (index == m_favoriteCount) {
     top = m_recentsHeader.top;
@@ -989,12 +1033,15 @@ void HomePage::showHostMenu(size_t index, const POINT *screenPoint)
     point = *screenPoint;
   } else {
     // Keyboard: below the start of the row, which is scrolled into view
-    // first. The point stays inside the list viewport, never over the fixed
-    // part above it.
+    // first. A scrolled row's point stays inside the list viewport, never
+    // over the fixed part above it; a pinned row never moves.
     ensureVisible(ITEM_FIRST_HOST + static_cast<int>(index));
-    point.x = m_chrome.dipsToPixels(row.rect.left + kHostIcon);
-    float bottom = m_list.top + row.rect.bottom - m_scroll;
-    bottom = (std::max)(m_list.top, (std::min)(bottom, m_list.bottom));
+    D2D1_RECT_F rect = hostRect(index);
+    float bottom = rect.bottom;
+    if (index >= m_pinnedCount) {
+      bottom = (std::max)(m_list.top, (std::min)(bottom, m_list.bottom));
+    }
+    point.x = m_chrome.dipsToPixels(rect.left + kHostIcon);
     point.y = m_chrome.dipsToPixels(bottom);
     ClientToScreen(m_hwnd, &point);
   }
@@ -1134,13 +1181,22 @@ void HomePage::paint()
                       theme.mutedText, theme.fontSizeSmall);
   }
 
-  // The host list: scrolled and clipped to its viewport.
+  // The pinned favorites: fixed, outside the list clip.
+  if (m_pinnedCount > 0) {
+    m_chrome.drawText(kFavorites, m_favoritesHeader, theme.mutedText,
+                      theme.fontSizeSmall, DWRITE_FONT_WEIGHT_SEMI_BOLD);
+    for (size_t i = 0; i < m_pinnedCount; i++) {
+      paintHost(i);
+    }
+  }
+
+  // The rest of the host list: scrolled and clipped to its viewport.
   float listShift = m_list.top - m_scroll;
   m_chrome.pushClip(m_list);
   if (m_hosts.empty()) {
     paintEmptyState();
   }
-  if (m_favoriteCount > 0) {
+  if (m_pinnedCount == 0 && m_favoriteCount > 0) {
     m_chrome.drawText(kFavorites, offsetY(m_favoritesHeader, listShift), theme.mutedText,
                       theme.fontSizeSmall, DWRITE_FONT_WEIGHT_SEMI_BOLD);
   }
@@ -1148,7 +1204,7 @@ void HomePage::paint()
     m_chrome.drawText(kRecents, offsetY(m_recentsHeader, listShift), theme.mutedText,
                       theme.fontSizeSmall, DWRITE_FONT_WEIGHT_SEMI_BOLD);
   }
-  for (size_t i = 0; i < m_hosts.size(); i++) {
+  for (size_t i = m_pinnedCount; i < m_hosts.size(); i++) {
     paintHost(i);
   }
   m_chrome.popClip();
@@ -1193,7 +1249,7 @@ void HomePage::paintHost(size_t index)
   const ThemeTokens &theme = currentTheme();
   const HostRow &row = m_hosts[index];
   int item = ITEM_FIRST_HOST + static_cast<int>(index);
-  D2D1_RECT_F rect = offsetY(row.rect, m_list.top - m_scroll);
+  D2D1_RECT_F rect = hostRect(index);
   bool highlighted = m_hover == item || m_pressed == item;
   if (m_pressed == item) {
     m_chrome.fillRoundRect(rect, kFieldRadius, theme.hover);

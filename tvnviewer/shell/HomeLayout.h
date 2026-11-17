@@ -24,8 +24,8 @@
 
 // Geometry of the scrolling host list of the Home page (HomePage), without
 // any window or Direct2D type so that it can be tested. The heading, the
-// address field and the action buttons stay fixed; only the favorite and
-// recent hosts scroll, inside the list viewport. Values are DIPs; client
+// address field, the action buttons and the pinned favorites stay fixed; only
+// the recent hosts scroll, inside the list viewport. Values are DIPs; client
 // coordinates are those of the page window, list coordinates start at the
 // top of the list content (unscrolled).
 namespace fsv::shell {
@@ -63,6 +63,35 @@ inline float visibleListHeight(float clientDips, float listTop, float bottomMarg
 {
   float height = listHeight(clientDips, listTop, bottomMargin, minHeight);
   return (std::max)(0.0f, (std::min)(height, clientDips - listTop));
+}
+
+// Room for the pinned favorites block (header and rows): from pinnedTop down
+// to bottomMargin above the bottom of the client area, minus what the recent
+// list keeps (minListHeight) and the gap between the block and the list
+// (gapAfter). Negative in a window too short for any pinned row.
+inline float pinnedBudget(float clientDips, float pinnedTop, float gapAfter, float bottomMargin,
+                          float minListHeight)
+{
+  return clientDips - bottomMargin - minListHeight - gapAfter - pinnedTop;
+}
+
+// How many of the favorites stay pinned: a header and rows of rowStep each
+// (row height plus gap) inside budget, at most count; 0 when not even the
+// header and one row fit (the favorites then scroll with the list, so no
+// favorite is ever out of reach).
+inline int pinnedRowCount(float budget, int count, float headerHeight, float rowStep)
+{
+  if (count <= 0 || rowStep <= 0.0f || budget < headerHeight + rowStep) {
+    return 0;
+  }
+  int fit = static_cast<int>((budget - headerHeight) / rowStep);
+  return (std::min)(count, fit);
+}
+
+// Height of a pinned block of rows rows (header included), 0 without rows.
+inline float pinnedHeight(int rows, float headerHeight, float rowStep)
+{
+  return rows > 0 ? headerHeight + static_cast<float>(rows) * rowStep : 0.0f;
 }
 
 // True when client y is inside the list viewport; *listY then receives the
