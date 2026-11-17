@@ -22,6 +22,8 @@
 //-------------------------------------------------------------------------
 //
 
+// Modified for FarSightVNC on 2026-11-16: clipboard file paste.
+
 #ifndef __WINDOWSUSERINPUT_H__
 #define __WINDOWSUSERINPUT_H__
 
@@ -41,6 +43,9 @@ public:
   virtual ~WindowsUserInput(void);
 
   virtual void setNewClipboard(const StringStorage *newClipboard);
+  virtual void getClipboardStagingRoot(StringStorage *root);
+  virtual void setNewClipboardFiles(const StringStorage *root,
+                                    const std::vector<StringStorage> *paths);
   virtual void setMouseEvent(const Point newPos, UINT8 keyFlag);
   virtual void setKeyboardEvent(UINT32 keySym, bool down);
 

@@ -22,6 +22,8 @@
 //-------------------------------------------------------------------------
 //
 
+// Modified for FarSightVNC on 2026-11-16: clipboard file paste.
+
 #include "DesktopBaseImpl.h"
 #include "util/BrokenHandleException.h"
 
@@ -238,6 +240,38 @@ void DesktopBaseImpl::setNewClipText(const StringStorage *newClipboard)
     m_userInput->setNewClipboard(newClipboard);
   } catch (Exception &e) {
 	  m_log->error(_T("Exception in DesktopBaseImpl::setNewClipText %s"), e.getMessage());
+    m_extDeskTermListener->onAbnormalDesktopTerminate();
+  }
+}
+
+void DesktopBaseImpl::getClipboardStagingRoot(StringStorage *root)
+{
+  _ASSERT(m_userInput != 0);
+
+  root->setString(_T(""));
+  try {
+    m_userInput->getClipboardStagingRoot(root);
+  } catch (Exception &e) {
+    m_log->error(_T("Exception in DesktopBaseImpl::getClipboardStagingRoot %s"),
+                 e.getMessage());
+    root->setString(_T(""));
+  }
+}
+
+void DesktopBaseImpl::setNewClipFiles(const StringStorage *root,
+                                      const std::vector<StringStorage> *files)
+{
+  _ASSERT(m_userInput != 0);
+  _ASSERT(m_extDeskTermListener != 0);
+
+  m_log->debug(_T("set new clipboard file list of %d entries"),
+               (int)files->size());
+
+  try {
+    m_userInput->setNewClipboardFiles(root, files);
+  } catch (Exception &e) {
+    m_log->error(_T("Exception in DesktopBaseImpl::setNewClipFiles %s"),
+                 e.getMessage());
     m_extDeskTermListener->onAbnormalDesktopTerminate();
   }
 }

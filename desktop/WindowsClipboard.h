@@ -22,6 +22,9 @@
 //-------------------------------------------------------------------------
 //
 
+// Modified for FarSightVNC on 2026-11-16: writing a CF_HDROP file list
+// (clipboard file paste).
+
 #ifndef __WINDOWSCLIPBOARD_H__
 #define __WINDOWSCLIPBOARD_H__
 
@@ -30,6 +33,8 @@
 #include "ClipboardListener.h"
 #include "log-writer/LogWriter.h"
 #include "thread/GuiThread.h"
+
+#include <vector>
 
 class WindowsClipboard : protected MessageWindow, GuiThread
 {
@@ -41,6 +46,11 @@ public:
   virtual bool writeToClipBoard(const TCHAR *text);
 
   virtual void readFromClipBoard(StringStorage *clipDest) const;
+
+  // This function replaces the clipboard content by the file list, in the
+  // CF_HDROP format Explorer pastes from. The text behaviour above is not
+  // touched: a file paste and a text paste are separate clipboard contents.
+  virtual bool writeFileListToClipBoard(const std::vector<StringStorage> *paths);
 
 protected:
   virtual bool wndProc(UINT message, WPARAM wParam, LPARAM lParam);

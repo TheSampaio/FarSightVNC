@@ -58,6 +58,18 @@ void SasUserInput::setNewClipboard(const StringStorage *newClipboard)
   m_client->setNewClipboard(newClipboard);
 }
 
+// Modified for FarSightVNC on 2026-11-16: clipboard file paste.
+void SasUserInput::getClipboardStagingRoot(StringStorage *root)
+{
+  m_client->getClipboardStagingRoot(root);
+}
+
+void SasUserInput::setNewClipboardFiles(const StringStorage *root,
+                                        const std::vector<StringStorage> *paths)
+{
+  m_client->setNewClipboardFiles(root, paths);
+}
+
 void SasUserInput::setKeyboardEvent(UINT32 keySym, bool down)
 {
   bool delPressed = false;

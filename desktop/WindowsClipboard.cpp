@@ -22,9 +22,13 @@
 //-------------------------------------------------------------------------
 //
 
+// Modified for FarSightVNC on 2026-11-16: writing a CF_HDROP file list
+// (clipboard file paste).
+
 #include "WindowsClipboard.h"
 #include "tvnserver-app/NamingDefs.h"
 #include "util/Exception.h"
+#include "win-system/DropFilesBuffer.h"
 #include <vector>
 
 const HINSTANCE WindowsClipboard::m_hinst = GetModuleHandle(0);
@@ -81,6 +85,47 @@ bool WindowsClipboard::writeToClipBoard(const TCHAR *text)
   }
 
   return false;
+}
+
+bool WindowsClipboard::writeFileListToClipBoard(const std::vector<StringStorage> *paths)
+{
+  std::vector<char> dropFiles;
+  DropFilesBuffer::build(paths, &dropFiles);
+
+  if (!OpenClipboard(m_hwnd)) {
+    m_log->error(_T("Could not open the clipboard to set the file list"));
+    return false;
+  }
+
+  bool result = false;
+  EmptyClipboard();
+
+  HGLOBAL hglb = GlobalAlloc(GMEM_MOVEABLE, dropFiles.size());
+  if (hglb != NULL) {
+    void *buff = GlobalLock(hglb);
+    if (buff != 0) {
+      memcpy(buff, &dropFiles.front(), dropFiles.size());
+      GlobalUnlock(hglb);
+      // On success the clipboard owns the block; on failure we do.
+      if (SetClipboardData(CF_HDROP, hglb) != NULL) {
+        result = true;
+      } else {
+        GlobalFree(hglb);
+      }
+    } else {
+      GlobalFree(hglb);
+    }
+  }
+
+  CloseClipboard();
+
+  if (result) {
+    m_log->info(_T("Put a clipboard file list of %d entries on the clipboard"),
+                (int)paths->size());
+  } else {
+    m_log->error(_T("Could not put the clipboard file list on the clipboard"));
+  }
+  return result;
 }
 
 void WindowsClipboard::readFromClipBoard(StringStorage *clipDest) const

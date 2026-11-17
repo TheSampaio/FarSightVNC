@@ -38,6 +38,10 @@ public:
 
   virtual void sendInit(BlockingGate *gate);
   virtual void setNewClipboard(const StringStorage *newClipboard);
+  // Modified for FarSightVNC on 2026-11-16: clipboard file paste.
+  virtual void getClipboardStagingRoot(StringStorage *root);
+  virtual void setNewClipboardFiles(const StringStorage *root,
+                                    const std::vector<StringStorage> *paths);
   virtual void setMouseEvent(const Point newPos, UINT8 keyFlag);
   virtual void setKeyboardEvent(UINT32 keySym, bool down);
   virtual void getCurrentUserInfo(StringStorage *desktopName,

@@ -67,6 +67,10 @@ public:
   virtual void setKeyboardEvent(UINT32 keySym, bool down);
   virtual void setMouseEvent(UINT16 x, UINT16 y, UINT8 buttonMask);
   virtual void setNewClipText(const StringStorage *newClipboard);
+  // Modified for FarSightVNC on 2026-11-16: clipboard file paste.
+  virtual void getClipboardStagingRoot(StringStorage *root);
+  virtual void setNewClipFiles(const StringStorage *root,
+                               const std::vector<StringStorage> *files);
 
 protected:
   // Calling when at least one update has been detected.

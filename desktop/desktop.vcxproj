@@ -302,6 +302,7 @@
     <ClCompile Include="ConsolePoller.cpp" />
     <ClCompile Include="CopyRectDetector.cpp" />
     <ClCompile Include="DesktopBaseImpl.cpp" />
+    <ClCompile Include="ClipboardStaging.cpp" />
     <ClCompile Include="DesktopClientImpl.cpp" />
     <ClCompile Include="DesktopConfigLocal.cpp" />
     <ClCompile Include="DesktopServerWatcher.cpp" />
@@ -369,6 +370,7 @@
     <ClInclude Include="CopyRectDetector.h" />
     <ClInclude Include="Desktop.h" />
     <ClInclude Include="DesktopBaseImpl.h" />
+    <ClInclude Include="ClipboardStaging.h" />
     <ClInclude Include="DesktopClientImpl.h" />
     <ClInclude Include="DesktopConfigLocal.h" />
     <ClInclude Include="DesktopFactory.h" />

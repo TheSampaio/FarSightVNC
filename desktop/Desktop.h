@@ -62,6 +62,15 @@ public:
   virtual void setKeyboardEvent(UINT32 keySym, bool down) = 0;
   virtual void setMouseEvent(UINT16 x, UINT16 y, UINT8 buttonMask) = 0;
   virtual void setNewClipText(const StringStorage *newClipboard) = 0;
+  // Modified for FarSightVNC on 2026-11-16: clipboard file paste (local
+  // viewer machine -> remote server machine).
+  // Creates a staging folder for one paste in the temp area of the
+  // interactive user; 'root' is left empty on failure.
+  virtual void getClipboardStagingRoot(StringStorage *root) = 0;
+  // Puts a CF_HDROP holding the already validated 'files' on the clipboard of
+  // the interactive user.
+  virtual void setNewClipFiles(const StringStorage *root,
+                               const std::vector<StringStorage> *files) = 0;
 
   // Updates external frame buffer pixels only for the region from view port
   // located at the place in a central frame buffer.

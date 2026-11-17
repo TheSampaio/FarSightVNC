@@ -32,6 +32,8 @@
 #include "region/Point.h"
 #include "util/DateTime.h"
 
+#include <vector>
+
 #include "BlockingGate.h"
 
 class DesktopServerProto
@@ -67,6 +69,18 @@ protected:
                                 BlockingGate *gate);
   virtual void readNewClipboard(StringStorage *newClipboard,
                                 BlockingGate *gate);
+  // Modified for FarSightVNC on 2026-11-16: clipboard file paste. The text
+  // clipboard messages above carry a single string and cannot carry a path
+  // list, so the paste has messages of its own.
+  virtual void sendClipboardFiles(const StringStorage *root,
+                                  const std::vector<StringStorage> *paths,
+                                  BlockingGate *gate);
+  // Throws when the peer announces more paths than the protocol accepts.
+  virtual void readClipboardFiles(StringStorage *root,
+                                  std::vector<StringStorage> *paths,
+                                  BlockingGate *gate);
+  virtual void sendStagingRoot(const StringStorage *root, BlockingGate *gate);
+  virtual void readStagingRoot(StringStorage *root, BlockingGate *gate);
   virtual void sendNewPointerPos(const Point newPos, UINT8 keyFlag,
                                  BlockingGate *gate);
   virtual void readNewPointerPos(Point *newPos, UINT8 *keyFlag,
@@ -108,6 +122,9 @@ protected:
   static const UINT8 NORMALIZE_RECT_REQ = 40;
   static const UINT8 APPLICATION_CHECK_FOCUS = 41;
   static const UINT8 DISPLAYS_COORDS_REQ = 42;
+  // Modified for FarSightVNC on 2026-11-16: clipboard file paste.
+  static const UINT8 CLIPBOARD_FILES_CHANGED = 43;
+  static const UINT8 CLIPBOARD_STAGING_ROOT_REQ = 44;
 
   static const UINT8 CONFIG_RELOAD_REQ = 50;
   static const UINT8 SOFT_INPUT_ENABLING_REQ = 51;

@@ -22,6 +22,8 @@
 //-------------------------------------------------------------------------
 //
 
+// Modified for FarSightVNC on 2026-11-16: clipboard file paste.
+
 #include "UserInputClient.h"
 #include "thread/AutoLock.h"
 #include "ReconnectException.h"
@@ -86,6 +88,31 @@ void UserInputClient::setNewClipboard(const StringStorage *newClipboard)
     // Send clipboard data
     m_forwGate->writeUInt8(CLIPBOARD_CHANGED);
     sendNewClipboard(newClipboard, m_forwGate);
+  } catch (ReconnectException &) {
+  }
+}
+
+void UserInputClient::getClipboardStagingRoot(StringStorage *root)
+{
+  AutoLock al(m_forwGate);
+  root->setString(_T(""));
+  try {
+    // The helper process runs in the session of the interactive user, so it
+    // is the side that knows %TEMP% and can create the folder as that user.
+    m_forwGate->writeUInt8(CLIPBOARD_STAGING_ROOT_REQ);
+    readStagingRoot(root, m_forwGate);
+  } catch (ReconnectException &) {
+    root->setString(_T(""));
+  }
+}
+
+void UserInputClient::setNewClipboardFiles(const StringStorage *root,
+                                           const std::vector<StringStorage> *paths)
+{
+  AutoLock al(m_forwGate);
+  try {
+    m_forwGate->writeUInt8(CLIPBOARD_FILES_CHANGED);
+    sendClipboardFiles(root, paths, m_forwGate);
   } catch (ReconnectException &) {
   }
 }

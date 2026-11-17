@@ -51,6 +51,9 @@ public:
 protected:
   virtual void applyNewPointerPos(BlockingGate *backGate);
   virtual void applyNewClipboard(BlockingGate *backGate);
+  // Modified for FarSightVNC on 2026-11-16: clipboard file paste.
+  virtual void applyNewClipboardFiles(BlockingGate *backGate);
+  virtual void ansClipboardStagingRoot(BlockingGate *backGate);
   virtual void applyKeyEvent(BlockingGate *backGate);
   virtual void ansDesktopCoords(BlockingGate *backGate);
   virtual void ansWindowCoords(BlockingGate *backGate);

@@ -98,6 +98,9 @@
     <ClCompile Include="DesktopBaseImpl.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="ClipboardStaging.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="DesktopClientImpl.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -293,6 +296,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="DesktopBaseImpl.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ClipboardStaging.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="DesktopClientImpl.h">

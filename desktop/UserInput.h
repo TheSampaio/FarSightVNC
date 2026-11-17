@@ -31,6 +31,8 @@
 #include "region/Rect.h"
 #include "region/Region.h"
 
+#include <vector>
+
 // This class will be an abstract interface for user input such as keyboard,
 // mouse pointer, e.t.c., on the server side.
 class UserInput
@@ -45,6 +47,15 @@ public:
 
   // Client to server user inputs
   virtual void setNewClipboard(const StringStorage *newClipboard) = 0;
+  // Modified for FarSightVNC on 2026-11-16: clipboard file paste.
+  // Creates a staging folder for one clipboard file paste in the temp area of
+  // the interactive user and puts its absolute path in 'root'; 'root' is left
+  // empty when no folder could be created.
+  virtual void getClipboardStagingRoot(StringStorage *root) = 0;
+  // Puts a CF_HDROP holding 'paths' on the clipboard of the interactive user.
+  // The paths were already checked against 'root' by the caller.
+  virtual void setNewClipboardFiles(const StringStorage *root,
+                                    const std::vector<StringStorage> *paths) = 0;
   // By the keyFlag argument will be set the mouse button state as described in
   // the rfb protocol.
   virtual void setMouseEvent(const Point newPos, UINT8 keyFlag) = 0;

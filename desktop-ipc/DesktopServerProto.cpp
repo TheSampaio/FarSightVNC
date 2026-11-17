@@ -23,6 +23,7 @@
 //
 
 #include "DesktopServerProto.h"
+#include "rfb/ClipboardFilesMessage.h"
 #include "server-config-lib/Configurator.h"
 #include "util/Exception.h"
 
@@ -223,6 +224,50 @@ void DesktopServerProto::readNewClipboard(StringStorage *newClipboard,
                                           BlockingGate *gate)
 {
   gate->readUTF8(newClipboard);
+}
+
+// Modified for FarSightVNC on 2026-11-16: clipboard file paste.
+void DesktopServerProto::sendClipboardFiles(const StringStorage *root,
+                                            const std::vector<StringStorage> *paths,
+                                            BlockingGate *gate)
+{
+  gate->writeUTF8(root->getString());
+  gate->writeUInt32((UINT32)paths->size());
+  for (size_t i = 0; i < paths->size(); i++) {
+    gate->writeUTF8((*paths)[i].getString());
+  }
+}
+
+void DesktopServerProto::readClipboardFiles(StringStorage *root,
+                                            std::vector<StringStorage> *paths,
+                                            BlockingGate *gate)
+{
+  gate->readUTF8(root);
+  UINT32 count = gate->readUInt32();
+  if (count > ClipboardFilesMessage::MAX_PATH_COUNT) {
+    StringStorage errMess;
+    errMess.format(_T("Clipboard file list of %u paths received from a pipe,")
+                   _T(" at most %u are accepted"),
+                   (unsigned)count,
+                   (unsigned)ClipboardFilesMessage::MAX_PATH_COUNT);
+    throw Exception(errMess.getString());
+  }
+  paths->resize(count);
+  for (UINT32 i = 0; i < count; i++) {
+    gate->readUTF8(&(*paths)[i]);
+  }
+}
+
+void DesktopServerProto::sendStagingRoot(const StringStorage *root,
+                                         BlockingGate *gate)
+{
+  gate->writeUTF8(root->getString());
+}
+
+void DesktopServerProto::readStagingRoot(StringStorage *root,
+                                         BlockingGate *gate)
+{
+  gate->readUTF8(root);
 }
 
 void DesktopServerProto::sendNewPointerPos(const Point newPos, UINT8 keyFlag,

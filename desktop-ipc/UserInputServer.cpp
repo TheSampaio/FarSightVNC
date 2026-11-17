@@ -22,6 +22,8 @@
 //-------------------------------------------------------------------------
 //
 
+// Modified for FarSightVNC on 2026-11-16: clipboard file paste.
+
 #include "UserInputServer.h"
 #include "thread/AutoLock.h"
 #include "util/BrokenHandleException.h"
@@ -39,6 +41,8 @@ UserInputServer::UserInputServer(BlockingGate *forwGate,
 
   dispatcher->registerNewHandle(POINTER_POS_CHANGED, this);
   dispatcher->registerNewHandle(CLIPBOARD_CHANGED, this);
+  dispatcher->registerNewHandle(CLIPBOARD_FILES_CHANGED, this);
+  dispatcher->registerNewHandle(CLIPBOARD_STAGING_ROOT_REQ, this);
   dispatcher->registerNewHandle(KEYBOARD_EVENT, this);
   dispatcher->registerNewHandle(USER_INFO_REQ, this);
   dispatcher->registerNewHandle(DESKTOP_COORDS_REQ, this);
@@ -83,6 +87,12 @@ void UserInputServer::onRequest(UINT8 reqCode, BlockingGate *backGate)
     break;
   case CLIPBOARD_CHANGED:
     applyNewClipboard(backGate);
+    break;
+  case CLIPBOARD_FILES_CHANGED:
+    applyNewClipboardFiles(backGate);
+    break;
+  case CLIPBOARD_STAGING_ROOT_REQ:
+    ansClipboardStagingRoot(backGate);
     break;
   case KEYBOARD_EVENT:
     applyKeyEvent(backGate);
@@ -145,6 +155,21 @@ void UserInputServer::applyNewClipboard(BlockingGate *backGate)
   StringStorage newClipboard;
   readNewClipboard(&newClipboard, backGate);
   m_userInput->setNewClipboard(&newClipboard);
+}
+
+void UserInputServer::applyNewClipboardFiles(BlockingGate *backGate)
+{
+  StringStorage root;
+  std::vector<StringStorage> paths;
+  readClipboardFiles(&root, &paths, backGate);
+  m_userInput->setNewClipboardFiles(&root, &paths);
+}
+
+void UserInputServer::ansClipboardStagingRoot(BlockingGate *backGate)
+{
+  StringStorage root;
+  m_userInput->getClipboardStagingRoot(&root);
+  sendStagingRoot(&root, backGate);
 }
 
 void UserInputServer::applyKeyEvent(BlockingGate *backGate)

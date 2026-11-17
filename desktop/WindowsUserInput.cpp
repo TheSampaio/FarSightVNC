@@ -22,7 +22,10 @@
 //-------------------------------------------------------------------------
 //
 
+// Modified for FarSightVNC on 2026-11-16: clipboard file paste.
+
 #include "WindowsUserInput.h"
+#include "ClipboardStaging.h"
 #include "thread/DesktopSelector.h"
 #include "win-system/Environment.h"
 #include "win-system/Keyboard.h"
@@ -136,6 +139,19 @@ void WindowsUserInput::setNewClipboard(const StringStorage *newClipboard)
 {
   // FIXME: use StringStorage instead TCHAR * in writeToClipBoard arg
   m_clipboard->writeToClipBoard(newClipboard->getString());
+}
+
+void WindowsUserInput::getClipboardStagingRoot(StringStorage *root)
+{
+  if (!ClipboardStaging::createRoot(root, m_log)) {
+    root->setString(_T(""));
+  }
+}
+
+void WindowsUserInput::setNewClipboardFiles(const StringStorage *root,
+                                            const std::vector<StringStorage> *paths)
+{
+  m_clipboard->writeFileListToClipBoard(paths);
 }
 
 void WindowsUserInput::setKeyboardEvent(UINT32 keySym, bool down)
