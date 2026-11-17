@@ -994,6 +994,19 @@ void RemoteViewerCore::execute()
           m_logWriter.detail(_T("Received message (%d) transmit to capability handler"), msgType);
           try {
             m_serverMsgHandlers[msgType]->onServerMessage(msgType, m_input);
+          } catch (const IOException &) {
+            //
+            // A capability handler reports a malformed length or count as an
+            // IOException, and it throws before the rest of that message has
+            // been read. Logging and carrying on would make the next
+            // receiveServerMessageType() read a message type out of the middle
+            // of the message just refused, which hands the framing of the
+            // stream to the peer that sent the bad value. The session has to
+            // end instead; the outer handler reports the disconnect. A real
+            // socket error arrives the same way and also ends the session,
+            // which is what it already did everywhere else.
+            //
+            throw;
           } catch (const Exception &ex) {
             m_logWriter.error(_T("Error in onServerMessage(): %s"), ex.getMessage());
           } catch (...) {
