@@ -78,6 +78,7 @@ add_subdirectory(viewer-keyboard-test)
 add_subdirectory(viewer-input-queue-test)
 add_subdirectory(viewer-favorites-test)
 add_subdirectory(viewer-clipboard-files-test)
+add_subdirectory(viewer-security-test)
 # Tests only: this does not port the server to CMake. server-identity-test
 # compiles the handful of server translation units that hold the identity
 # constants and the default ports straight into the test executable; the server

@@ -27,6 +27,7 @@ add_library(util STATIC
   UnicodeStringStorage.cpp
   Utf8StringStorage.cpp
   VncPassCrypt.cpp
+  WindowsFileName.cpp
   ZLibBase.cpp
   ZlibException.cpp)
 

@@ -1,4 +1,4 @@
-Microsoft Visual Studio Solution File, Format Version 12.00
+﻿Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
 VisualStudioVersion = 15.0.28307.1758
 MinimumVisualStudioVersion = 10.0.40219.1
@@ -129,6 +129,11 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "viewer-clipboard-files-test
 		{5F629934-ED68-4D38-9BA5-CF3A139A44A1} = {5F629934-ED68-4D38-9BA5-CF3A139A44A1}
 		{E45BF60D-C8FD-4F07-A307-25596BE1D256} = {E45BF60D-C8FD-4F07-A307-25596BE1D256}
 		{56EADC5B-9C2C-431C-9275-98FE9088518B} = {56EADC5B-9C2C-431C-9275-98FE9088518B}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "viewer-security-test", "viewer-security-test\viewer-security-test.vcxproj", "{3F6A8C21-94B7-4D0E-8E5A-7C1B2D4F60A9}"
+	ProjectSection(ProjectDependencies) = postProject
+		{E45BF60D-C8FD-4F07-A307-25596BE1D256} = {E45BF60D-C8FD-4F07-A307-25596BE1D256}
 	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "updater-lib", "updater-lib\updater-lib.vcxproj", "{D1219C39-CD06-47B4-AC2D-2BE4DA68FD4D}"
@@ -703,6 +708,22 @@ Global
 		{7C41F2A6-5D3B-48E9-9A14-4F8B2E6D71C3}.ReleaseNoUnicode|Win32.Build.0 = ReleaseNoUnicode|Win32
 		{7C41F2A6-5D3B-48E9-9A14-4F8B2E6D71C3}.ReleaseNoUnicode|x64.ActiveCfg = ReleaseNoUnicode|x64
 		{7C41F2A6-5D3B-48E9-9A14-4F8B2E6D71C3}.ReleaseNoUnicode|x64.Build.0 = ReleaseNoUnicode|x64
+		{3F6A8C21-94B7-4D0E-8E5A-7C1B2D4F60A9}.Debug|Win32.ActiveCfg = Debug|Win32
+		{3F6A8C21-94B7-4D0E-8E5A-7C1B2D4F60A9}.Debug|Win32.Build.0 = Debug|Win32
+		{3F6A8C21-94B7-4D0E-8E5A-7C1B2D4F60A9}.Debug|x64.ActiveCfg = Debug|x64
+		{3F6A8C21-94B7-4D0E-8E5A-7C1B2D4F60A9}.Debug|x64.Build.0 = Debug|x64
+		{3F6A8C21-94B7-4D0E-8E5A-7C1B2D4F60A9}.DebugNoUnicode|Win32.ActiveCfg = DebugNoUnicode|Win32
+		{3F6A8C21-94B7-4D0E-8E5A-7C1B2D4F60A9}.DebugNoUnicode|Win32.Build.0 = DebugNoUnicode|Win32
+		{3F6A8C21-94B7-4D0E-8E5A-7C1B2D4F60A9}.DebugNoUnicode|x64.ActiveCfg = DebugNoUnicode|x64
+		{3F6A8C21-94B7-4D0E-8E5A-7C1B2D4F60A9}.DebugNoUnicode|x64.Build.0 = DebugNoUnicode|x64
+		{3F6A8C21-94B7-4D0E-8E5A-7C1B2D4F60A9}.Release|Win32.ActiveCfg = Release|Win32
+		{3F6A8C21-94B7-4D0E-8E5A-7C1B2D4F60A9}.Release|Win32.Build.0 = Release|Win32
+		{3F6A8C21-94B7-4D0E-8E5A-7C1B2D4F60A9}.Release|x64.ActiveCfg = Release|x64
+		{3F6A8C21-94B7-4D0E-8E5A-7C1B2D4F60A9}.Release|x64.Build.0 = Release|x64
+		{3F6A8C21-94B7-4D0E-8E5A-7C1B2D4F60A9}.ReleaseNoUnicode|Win32.ActiveCfg = ReleaseNoUnicode|Win32
+		{3F6A8C21-94B7-4D0E-8E5A-7C1B2D4F60A9}.ReleaseNoUnicode|Win32.Build.0 = ReleaseNoUnicode|Win32
+		{3F6A8C21-94B7-4D0E-8E5A-7C1B2D4F60A9}.ReleaseNoUnicode|x64.ActiveCfg = ReleaseNoUnicode|x64
+		{3F6A8C21-94B7-4D0E-8E5A-7C1B2D4F60A9}.ReleaseNoUnicode|x64.Build.0 = ReleaseNoUnicode|x64
 		{56582A52-348B-401B-A0FE-EC799AE6D0AC}.Debug|Win32.ActiveCfg = Debug|Win32
 		{56582A52-348B-401B-A0FE-EC799AE6D0AC}.Debug|Win32.Build.0 = Debug|Win32
 		{56582A52-348B-401B-A0FE-EC799AE6D0AC}.Debug|x64.ActiveCfg = Debug|x64
