@@ -30,6 +30,7 @@
 #include "thread/LocalMutex.h"
 #include "thread/Thread.h"
 #include "viewer-core/ClipboardFilesCapability.h"
+#include "viewer-core/ClipboardFilesHandshake.h"
 #include "viewer-core/FileTransferCapability.h"
 #include "win-system/WindowsEvent.h"
 
@@ -55,7 +56,6 @@
 // ClipboardExchange does on the server side.
 class ClipboardFilePaste : public Thread,
                            public FileTransferInterface,
-                           public ClipboardFilesListener,
                            public ClipboardPasteDialogListener
 {
 public:
@@ -94,12 +94,6 @@ public:
   virtual void onPasteFinished(bool ok);
 
   //
-  // Inherited from ClipboardFilesListener (remote viewer core thread).
-  //
-  virtual void onClipboardFilesRoot(bool ok, const StringStorage *text);
-  virtual void onClipboardFilesSet(bool ok, const StringStorage *text);
-
-  //
   // Inherited from FileTransferInterface. The file transfer calls these from
   // the remote viewer core thread while an upload runs.
   //
@@ -136,8 +130,8 @@ private:
   bool uploadSelection();
   bool announceStagedFiles();
 
-  // Waits for a reply of the server, for the end of an upload or for a
-  // cancel. Returns false when it was cancelled or the wait timed out.
+  // Waits for the end of an upload or for a cancel. Returns false when it
+  // was cancelled or the wait timed out.
   bool waitForStep(WindowsEvent *event, DWORD timeoutMs);
 
   void setError(const TCHAR *message);
@@ -150,6 +144,8 @@ private:
   LogWriter *m_logWriter;
   FileTransferCapability *m_fileTransfer;
   ClipboardFilesCapability *m_clipboardFiles;
+  // The staging folder and file list exchanges with the server.
+  ClipboardFilesHandshake m_handshake;
   Control *m_parent;
   HWND m_desktopWnd;
 
@@ -160,15 +156,11 @@ private:
   WindowsEvent m_workWaiter;
   bool m_hasWork;
 
-  // Answers of the server and end of an upload.
-  WindowsEvent m_rootWaiter;
-  WindowsEvent m_setWaiter;
+  // End of an upload and cancel of the paste.
   WindowsEvent m_uploadWaiter;
   WindowsEvent m_cancelWaiter;
 
   StringStorage m_stagingRoot;
-  bool m_rootOk;
-  bool m_setOk;
 
   mutable LocalMutex m_stateMutex;
   bool m_inProgress;

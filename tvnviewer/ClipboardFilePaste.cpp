@@ -74,24 +74,21 @@ ClipboardFilePaste::ClipboardFilePaste(LogWriter *logWriter,
   m_logWriter(logWriter),
   m_fileTransfer(fileTransfer),
   m_clipboardFiles(clipboardFiles),
+  m_handshake(clipboardFiles, logWriter),
   m_parent(parent),
   m_desktopWnd(desktopWnd),
   m_hasWork(false),
-  m_rootOk(false),
-  m_setOk(false),
   m_inProgress(false),
   m_cancelled(false),
   m_bytesDone(0),
   m_bytesTotal(0),
   m_bytesOfGroup(0)
 {
-  m_clipboardFiles->setListener(this);
   resume();
 }
 
 ClipboardFilePaste::~ClipboardFilePaste()
 {
-  m_clipboardFiles->setListener(0);
   terminate();
   wait();
   // The file transfer core must not keep a pointer to this object. Nothing
@@ -168,8 +165,6 @@ bool ClipboardFilePaste::begin(const std::vector<StringStorage> *localPaths)
     m_error.setString(_T(""));
     m_inProgress = true;
   }
-  m_rootOk = false;
-  m_setOk = false;
   m_stagingRoot.setString(_T(""));
   m_bytesDone = 0;
   m_bytesTotal = 0;
@@ -352,15 +347,20 @@ bool ClipboardFilePaste::confirmLargePaste(UINT64 totalBytes, size_t fileCount)
 
 bool ClipboardFilePaste::requestStagingRoot()
 {
-  m_clipboardFiles->sendBegin();
-  if (!waitForStep(&m_rootWaiter, REPLY_TIMEOUT_MS)) {
-    setError(_T("The remote computer did not answer the paste request."));
+  if (isCancelled()) {
     return false;
   }
-  if (!m_rootOk || m_stagingRoot.isEmpty()) {
-    return false; // onClipboardFilesRoot already stored the reason
+  StringStorage error;
+  bool ok = m_handshake.requestStagingRoot(m_cancelWaiter.getHandle(),
+                                           REPLY_TIMEOUT_MS,
+                                           &m_stagingRoot, &error);
+  if (isCancelled()) {
+    return false;
   }
-  return true;
+  if (!ok) {
+    setError(error.getString());
+  }
+  return ok;
 }
 
 bool ClipboardFilePaste::uploadSelection()
@@ -414,23 +414,27 @@ bool ClipboardFilePaste::uploadSelection()
 
 bool ClipboardFilePaste::announceStagedFiles()
 {
-  ClipboardFilesMessage message;
-  message.setRoot(m_stagingRoot.getString());
+  if (isCancelled()) {
+    return false;
+  }
+  std::vector<StringStorage> names;
   for (size_t i = 0; i < m_localPaths.size(); i++) {
     StringStorage parent, name;
     splitPath(&m_localPaths[i], &parent, &name);
-    StringStorage staged(m_stagingRoot.getString());
-    staged.appendChar(_T('\\'));
-    staged.appendString(name.getString());
-    message.addPath(staged.getString());
+    names.push_back(name);
   }
 
-  m_clipboardFiles->sendSet(&message);
-  if (!waitForStep(&m_setWaiter, REPLY_TIMEOUT_MS)) {
-    setError(_T("The remote computer did not confirm the paste."));
+  StringStorage error;
+  bool ok = m_handshake.announceStagedFiles(&m_stagingRoot, &names,
+                                            m_cancelWaiter.getHandle(),
+                                            REPLY_TIMEOUT_MS, &error);
+  if (isCancelled()) {
     return false;
   }
-  return m_setOk;
+  if (!ok) {
+    setError(error.getString());
+  }
+  return ok;
 }
 
 bool ClipboardFilePaste::waitForStep(WindowsEvent *event, DWORD timeoutMs)
@@ -469,36 +473,6 @@ void ClipboardFilePaste::setStatus(WPARAM status)
   if (dialogWnd != 0) {
     PostMessage(dialogWnd, ClipboardPasteDialog::WM_PASTE_STATUS, status, 0);
   }
-}
-
-//
-// Answers of the server.
-//
-
-void ClipboardFilePaste::onClipboardFilesRoot(bool ok, const StringStorage *text)
-{
-  m_rootOk = ok;
-  if (ok) {
-    m_stagingRoot = *text;
-  } else {
-    StringStorage message;
-    message.format(_T("The remote computer refused the paste: %s"),
-                   text->getString());
-    setError(message.getString());
-  }
-  m_rootWaiter.notify();
-}
-
-void ClipboardFilePaste::onClipboardFilesSet(bool ok, const StringStorage *text)
-{
-  m_setOk = ok;
-  if (!ok) {
-    StringStorage message;
-    message.format(_T("The remote computer could not set its clipboard: %s"),
-                   text->getString());
-    setError(message.getString());
-  }
-  m_setWaiter.notify();
 }
 
 //

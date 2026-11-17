@@ -27,6 +27,12 @@
     <ClCompile Include="ClipboardFilesCapability.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="ClipboardFilesHandshake.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="PasteKeystroke.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="CoreEventsAdapter.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -144,6 +150,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="ClipboardFilesCapability.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ClipboardFilesHandshake.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="PasteKeystroke.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="CoreEventsAdapter.h">

@@ -541,6 +541,9 @@ void testPasteDecision()
 
 } // namespace
 
+// ClipboardFilesSessionTest.cpp
+void runClipboardFilesSessionTests(int *passed, int *failed);
+
 int main()
 {
   setvbuf(stdout, NULL, _IONBF, 0);
@@ -556,6 +559,7 @@ int main()
   RUN_TEST(testDropFilesEmptyAndBroken);
   RUN_TEST(testPasteDecision);
 #undef RUN_TEST
+  runClipboardFilesSessionTests(&g_passed, &g_failed);
   printf("viewer-clipboard-files-test: %d passed, %d failed\n",
          g_passed, g_failed);
   return g_failed == 0 ? 0 : 1;

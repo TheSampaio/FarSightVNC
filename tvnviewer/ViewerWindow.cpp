@@ -1220,7 +1220,7 @@ void ViewerWindow::onConnected(RfbOutputGate *output)
 
   // The clipboard file paste is only offered when the server advertised it.
   if (m_clipboardFiles != 0) {
-    m_clipboardFiles->updateSupport(&clientMsgCodes);
+    m_clipboardFiles->updateSupport(&clientMsgCodes, &serverMsgCodes);
   }
 
   // This runs in the thread of the viewer core, which pumps no messages.

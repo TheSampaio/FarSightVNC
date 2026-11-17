@@ -94,7 +94,8 @@ void ClipboardFilesCapability::setOutput(RfbOutputGate *output)
   m_output = output;
 }
 
-void ClipboardFilesCapability::updateSupport(const std::vector<UINT32> *enabledClientMsgCodes)
+void ClipboardFilesCapability::updateSupport(const std::vector<UINT32> *enabledClientMsgCodes,
+                                             const std::vector<UINT32> *enabledServerMsgCodes)
 {
   bool hasBegin = false;
   bool hasSet = false;
@@ -106,7 +107,14 @@ void ClipboardFilesCapability::updateSupport(const std::vector<UINT32> *enabledC
       hasSet = true;
     }
   }
-  m_isSupported = hasBegin && hasSet;
+  bool hasReply = false;
+  for (size_t i = 0; i < enabledServerMsgCodes->size(); i++) {
+    if ((*enabledServerMsgCodes)[i] == ServerMsgDefs::CLIPBOARD_FILES_REPLY) {
+      hasReply = true;
+      break;
+    }
+  }
+  m_isSupported = hasBegin && hasSet && hasReply;
   m_logWriter.info(_T("Clipboard file paste is %s by the server"),
                    m_isSupported ? _T("supported") : _T("not supported"));
 }
@@ -132,6 +140,12 @@ void ClipboardFilesCapability::sendSet(const ClipboardFilesMessage *message)
   m_output->flush();
 }
 
+void ClipboardFilesCapability::setListener(ClipboardFilesListener *listener)
+{
+  AutoLock al(&m_listenerMutex);
+  m_listener = listener;
+}
+
 void ClipboardFilesCapability::onServerMessage(UINT32 code,
                                                DataInputStream *input)
 {
@@ -144,6 +158,8 @@ void ClipboardFilesCapability::onServerMessage(UINT32 code,
   StringStorage text;
   ClipboardFilesMessage::readReplyBody(input, &kind, &status, &text);
 
+  // Unregistering waits until a callback has returned before destroying it.
+  AutoLock al(&m_listenerMutex);
   bool ok = status == ClipboardFilesMessage::STATUS_OK;
   if (m_listener == 0) {
     m_logWriter.detail(_T("Clipboard file paste reply %d dropped: no listener"),

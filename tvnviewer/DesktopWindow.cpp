@@ -33,6 +33,7 @@
 
 #include "DesktopWindow.h"
 #include "win-system/WinHooks.h"
+#include "viewer-core/PasteKeystroke.h"
 #include "RenderSettings.h"
 
 DesktopWindow::DesktopWindow(LogWriter *logWriter, ConnectionConfig *conConf)
@@ -384,14 +385,7 @@ void DesktopWindow::sendCtrlV()
   if (m_conConf->isViewOnly() || m_viewerCore == 0) {
     return;
   }
-  // The pair is sent complete, whether or not the user still holds the real
-  // Ctrl: its key-up is ignored by RfbKeySym when it did not press the key,
-  // so nothing stays pressed on the remote machine.
-  unsigned int scan = MapVirtualKey('V', MAPVK_VK_TO_VSC) & 0xff;
-  m_rfbKeySym->sendModifier(VK_CONTROL, true);
-  m_rfbKeySym->processKeyEvent('V', scan << 16);
-  m_rfbKeySym->processKeyEvent('V', (scan << 16) | 0x80000000);
-  m_rfbKeySym->sendModifier(VK_CONTROL, false);
+  PasteKeystroke::send(m_rfbKeySym.get());
 }
 
 bool DesktopWindow::onChar(WPARAM wParam, LPARAM lParam)

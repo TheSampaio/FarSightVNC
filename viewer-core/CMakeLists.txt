@@ -4,12 +4,14 @@ add_library(viewer-core STATIC
   CapabilitiesManager.cpp
   CapsContainer.cpp
   ClipboardFilesCapability.cpp
+  ClipboardFilesHandshake.cpp
   CoreEventsAdapter.cpp
   CursorPainter.cpp
   DecoderOfRectangle.cpp
   FbUpdateNotifier.cpp
   FileTransferCapability.cpp
   LastRectDecoder.cpp
+  PasteKeystroke.cpp
   PseudoDecoder.cpp
   RawDecoder.cpp
   RemoteViewerCore.cpp

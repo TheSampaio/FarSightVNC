@@ -26,6 +26,7 @@
 #include "log-writer/LogWriter.h"
 #include "network/RfbOutputGate.h"
 #include "rfb/ClipboardFilesMessage.h"
+#include "thread/LocalMutex.h"
 
 #include "CapabilitiesManager.h"
 #include "ServerMessageListener.h"
@@ -95,13 +96,13 @@ public:
   // Must be called from CoreEventsAdapter::onConnected().
   void setOutput(RfbOutputGate *output);
 
-  // Takes the client-to-server capabilities the server enabled (the same
-  // list the file transfer is updated with). The paste needs both of its
-  // messages.
-  void updateSupport(const std::vector<UINT32> *enabledClientMsgCodes);
+  // Takes the negotiated capabilities in both directions. A paste needs
+  // BEGIN, SET and REPLY, all matched with the FarSight vendor signature.
+  void updateSupport(const std::vector<UINT32> *enabledClientMsgCodes,
+                     const std::vector<UINT32> *enabledServerMsgCodes);
   bool isSupported() const { return m_isSupported; }
 
-  void setListener(ClipboardFilesListener *listener) { m_listener = listener; }
+  void setListener(ClipboardFilesListener *listener);
 
   // Asks the server for a staging folder. The answer arrives through
   // ClipboardFilesListener::onClipboardFilesRoot.
@@ -118,6 +119,7 @@ private:
 
   RfbOutputGate *m_output;
   bool m_isSupported;
+  LocalMutex m_listenerMutex;
   ClipboardFilesListener *m_listener;
 };
 
