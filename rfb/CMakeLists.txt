@@ -18,4 +18,7 @@ fsv_configure_target(rfb)
 target_compile_definitions(rfb PRIVATE _LIB)
 target_include_directories(rfb PRIVATE ${FSV_ROOT})
 
+# ClipboardFilesMessage.cpp uses util/WindowsFileName.h.
+target_link_libraries(rfb PUBLIC util)
+
 # No PCH: 8 of 12 sources include no SDK header (a PCH would add windows.h to them).

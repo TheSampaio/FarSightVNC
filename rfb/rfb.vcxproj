@@ -276,6 +276,11 @@
     <ClInclude Include="EncodingDefs.h" />
     <ClInclude Include="PixelConverter.h" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\util\util.vcxproj">
+      <Project>{e45bf60d-c8fd-4f07-a307-25596be1d256}</Project>
+    </ProjectReference>
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

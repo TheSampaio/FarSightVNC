@@ -22,6 +22,7 @@
 
 #include "rfb/ClipboardFilesMessage.h"
 #include "util/Exception.h"
+#include "util/WindowsFileName.h"
 
 namespace {
 
@@ -57,30 +58,6 @@ bool isTokenChar(TCHAR c)
 {
   return isAsciiLetter(c) || (c >= _T('0') && c <= _T('9')) ||
          c == _T('-') || c == _T('_');
-}
-
-// A single name component that may be handed to the shell: not empty, not
-// "." or "..", and free of the characters Windows forbids in a name (the
-// path separators and ':' among them) and of control characters.
-bool isSafeNameComponent(const TCHAR *name, size_t length)
-{
-  if (length == 0) {
-    return false;
-  }
-  if (equalsNoCase(name, _T(".")) || equalsNoCase(name, _T(".."))) {
-    return false;
-  }
-  for (size_t i = 0; i < length; i++) {
-    TCHAR c = name[i];
-    if (c < 0x20 || c == _T('\\') || c == _T('/') || c == _T(':') ||
-        c == _T('<') || c == _T('>') || c == _T('"') || c == _T('|') ||
-        c == _T('?') || c == _T('*')) {
-      return false;
-    }
-  }
-  // A trailing space or dot makes Windows resolve the name to another file.
-  TCHAR last = name[length - 1];
-  return last != _T(' ') && last != _T('.');
 }
 
 } // namespace
@@ -275,7 +252,11 @@ ClipboardFilesMessage::checkPaths(const StringStorage *root,
         return CHECK_TRAVERSAL;
       }
     }
-    if (!isSafeNameComponent(name, nameLength)) {
+    // The shared Windows rule: not empty, not "." or "..", free of the
+    // characters Windows forbids in a name (the path separators and ':' among
+    // them) and of control characters, no trailing space or dot, and not one of
+    // the reserved DOS device names.
+    if (!WindowsFileName::isSafeNameComponent(name, nameLength)) {
       return CHECK_BAD_NAME;
     }
   }
