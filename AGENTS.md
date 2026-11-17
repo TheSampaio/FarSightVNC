@@ -1,5 +1,13 @@
 # FarSightVNC — instruções para agentes
 
+## Compatibilidade com a infraestrutura TightVNC (obrigatório)
+
+- **O FarSightVNC substitui o TightVNC na infraestrutura existente do dono, sem mudança nenhuma do outro lado.** O viewer tem de conectar e funcionar contra os servidores TightVNC já instalados: protocolo RFB, tipos de segurança, autenticação, codificações, arquivos `.vnc`, chaves de registro `HKCU\Software\TightVNC\Viewer` e opções de linha de comando continuam compatíveis. Essa regra vence conveniência, desempenho e funcionalidade nova.
+- Extensão de protocolo é permitida, mas **só como capacidade negociada e opcional**, nunca como requisito. O servidor anuncia, o viewer habilita apenas o que foi anunciado (`RemoteViewerCore::readCapabilities`), e quando a capacidade está ausente o comportamento tem de ser **idêntico ao anterior**, sem erro, sem aviso e sem caminho degradado visível.
+- Toda extensão nova usa a assinatura de fornecedor própria `VendorDefs::FARSIGHT` (`"FSVC"`), nunca `"TGHT"` nem `"STDV"`: `CapsContainer::enable` casa código, fornecedor e nome juntos, e um fornecedor privado impede que um par TightVNC case os mesmos códigos por acidente, hoje ou se o TightVNC passar a usá-los. Códigos novos ficam na faixa `0xFC0004xx` em diante.
+- Funcionalidade que exige as duas pontas FarSightVNC (ex.: colagem de arquivos pelo clipboard) é **dormente** enquanto o remoto for TightVNC. Isso é aceitável; quebrar a conexão com TightVNC não é.
+- **O shipping contém somente o viewer.** Não empacote servidor: ele disputaria o nome de serviço, a porta 5900 e a chave `HKLM\SOFTWARE\TightVNC\Server` com o TightVNC instalado. Mudar isso exige decisão explícita do dono.
+
 ## Versionamento (obrigatório)
 
 - Formato: `vMAJOR.MINOR.FIXs`, onde o sufixo `s` é `a` (alpha), `b` (beta) ou nenhum (estável). Ex.: `v1.2.5a`.
