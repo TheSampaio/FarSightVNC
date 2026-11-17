@@ -25,6 +25,7 @@
 #ifndef _TIGHT_DECODER_H_
 #define _TIGHT_DECODER_H_
 
+#include <memory>
 #include <vector>
 
 #include "util/Inflater.h"
@@ -91,7 +92,7 @@ private:
   UINT32 transformPixelToTight(UINT32 color);
   vector<UINT8> transformArray(const vector<UINT8> &buffer);
 
-  vector<Inflater *> m_inflater;
+  vector<unique_ptr<Inflater> > m_inflater;
   JpegDecompressor m_jpeg;
 
   bool m_isCPixel;

@@ -26,6 +26,10 @@
 //
 // Modified for FarSightVNC on 2026-11-08: setColor() returns early for a frame
 // buffer without storage or pixel format (infinite loop inherited from TightVNC).
+//
+// Modified for FarSightVNC: resizeBuffer() no longer leaves m_buffer on a freed
+// block when the allocation fails (double free in the destructor), and the
+// buffer is freed through its real type, UINT8[].
 
 #include "FrameBuffer.h"
 #include <string.h>
@@ -39,7 +43,7 @@ FrameBuffer::FrameBuffer(void)
 FrameBuffer::~FrameBuffer(void)
 {
   if (m_buffer != 0) {
-    delete []m_buffer;
+    delete []static_cast<UINT8 *>(m_buffer);
   }
 }
 
@@ -565,10 +569,18 @@ int FrameBuffer::getBufferSize() const
 bool FrameBuffer::resizeBuffer()
 {
   if (m_buffer != 0) {
-    delete []m_buffer;
+    delete []static_cast<UINT8 *>(m_buffer);
+    // Modified for FarSightVNC: the pointer must not stay on the freed block
+    // while new[] below runs. If it throws, the destructor would free it again.
+    m_buffer = 0;
   }
-  if ((m_buffer = new UINT8[getBufferSize()]) == 0) {
-    return false;
+  try {
+    m_buffer = new UINT8[getBufferSize()];
+  } catch (...) {
+    // No storage: describe an empty frame buffer, so that nothing that still
+    // holds this object can read or write through the null pointer.
+    m_dimension.clear();
+    throw;
   }
   return true;
 }

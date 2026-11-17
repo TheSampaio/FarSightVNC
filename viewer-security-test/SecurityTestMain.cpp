@@ -60,6 +60,10 @@ void runFileTransferWireTests(int *passed, int *failed);
 // pixel format.
 void runRfbLimitsTests(int *passed, int *failed);
 
+// FrameBufferRaiiTest.cpp: the ownership of the frame buffer, the decoder
+// store and the Tight inflaters, and the DIB section pixel format check.
+void runFrameBufferRaiiTests(int *passed, int *failed);
+
 int main()
 {
   setvbuf(stdout, NULL, _IONBF, 0);
@@ -70,6 +74,7 @@ int main()
   RUN_AREA(runFileTransferPathTests);
   RUN_AREA(runFileTransferWireTests);
   RUN_AREA(runRfbLimitsTests);
+  RUN_AREA(runFrameBufferRaiiTests);
 #undef RUN_AREA
   printf("viewer-security-test: %d passed, %d failed\n", g_passed, g_failed);
   return g_failed == 0 ? 0 : 1;

@@ -35,7 +35,7 @@ TightDecoder::TightDecoder(LogWriter *logWriter)
 
   m_inflater.resize(DECODERS_NUM);
   for (int i = 0; i < DECODERS_NUM; i++)
-    m_inflater[i] = new Inflater;
+    m_inflater[i].reset(new Inflater);
   reset();
 }
 
@@ -43,7 +43,7 @@ TightDecoder::~TightDecoder()
 {
   for (int i = 0; i < DECODERS_NUM; i++) {
     try {
-      delete m_inflater[i];
+      m_inflater[i].reset();
     } catch (...) {
     }
   }
@@ -126,9 +126,10 @@ UINT32 TightDecoder::readTightPixel(RfbInputGate *input, int bytesPerCPixel)
 
 void TightDecoder::reset()
 {
+  // reset() builds the new Inflater before it frees the old one, so a throwing
+  // new leaves the element intact instead of dangling.
   for (int i = 0; i < DECODERS_NUM; i++) {
-    delete m_inflater[i];
-    m_inflater[i] = new Inflater;
+    m_inflater[i].reset(new Inflater);
   }
 }
 
@@ -136,8 +137,7 @@ void TightDecoder::resetDecoders(UINT8 compressionControl)
 {
   for (int i = 0; i < DECODERS_NUM; i++)
     if (compressionControl & (0x01 << i)) {
-        delete m_inflater[i];
-        m_inflater[i] = new Inflater;
+        m_inflater[i].reset(new Inflater);
     }
 }
 
@@ -284,7 +284,7 @@ void TightDecoder::readCompressedData(RfbInputGate *input,
   if (rawDataLength != 0) {
     input->readFully(&compressed.front(), rawDataLength);
 
-    Inflater *decoder = m_inflater[decoderId];
+    Inflater *decoder = m_inflater[decoderId].get();
     decoder->setInput(&compressed.front(), rawDataLength);
     decoder->setUnpackedSize(expectedLength);
     decoder->inflate();

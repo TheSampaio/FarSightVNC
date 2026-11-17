@@ -147,6 +147,15 @@ void DibSection::setupBMIStruct(BITMAPINFO *pBmi, const PixelFormat *pf, const D
 
 void DibSection::openDIBSection(const PixelFormat *pf, const Dimension *dim, HWND compatibleWin)
 {
+  // Modified for FarSightVNC: setupBMIStruct() divides by the maximum of every
+  // colour in the 8 bits per pixel branch. A zero maximum would be an integer
+  // division by zero (a hardware exception that the Exception handlers do not
+  // catch), so refuse such a format here, before any resource is taken.
+  if (pf->bitsPerPixel == 8 &&
+      (pf->redMax == 0 || pf->greenMax == 0 || pf->blueMax == 0)) {
+    throw Exception(_T("Can't create a DIB section: the 8 bits per pixel format has a zero colour maximum"));
+  }
+
   m_targetDC = GetDC(compatibleWin);
   m_isOwnTargetDC = true;
   if (m_targetDC == 0) {

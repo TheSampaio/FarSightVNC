@@ -4,7 +4,8 @@ add_executable(viewer-security-test
   FileNameRulesTest.cpp
   FileTransferPathTest.cpp
   FileTransferWireTest.cpp
-  RfbLimitsTest.cpp)
+  RfbLimitsTest.cpp
+  FrameBufferRaiiTest.cpp)
 
 fsv_configure_executable(viewer-security-test)
 target_include_directories(viewer-security-test PRIVATE ${FSV_ROOT})

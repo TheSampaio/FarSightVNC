@@ -302,6 +302,7 @@
     <ClCompile Include="FileTransferPathTest.cpp" />
     <ClCompile Include="FileTransferWireTest.cpp" />
     <ClCompile Include="RfbLimitsTest.cpp" />
+    <ClCompile Include="FrameBufferRaiiTest.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="SecurityTestHarness.h" />

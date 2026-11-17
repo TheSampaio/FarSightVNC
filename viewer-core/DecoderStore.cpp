@@ -96,17 +96,22 @@ bool DecoderStore::addDecoder(Decoder *decoder, int priority)
     m_decoders[decoder->getCode()] = make_pair(priority, decoder);
     return true;
   }
-  delete[] decoder;
+  // The decoder was created with a scalar new, so it takes a scalar delete.
+  delete decoder;
   return false;
 }
 
 bool DecoderStore::removeDecoder(INT32 decoderId)
 {
-  if (m_decoders.count(decoderId)) {
+  map<INT32, pair<int, Decoder *> >::iterator i = m_decoders.find(decoderId);
+  if (i != m_decoders.end()) {
     m_logWriter->detail(_T("Decoder '%d' destroyed (removed from list)"),
-                        m_decoders[decoderId].second->getCode());
-    delete m_decoders[decoderId].second;
-    m_decoders.erase(decoderId);
+                        i->second.second->getCode());
+    // Take the entry out of the map before freeing, so the map never holds a
+    // freed pointer.
+    Decoder *decoder = i->second.second;
+    m_decoders.erase(i);
+    delete decoder;
     return true;
   }
   return false;
