@@ -2004,6 +2004,39 @@ void testKeyCapture()
     c.disarm();
   }
 }
+void testKeyboardRelease()
+{
+  const auto PASS = WinHooks::HOOK_KEY_PASS;
+  const auto POST = WinHooks::HOOK_KEY_POST;
+  checkTrue("KR1 capture requires keyboard focus and an unreleased keyboard",
+            WinHooks::viewerOwnsKeyboard(true, false) &&
+            !WinHooks::viewerOwnsKeyboard(true, true) &&
+            !WinHooks::viewerOwnsKeyboard(false, false) &&
+            !WinHooks::viewerOwnsKeyboard(false, true));
+  {
+    WinHooks::KeyRouter router;
+    bool owns = WinHooks::viewerOwnsKeyboard(true, true);
+    const unsigned keys[] = {VK_LWIN, VK_LSHIFT, 'S', VK_LMENU, VK_SNAPSHOT, VK_SUBTRACT};
+    bool ok = true;
+    for (unsigned key : keys) {
+      ok = ok && router.route(key, 0, owns, false) == PASS;
+    }
+    for (unsigned key : keys) {
+      ok = ok && router.route(key, LLKHF_UP, owns, true) == PASS;
+    }
+    checkTrue("KR2 released keyboard passes Win+Shift+S, Alt+Print and Numpad Minus", ok);
+  }
+  {
+    WinHooks::KeyRouter router;
+    bool ok = router.route(VK_LCONTROL, 0, true, false) == POST &&
+              router.route(VK_LCONTROL, LLKHF_UP, false, false) == POST &&
+              router.route('A', 0, false, false) == PASS &&
+              router.route('A', 0, true, true) == PASS &&
+              router.route('A', LLKHF_UP, true, true) == PASS &&
+              router.route('A', 0, true, false) == POST;
+    checkTrue("KR3 transition preserves each key owner until its release", ok);
+  }
+}
 } // namespace
 
 int main()
@@ -2045,6 +2078,7 @@ int main()
   testSessions(&log);
   testLocalKeys(&log);
   testKeyCapture();
+  testKeyboardRelease();
 
   unloadLayouts();
   printf("\n%d passed, %d failed\n", g_passed, g_failed);

@@ -20,6 +20,8 @@
 // Modified for FarSightVNC on 2026-11-11: rewritten as a floating pill drawn
 // with ChromeRenderer; the buttons are the SessionActionStrip of the session
 // toolbar.
+// Modified for FarSightVNC on 2026-11-16: badge of the released keyboard; the
+// pill stays visible while the keyboard is released.
 //
 
 #ifndef _FULL_SCREEN_TOOLBAR_H_
@@ -110,6 +112,9 @@ private:
   D2D1_RECT_F m_pill;
   D2D1_RECT_F m_labelRect;
   D2D1_RECT_F m_labelDivider;
+  // Badge of the released keyboard, between the label and the buttons (empty
+  // while the keyboard is captured).
+  D2D1_RECT_F m_keyboardBadge;
 };
 
 #endif

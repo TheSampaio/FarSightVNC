@@ -69,6 +69,7 @@
 #define IDS_TB_FULLSCREEN               215
 #define IDS_TB_CONFIGURATION            216
 #define IDS_CHECK_FOR_UPDATES           217
+#define IDS_TB_RELEASE_KEYBOARD         218
 #define IDD_FS_WARNING                  230
 #define IDD_CLIPBOARD_PASTE             237
 #define IDD_OPTIONS_DISPLAY             232

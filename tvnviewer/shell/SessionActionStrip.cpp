@@ -43,7 +43,11 @@ enum ActionKind
   KIND_TOGGLE,    // Posts its command; drawn checked when the state says so.
   KIND_MENU,      // Opens a drop-down menu (SessionToolbarListener).
   KIND_OVERFLOW,  // A drop-down menu without the chevron ("...").
-  KIND_DANGER     // Posts its command; red when hovered (disconnect).
+  KIND_DANGER,    // Posts its command; red when hovered (disconnect).
+  // Like KIND_TOGGLE, but checked it takes the accent color instead of the
+  // subtle selected one: a state the user must not overlook (the keyboard
+  // released to the local machine).
+  KIND_ALERT
 };
 
 const int PLACE_BAR = SESSION_PLACEMENT_BAR;
@@ -81,6 +85,9 @@ const ActionInfo kActions[SESSION_ACTION_COUNT] = {
     L"Ctrl", 36.0f, L"Ctrl key down" },
   { SESSION_ACTION_ALT_LATCH, GROUP_INPUT, KIND_TOGGLE, PLACE_BOTH, IDS_TB_ALT, 0,
     L"Alt", 32.0f, L"Alt key down" },
+  { SESSION_ACTION_KEYBOARD, GROUP_INPUT, KIND_ALERT, PLACE_BOTH, IDS_TB_RELEASE_KEYBOARD, 0,
+    L"Kbd", 34.0f, L"Release the keyboard to this computer, so its own shortcuts work "
+    L"(Win+Shift+S, Alt+Print Screen...). Click again to type on the server." },
   { SESSION_ACTION_SPECIAL_KEYS, GROUP_INPUT, KIND_MENU, PLACE_BOTH, 0, 0xE765,
     L"Keys", 28.0f, L"Special keys" },
 
@@ -105,6 +112,12 @@ const ActionInfo kActions[SESSION_ACTION_COUNT] = {
 
 // Other glyphs.
 const wchar_t kGlyphChevronDown = 0xE70D;
+
+// Badge of the released keyboard.
+const wchar_t kKeyboardBadgeText[] = L"Keyboard: this computer";
+const float kBadgeHeight = 20.0f;
+const float kBadgePadding = 8.0f;
+const float kBadgeFallbackWidth = 150.0f;
 
 // Sizes in DIPs.
 const float kButtonGap = 2.0f;
@@ -172,6 +185,36 @@ float placeButtons(int placement, float left, float right, float top, float bott
   return end;
 }
 
+}
+
+float sessionKeyboardBadgeWidth(ChromeRenderer *chrome)
+{
+  const ThemeTokens &theme = currentTheme();
+  float text = chrome != 0 ? chrome->measureText(kKeyboardBadgeText, theme.fontSizeSmall,
+                                                 DWRITE_FONT_WEIGHT_SEMI_BOLD)
+                           : 0.0f;
+  // Without DirectWrite the text cannot be measured: a width that fits it at
+  // the nominal font size.
+  if (text <= 0.0f) {
+    text = kBadgeFallbackWidth;
+  }
+  return text + 2.0f * kBadgePadding;
+}
+
+void paintSessionKeyboardBadge(ChromeRenderer *chrome, const D2D1_RECT_F &rect)
+{
+  if (chrome == 0 || isEmpty(rect)) {
+    return;
+  }
+  const ThemeTokens &theme = currentTheme();
+  float middle = (rect.top + rect.bottom) / 2.0f;
+  D2D1_RECT_F pill = D2D1::RectF(rect.left, middle - kBadgeHeight / 2.0f, rect.right,
+                                 middle + kBadgeHeight / 2.0f);
+  chrome->fillRoundRect(pill, kBadgeHeight / 2.0f, theme.accent);
+  D2D1_RECT_F label = D2D1::RectF(pill.left + kBadgePadding, pill.top,
+                                  pill.right - kBadgePadding, pill.bottom);
+  chrome->drawText(kKeyboardBadgeText, label, theme.accentText, theme.fontSizeSmall,
+                   DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
 }
 
 SessionActionStrip::SessionActionStrip(SessionActionPlacement placement)
@@ -286,21 +329,27 @@ void SessionActionStrip::paintButton(int index)
   bool pressed = enabled && m_pressed == index && m_hover == index;
   bool hover = enabled && m_hover == index && (m_pressed < 0 || pressed);
   bool danger = info.kind == KIND_DANGER;
+  // An alert toggle that is on is painted with the accent color, so the state
+  // reads from across the screen.
+  bool alert = info.kind == KIND_ALERT && checked;
 
   ThemeColor glyph = enabled ? theme.text : theme.disabledText;
   bool hasBackground = true;
   ThemeColor background = theme.background;
   if (pressed) {
-    background = danger ? theme.closePressed : checked ? theme.selectedPressed : theme.pressed;
+    background = danger ? theme.closePressed
+               : alert ? theme.accentPressed
+               : checked ? theme.selectedPressed : theme.pressed;
   } else if (checked) {
-    background = hover ? theme.selectedHover : theme.selected;
+    background = alert ? (hover ? theme.accentHover : theme.accent)
+                       : (hover ? theme.selectedHover : theme.selected);
   } else if (hover) {
     background = danger ? theme.closeHover : theme.hover;
   } else {
     hasBackground = false;
   }
   if (checked && enabled) {
-    glyph = theme.selectedText;
+    glyph = alert ? theme.accentText : theme.selectedText;
   }
   if (danger && (hover || pressed)) {
     glyph = theme.closeHoverText;

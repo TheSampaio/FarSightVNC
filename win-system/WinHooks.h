@@ -27,6 +27,7 @@
 // Modified for FarSightVNC on 2026-11-14: user-configurable local keys (Settings, Input, Local shortcuts) stay with Windows.
 // Modified for FarSightVNC on 2026-11-14: key owners per extended key (Enter/Numpad Enter); stricter LocalKeys parsing.
 // Modified for FarSightVNC on 2026-11-16: key capture hook (Settings, Add key...) that takes the next key-down and swallows it.
+// Modified for FarSightVNC on 2026-11-16: keyboard release toggle (viewerOwnsKeyboard) that hands every key back to Windows.
 //
 
 #include "util/CommonHeader.h"
@@ -56,6 +57,17 @@ public:
   // Pure decision function of the low level hook (unit-testable): keys that
   // always stay with Windows (injected, lock keys).
   static HookKeyAction decideKeyAction(DWORD vkCode, DWORD flags);
+
+  // Pure decision of the keyboard release toggle (unit-testable). The viewer
+  // sends keys to the server only while its window has the keyboard
+  // (foreground, focus on the remote desktop, able to type) AND the user did
+  // not hand the keyboard back to the local machine.
+  // Released, the session hook owns nothing: every key reaches Windows with
+  // its own key state, so any local hot key fires, combinations included
+  // (Win+Shift+S, Alt+Print Screen, whatever the user's tools use). Captured
+  // again, the viewer owns the keyboard as before. The per-key policy of
+  // decideKeyAction and the local keys are untouched by the toggle.
+  static bool viewerOwnsKeyboard(bool windowHasKeyboard, bool keyboardReleased);
 
   // Local keys: keys the user keeps for Windows and local applications (a
   // screenshot tool on Numpad Minus...). They are never sent to the server.

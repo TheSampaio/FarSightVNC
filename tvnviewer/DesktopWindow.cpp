@@ -29,6 +29,7 @@
 // Modified for FarSightVNC on 2026-11-14: local keys (Settings, Input) are not sent to the server.
 // Modified for FarSightVNC on 2026-11-14: the WM_CHAR of a dropped local key-down is dropped too.
 // Modified for FarSightVNC on 2026-11-16: Ctrl+V over files on the local clipboard becomes a clipboard file paste.
+// Modified for FarSightVNC on 2026-11-16: releaseRemoteKeys() for the keyboard release toggle.
 //
 
 #include "DesktopWindow.h"
@@ -49,6 +50,7 @@ DesktopWindow::DesktopWindow(LogWriter *logWriter, ConnectionConfig *conConf)
   m_viewerCore(0),
   m_ctrlDown(false),
   m_altDown(false),
+  m_keyboardReleased(false),
   m_droppedLocalScan(-1),
   m_previousMousePos(-1, -1),
   m_previousMouseState(0),
@@ -147,6 +149,10 @@ bool DesktopWindow::onMessage(UINT message, WPARAM wParam, LPARAM lParam)
     case WM_SYSKEYUP:
       return onKey(wParam, lParam);
     case WM_SETFOCUS:
+      // A held local key may have been released in a different window.
+      for (unsigned key = 1; key < 256; ++key) {
+        if (!(GetAsyncKeyState(key) & 0x8000)) m_keysHeldLocally.reset(key);
+      }
       m_rfbKeySym->processFocusRestoration();
       return true;
     case WM_KILLFOCUS:
@@ -306,13 +312,16 @@ bool DesktopWindow::onKey(WPARAM wParam, LPARAM lParam)
   // current, also in view-only mode (the accelerators must keep working).
   // Only the Ctrl/Alt key events change the toolbar latch flags.
   BYTE keys[256];
+  unsigned char key = static_cast<unsigned char>(virtualKey);
   if (GetKeyboardState(keys)) {
-    unsigned char key = WinHooks::applyKeyToStateTable(keys, virtualKey, lParam);
+    key = WinHooks::applyKeyToStateTable(keys, virtualKey, lParam);
     SetKeyboardState(keys);
-    if (key == VK_LCONTROL || key == VK_RCONTROL) {
+    if (!m_keyboardReleased && !m_keysHeldLocally.test(key) &&
+        (key == VK_LCONTROL || key == VK_RCONTROL)) {
       m_ctrlDown = (keys[VK_CONTROL] & 0x80) != 0;
     }
-    if (key == VK_LMENU || key == VK_RMENU) {
+    if (!m_keyboardReleased && !m_keysHeldLocally.test(key) &&
+        (key == VK_LMENU || key == VK_RMENU)) {
       m_altDown = (keys[VK_MENU] & 0x80) != 0;
     }
   }
@@ -325,6 +334,11 @@ bool DesktopWindow::onKey(WPARAM wParam, LPARAM lParam)
   // for Numpad Minus): its scan code is kept so that onChar drops it too,
   // until the key-up.
   bool isDown = (lParam & 0x80000000) == 0;
+  if (m_keyboardReleased || m_keysHeldLocally.test(key)) {
+    if (!isDown) m_keysHeldLocally.reset(key);
+    if (m_keyboardReleased) m_ctrlDown = m_altDown = false;
+    return true;
+  }
   int scan = static_cast<int>((lParam >> 16) & 0x1ff);
   if (isDown && WinHooks::isLocalKey(virtualKey, (lParam & 0x1000000) != 0)) {
     m_droppedLocalScan = scan;
@@ -382,7 +396,7 @@ bool DesktopWindow::tryStartFilePaste()
 
 void DesktopWindow::sendCtrlV()
 {
-  if (m_conConf->isViewOnly() || m_viewerCore == 0) {
+  if (m_keyboardReleased || m_conConf->isViewOnly() || m_viewerCore == 0) {
     return;
   }
   PasteKeystroke::send(m_rfbKeySym.get());
@@ -390,6 +404,10 @@ void DesktopWindow::sendCtrlV()
 
 bool DesktopWindow::onChar(WPARAM wParam, LPARAM lParam)
 {
+  unsigned scan = static_cast<unsigned>((lParam >> 16) & 0xff);
+  if (lParam & 0x1000000) scan |= 0xe000;
+  unsigned key = MapVirtualKeyEx(scan, MAPVK_VSC_TO_VK_EX, GetKeyboardLayout(0));
+  if (m_keyboardReleased || (key < 256 && m_keysHeldLocally.test(key))) return true;
   // The character of a local key whose key-down was dropped (see onKey).
   if (m_droppedLocalScan >= 0 &&
       static_cast<int>((lParam >> 16) & 0x1ff) == m_droppedLocalScan) {
@@ -815,17 +833,44 @@ bool DesktopWindow::getAltState() const
 
 void DesktopWindow::sendKey(WCHAR key, bool pressed)
 {
+  if (m_keyboardReleased) return;
   m_rfbKeySym->sendModifier(static_cast<unsigned char>(key), pressed);
 }
 
 void DesktopWindow::sendCtrlAltDel()
 {
+  if (m_keyboardReleased) return;
   m_rfbKeySym->sendCtrlAltDel();
+}
+
+void DesktopWindow::releaseRemoteKeys()
+{
+  // The same state the WM_KILLFOCUS handler clears: the latches of the
+  // toolbar, the scan code of a dropped local key-down and every key the
+  // server has pressed.
+  m_ctrlDown = false;
+  m_altDown = false;
+  m_droppedLocalScan = -1;
+  m_rfbKeySym->processFocusLoss();
+}
+
+void DesktopWindow::setKeyboardReleased(bool released)
+{
+  if (released == m_keyboardReleased) return;
+  // Release before closing the output gate so the server receives the ups.
+  if (released) releaseRemoteKeys();
+  m_keyboardReleased = released;
+  m_keysHeldLocally.reset();
+  if (!released) {
+    for (unsigned key = 1; key < 256; ++key) {
+      if (GetAsyncKeyState(key) & 0x8000) m_keysHeldLocally.set(key);
+    }
+  }
 }
 
 void DesktopWindow::sendKeyboardEvent(bool downFlag, UINT32 key)
 {
-  if (m_conConf->isViewOnly()) {
+  if (m_keyboardReleased || m_conConf->isViewOnly()) {
     return;
   }
 

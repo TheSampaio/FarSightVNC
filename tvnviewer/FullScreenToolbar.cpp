@@ -22,6 +22,8 @@
 // toolbar.
 // Modified for FarSightVNC on 2026-11-11: Disconnect ends the session (back to
 // the Home page) instead of closing the shell.
+// Modified for FarSightVNC on 2026-11-16: badge of the released keyboard; the
+// pill stays visible while the keyboard is released.
 //
 
 #include "FullScreenToolbar.h"
@@ -71,7 +73,8 @@ FullScreenToolbar::FullScreenToolbar()
   m_strip(SESSION_PLACEMENT_PILL),
   m_pill(D2D1::RectF()),
   m_labelRect(D2D1::RectF()),
-  m_labelDivider(D2D1::RectF())
+  m_labelDivider(D2D1::RectF()),
+  m_keyboardBadge(D2D1::RectF())
 {
   m_sessionState.enabled.set();
 }
@@ -132,8 +135,20 @@ void FullScreenToolbar::destroy()
 
 void FullScreenToolbar::setState(const SessionToolbarState &state)
 {
+  bool releaseChanged = state.keyboardReleased != m_sessionState.keyboardReleased;
   m_sessionState = state;
   applyState();
+  if (!releaseChanged || m_hwnd == 0 || m_monitor == 0) {
+    return;
+  }
+  // The badge takes room in the pill, so it is laid out again. Full screen is
+  // where a released keyboard confuses most, so the pill comes back (and the
+  // auto-hide keeps it, see the timer) as long as the keyboard is released.
+  if (m_expanded) {
+    layout(m_monitor);
+  } else {
+    expand(m_monitor);
+  }
 }
 
 void FullScreenToolbar::applyState()
@@ -181,6 +196,9 @@ void FullScreenToolbar::layout(HMONITOR monitor)
     float monitorWidth = m_chrome.pixelsToDips(rcMon.right - rcMon.left);
     float maxPill = monitorWidth - 2.0f * (kScreenMargin + kShadow);
     float stripWidth = SessionActionStrip::fullWidth(SESSION_PLACEMENT_PILL);
+    float badgeWidth = m_sessionState.keyboardReleased
+                     ? sessionKeyboardBadgeWidth(&m_chrome) : 0.0f;
+    float badgeBlock = badgeWidth > 0.0f ? badgeWidth + kLabelGap : 0.0f;
     float labelWidth = 0.0f;
     if (!m_label.empty()) {
       labelWidth = m_chrome.measureText(m_label.c_str(), theme.fontSizeSmall,
@@ -191,7 +209,9 @@ void FullScreenToolbar::layout(HMONITOR monitor)
     }
     // The label gives way to the buttons on a narrow monitor.
     float labelBlock = labelWidth > 0.0f ? labelWidth + 2.0f * kLabelGap + 1.0f : 0.0f;
-    float excess = 2.0f * kPillPadding + labelBlock + stripWidth - maxPill;
+    // The label gives way before the badge: the badge carries a state, the
+    // label only a name.
+    float excess = 2.0f * kPillPadding + labelBlock + badgeBlock + stripWidth - maxPill;
     if (excess > 0.0f && labelWidth > 0.0f) {
       labelWidth -= excess;
       if (labelWidth < kLabelMinWidth) {
@@ -199,7 +219,7 @@ void FullScreenToolbar::layout(HMONITOR monitor)
       }
       labelBlock = labelWidth > 0.0f ? labelWidth + 2.0f * kLabelGap + 1.0f : 0.0f;
     }
-    float pillWidth = 2.0f * kPillPadding + labelBlock + stripWidth;
+    float pillWidth = 2.0f * kPillPadding + labelBlock + badgeBlock + stripWidth;
     if (pillWidth > maxPill) {
       pillWidth = maxPill;
     }
@@ -214,6 +234,12 @@ void FullScreenToolbar::layout(HMONITOR monitor)
     } else {
       m_labelRect = D2D1::RectF();
       m_labelDivider = D2D1::RectF();
+    }
+    if (badgeWidth > 0.0f) {
+      m_keyboardBadge = D2D1::RectF(x, m_pill.top, x + badgeWidth, m_pill.bottom);
+      x += badgeWidth + kLabelGap;
+    } else {
+      m_keyboardBadge = D2D1::RectF();
     }
     m_strip.layout(x, m_pill.right - kPillPadding, m_pill.top, m_pill.bottom);
     width = pillWidth + 2.0f * kShadow;
@@ -263,6 +289,7 @@ void FullScreenToolbar::render()
       divider.right = divider.left + line;
       m_chrome.fillRect(divider, theme.border);
     }
+    paintSessionKeyboardBadge(&m_chrome, m_keyboardBadge);
     m_strip.paint();
   } else {
     // Grab handle: a small tab hanging from the top edge, with a grip line.
@@ -428,7 +455,10 @@ LRESULT FullScreenToolbar::onMessage(UINT message, WPARAM wParam, LPARAM lParam)
     return 0;
   case WM_TIMER:
     if (wParam == TIMER_AUTO_HIDE) {
-      if (m_logic.onTimer(isPointerNear() || m_strip.isMenuOpen(), GetTickCount())) {
+      // A released keyboard keeps the pill: its badge is the only hint that
+      // the keys of the user go to their own machine.
+      if (m_logic.onTimer(isPointerNear() || m_strip.isMenuOpen() ||
+                          m_sessionState.keyboardReleased, GetTickCount())) {
         collapse();
       }
       return 0;

@@ -67,6 +67,9 @@ void ViewerMenu::loadMenu()
     {MENU_ITEM, IDS_TB_CTRLESC},
     {MENU_ITEM, IDS_TB_CTRL},
     {MENU_ITEM, IDS_TB_ALT},
+    // Modified for FarSightVNC on 2026-11-16: keyboard release toggle, in the
+    // input group of the session menu (same command as the toolbar toggle).
+    {MENU_ITEM, IDS_TB_RELEASE_KEYBOARD},
     {SEPARATOR, 0},
     {MENU_ITEM, IDS_TB_TRANSFER},
     {SEPARATOR, 0},

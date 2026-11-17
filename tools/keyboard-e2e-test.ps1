@@ -18,8 +18,10 @@
   removed only when this run created it. All started processes are stopped.
 
   The run makes Numpad Minus a local key (HKCU ...\Viewer\Settings, value
-  LocalKeys = "6D") and restores the previous value (or removes it) at the
-  end: Numpad Minus must never reach the server, the '-' key still does.
+  LocalKeys = "6D") with the legacy policy marker and restores both previous
+  values at the end: migration must keep Print Screen local. With
+  -RemotePrintScreen the current policy explicitly removes Print Screen and
+  the test instead requires its keysym to reach the server.
 
 .EXAMPLE
   .\tools\keyboard-e2e-test.ps1 -Viewer .\build\bin\x64\Release\fsvncviewer.exe
@@ -28,7 +30,8 @@ param(
   [string]$Viewer = (Join-Path $PSScriptRoot '..\build\bin\x64\Release\fsvncviewer.exe'),
   [int]$Port = 5921,
   [string]$Python = 'python',
-  [int]$StepDelayMs = 60
+  [int]$StepDelayMs = 60,
+  [switch]$RemotePrintScreen
 )
 
 $ErrorActionPreference = 'Stop'
@@ -113,8 +116,10 @@ $historyKey = "HKCU:\Software\TightVNC\Viewer\History\127.0.0.1::$Port"
 $historyExisted = Test-Path -LiteralPath $historyKey
 $settingsKey = 'HKCU:\Software\TightVNC\Viewer\Settings'
 $localKeysBefore = $null
+$localKeysPolicyBefore = $null
 if (Test-Path -LiteralPath $settingsKey) {
   $localKeysBefore = (Get-ItemProperty -LiteralPath $settingsKey -Name LocalKeys -ErrorAction SilentlyContinue).LocalKeys
+  $localKeysPolicyBefore = (Get-ItemProperty -LiteralPath $settingsKey -Name LocalKeysPolicyVersion -ErrorAction SilentlyContinue).LocalKeysPolicyVersion
 }
 $results = New-Object System.Collections.ArrayList
 
@@ -157,6 +162,12 @@ function Send-Key([IntPtr]$target, [int]$vk, [int]$scan, [bool]$up, [bool]$exten
 function Invoke-Case([string]$name, [IntPtr]$target, [object[]]$steps, [object[]]$expected) {
   $before = (Get-KeyEvents).Count
   foreach ($s in $steps) {
+    if ($s[0] -eq 'c') {
+      if ([E2eWin]::OwnerPid($top) -ne $state.Viewer.Id) { throw 'refusing to post to a window of another process' }
+      [void][E2eWin]::PostMessage($top, 0x111, [IntPtr]$s[1], [IntPtr]::Zero)
+      Start-Sleep -Milliseconds 200
+      continue
+    }
     $ext = ($s.Count -gt 3) -and [bool]$s[3]
     Send-Key $target $s[1] $s[2] ($s[0] -eq 'u') $ext ($s[0] -eq 'r')
   }
@@ -188,6 +199,8 @@ try {
   # Numpad Minus is a local key for this run (Settings > Input > Local shortcuts).
   if (-not (Test-Path -LiteralPath $settingsKey)) { New-Item -Path $settingsKey -Force | Out-Null }
   Set-ItemProperty -LiteralPath $settingsKey -Name LocalKeys -Value '6D' -Type String
+  $policyVersion = if ($RemotePrintScreen) { 1 } else { 0 }
+  Set-ItemProperty -LiteralPath $settingsKey -Name LocalKeysPolicyVersion -Value $policyVersion -Type DWord
 
   $state.Viewer = Start-Process -FilePath $Viewer -PassThru -ArgumentList @('-host=127.0.0.1', "-port=$Port")
   if (-not (Wait-LogEvent 'connected' 20)) { throw 'viewer did not connect to the fake server' }
@@ -258,10 +271,12 @@ try {
 
   # Print Screen stays local: nothing is sent, also with Alt held.
   $psD = @('d', $VK.Snapshot, $SC.Snapshot, $true); $psU = @('u', $VK.Snapshot, $SC.Snapshot, $true)
-  Invoke-Case 'Print Screen is not sent' $desk @($psD, $psU) @()
+  $printExpected = if ($RemotePrintScreen) { @('+ff61', '-ff61') } else { @() }
+  Invoke-Case 'Print Screen respects migrated or explicit local-key policy' $desk @($psD, $psU) $printExpected
   Invoke-Case 'Print Screen key-up alone is not sent' $desk @(,$psU) @()
-  Invoke-Case 'Alt+Print Screen sends only Alt' $desk `
-    @(@('d', $VK.LAlt, $SC.Alt), $psD, $psU, @('u', $VK.LAlt, $SC.Alt)) @('+ffe9', '-ffe9')
+  $altPrintExpected = if ($RemotePrintScreen) { @('+ffe9', '+ff61', '-ff61', '-ffe9') } else { @('+ffe9', '-ffe9') }
+  Invoke-Case 'Alt+Print Screen respects local-key policy' $desk `
+    @(@('d', $VK.LAlt, $SC.Alt), $psD, $psU, @('u', $VK.LAlt, $SC.Alt)) $altPrintExpected
 
   # Local keys: Numpad Minus (VK_SUBTRACT 0x6D, scan 0x4A) is local, the '-'
   # key of the main block (VK_OEM_MINUS 0xBD, ABNT2 scan 0x0C) is not.
@@ -270,6 +285,18 @@ try {
   Invoke-Case 'local key: Ctrl+Numpad Minus sends only Ctrl' $desk `
     @(@('d', $VK.LCtrl, $SC.Ctrl), $nmD, $nmU, @('u', $VK.LCtrl, $SC.Ctrl)) @('+ffe3', '-ffe3')
   Invoke-Case "local key: the '-' key is still sent" $desk @(@('d', 0xBD, 0x0C), @('u', 0xBD, 0x0C)) @('+2d', '-2d')
+
+  # Release toggle: normal WM_KEY messages must be blocked as well as the
+  # hook. Releasing while Ctrl is down must first send its matching key-up.
+  $releaseKeyboard = @('c', 218) # IDS_TB_RELEASE_KEYBOARD
+  Invoke-Case 'release keyboard: held Ctrl is released before the gate closes' $desk `
+    @(@('d', $VK.LCtrl, $SC.Ctrl), $releaseKeyboard, @('u', $VK.LCtrl, $SC.Ctrl), $aD, $aU) @('+ffe3', '-ffe3')
+  Invoke-Case 'released keyboard: characters and modifiers never reach the server' $desk `
+    @($ls, $kd, $ku, $lsU, @('d', $VK.LCtrl, $SC.Ctrl), $aD, $aU, @('u', $VK.LCtrl, $SC.Ctrl)) @()
+  Invoke-Case 'released keyboard: synthetic remote keyboard commands are refused' $desk `
+    @(@('c', 206), @('c', 207), @('c', 208), @('c', 209)) @()
+  Invoke-Case 'recapture keyboard: normal typing resumes' $desk `
+    @($releaseKeyboard, $aD, $aU) @('+61', '-61')
 
   # The Settings page over the running session (settings button command,
   # IDS_TB_CONFIGURATION = 216): the remote desktop is hidden and loses the
@@ -312,6 +339,11 @@ try {
       Set-ItemProperty -LiteralPath $settingsKey -Name LocalKeys -Value $localKeysBefore -Type String
     } else {
       Remove-ItemProperty -LiteralPath $settingsKey -Name LocalKeys -ErrorAction SilentlyContinue
+    }
+    if ($null -ne $localKeysPolicyBefore) {
+      Set-ItemProperty -LiteralPath $settingsKey -Name LocalKeysPolicyVersion -Value $localKeysPolicyBefore -Type DWord
+    } else {
+      Remove-ItemProperty -LiteralPath $settingsKey -Name LocalKeysPolicyVersion -ErrorAction SilentlyContinue
     }
   }
   Remove-Item -LiteralPath $workDir -Recurse -Force -ErrorAction SilentlyContinue

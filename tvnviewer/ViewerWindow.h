@@ -35,6 +35,7 @@
 // Modified for FarSightVNC on 2026-11-11: the remote screen always fits the window (no scale modes, no scroll bars).
 // Modified for FarSightVNC on 2026-11-11: the Settings page of the shell covers the running session.
 // Modified for FarSightVNC on 2026-11-16: clipboard file paste (Ctrl+V over files copied on the local machine).
+// Modified for FarSightVNC on 2026-11-16: keyboard release toggle (the keys go to the local machine while it is on).
 //
 
 #ifndef _VIEWER_WINDOW_H_
@@ -166,6 +167,7 @@ protected:
   void commandAlt();
   void commandToolBar();
   void commandWinKey();
+  void commandReleaseKeyboard();
   void commandPause();
   void onAbout();
   void onCheckForUpdates();
@@ -239,6 +241,17 @@ protected:
   bool m_bToolBar;
   // Screen updates are paused (Pause command).
   bool m_isPaused;
+
+  // The user handed the keyboard back to their own machine (toggle of the
+  // session toolbar, of the full screen pill and of the session menu). While
+  // it is set the session hook owns no key, so every local hot key fires,
+  // combinations included: no hot key list to configure and no knowledge of
+  // the tools of the user (see WinHooks::viewerOwnsKeyboard()).
+  // It belongs to this session window, so two sessions are independent; it is
+  // never saved, so a new session starts with the keyboard captured; and it
+  // survives a focus change, a full screen switch and the Settings page,
+  // because it is a deliberate choice of the user and not a focus artifact.
+  bool m_keyboardReleased;
 
   // Flag is set after onConnected().
   bool m_isConnected;

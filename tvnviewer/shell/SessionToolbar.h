@@ -25,10 +25,10 @@
 // Thin toolbar of a session, a child window drawn with ChromeRenderer and the
 // light ThemeTokens: icon buttons in groups (display, input, transfer,
 // session, overflow) and, on the right, the connection area (latency and
-// security placeholders). The buttons are a SessionActionStrip, shared with
-// the full screen pill. It never takes the activation nor the keyboard
-// focus: after a click the focus goes back to the focus target (the remote
-// desktop).
+// security placeholders) with the badge of the released keyboard before it.
+// The buttons are a SessionActionStrip, shared with the full screen pill. It
+// never takes the activation nor the keyboard focus: after a click the focus
+// goes back to the focus target (the remote desktop).
 class SessionToolbar
 {
 public:
@@ -76,6 +76,12 @@ private:
   D2D1_RECT_F m_latency;
   D2D1_RECT_F m_lock;
   bool m_showConnection;
+
+  // Badge of the released keyboard, left of the connection area (its width
+  // depends on the text, so the bar is laid out again when it appears).
+  D2D1_RECT_F m_keyboardBadge;
+  bool m_keyboardReleased;
+  bool m_showKeyboardBadge;
 };
 
 #endif

@@ -27,6 +27,7 @@
 // Modified for FarSightVNC on 2026-11-14: user-configurable local keys (Settings, Input, Local shortcuts) stay with Windows.
 // Modified for FarSightVNC on 2026-11-14: key owners per extended key (Enter/Numpad Enter); stricter LocalKeys parsing.
 // Modified for FarSightVNC on 2026-11-16: key capture hook (Settings, Add key...) that takes the next key-down and swallows it.
+// Modified for FarSightVNC on 2026-11-16: keyboard release toggle (viewerOwnsKeyboard) that hands every key back to Windows.
 //
 
 #include "WinHooks.h"
@@ -116,6 +117,15 @@ WinHooks::HookKeyAction WinHooks::decideKeyAction(DWORD vkCode, DWORD flags)
   }
   // Post every physical key to the same queue, then swallow the source event.
   return HOOK_KEY_POST;
+}
+
+bool WinHooks::viewerOwnsKeyboard(bool windowHasKeyboard, bool keyboardReleased)
+{
+  // The release is a deliberate user choice, so it wins over the state of the
+  // window: while it lasts the session hook owns nothing and KeyRouter gives
+  // every new key to Windows (a key pressed before still ends where it
+  // started, see KeyRouter::route).
+  return windowHasKeyboard && !keyboardReleased;
 }
 
 // ------------------------------------------------------------ Key capture

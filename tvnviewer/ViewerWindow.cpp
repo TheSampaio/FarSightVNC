@@ -40,6 +40,7 @@
 // Modified for FarSightVNC on 2026-11-11: the keyboard hook releases a key on the same path it pressed it (no Ctrl/Alt stuck locally or on the server).
 // Modified for FarSightVNC on 2026-11-14: a key Windows already has down when the hook sees it first stays with Windows until its key-up.
 // Modified for FarSightVNC on 2026-11-14: the local keys of the settings are applied to the keyboard hook.
+// Modified for FarSightVNC on 2026-11-16: keyboard release toggle (toolbar, full screen pill and session menu) that hands every key back to the local machine.
 //
 
 #include "config-lib/IniFileSettingsManager.h"
@@ -80,6 +81,7 @@ ViewerWindow::ViewerWindow(WindowsApplication *application,
   m_isFirstConnection(true),
   m_bToolBar(true),
   m_isPaused(false),
+  m_keyboardReleased(false),
   m_hooksEnabledFirstTime(true),
   m_requiresReconnect(false),
   m_stopped(false),
@@ -541,14 +543,14 @@ void ViewerWindow::desktopStateUpdate()
 // buttons and menu items that send them.
 void ViewerWindow::commandCtrlAltDel()
 {
-  if (!m_conConf->isViewOnly()) {
+  if (!m_keyboardReleased && !m_conConf->isViewOnly()) {
     m_dsktWnd.sendCtrlAltDel();
   }
 }
 
 void ViewerWindow::commandCtrlEsc()
 {
-  if (!m_conConf->isViewOnly()) {
+  if (!m_keyboardReleased && !m_conConf->isViewOnly()) {
     m_dsktWnd.sendKey(VK_LCONTROL, true);
     m_dsktWnd.sendKey(VK_ESCAPE,   true);
     m_dsktWnd.sendKey(VK_ESCAPE,   false);
@@ -560,7 +562,7 @@ void ViewerWindow::commandWinKey()
 {
   // Ignored like the physical Win key while the frame is not active
   // (RfbKeySym::setWinKeyIgnore()).
-  if (!m_conConf->isViewOnly()) {
+  if (!m_keyboardReleased && !m_conConf->isViewOnly()) {
     m_dsktWnd.sendKey(VK_LWIN, true);
     m_dsktWnd.sendKey(VK_LWIN, false);
   }
@@ -568,7 +570,7 @@ void ViewerWindow::commandWinKey()
 
 void ViewerWindow::commandCtrl()
 {
-  if (m_conConf->isViewOnly()) {
+  if (m_keyboardReleased || m_conConf->isViewOnly()) {
     return;
   }
   // Toggles the latch of the remote desktop, which the toolbar shows.
@@ -581,13 +583,32 @@ void ViewerWindow::commandCtrl()
 
 void ViewerWindow::commandAlt()
 {
-  if (m_conConf->isViewOnly()) {
+  if (m_keyboardReleased || m_conConf->isViewOnly()) {
     return;
   }
   bool down = !m_dsktWnd.getAltState();
   m_menu.checkedMenuItem(IDS_TB_ALT, down);
   m_dsktWnd.setAltState(down);
   m_dsktWnd.sendKey(VK_LMENU, down);
+  updateToolbar();
+}
+
+void ViewerWindow::commandReleaseKeyboard()
+{
+  m_keyboardReleased = !m_keyboardReleased;
+  m_logWriter.debug(m_keyboardReleased ? _T("Keyboard released to the local machine")
+                                       : _T("Keyboard captured by the session"));
+  if (m_keyboardReleased) {
+    // The user may hold Ctrl (or a latch of the toolbar may be on) at this
+    // moment: every key the server has pressed is released now, because its
+    // key-up will go to the local machine. Re-capturing presses nothing back:
+    // a key still held belongs to Windows until its key-up (KeyRouter) and
+    // the focus restoration never presses a modifier either.
+    m_menu.checkedMenuItem(IDS_TB_CTRL, false);
+    m_menu.checkedMenuItem(IDS_TB_ALT, false);
+  }
+  m_dsktWnd.setKeyboardReleased(m_keyboardReleased);
+  m_menu.checkedMenuItem(IDS_TB_RELEASE_KEYBOARD, m_keyboardReleased);
   updateToolbar();
 }
 
@@ -774,6 +795,9 @@ bool ViewerWindow::onCommand(WPARAM wParam, LPARAM lParam)
       return true;
     case IDS_TB_ALT:
       commandAlt();
+      return true;
+    case IDS_TB_RELEASE_KEYBOARD:
+      commandReleaseKeyboard();
       return true;
     case IDS_TB_TOOLBAR:
       commandToolBar();
@@ -1352,17 +1376,22 @@ SessionToolbarState ViewerWindow::toolbarState() const
 {
   SessionToolbarState state;
   bool canType = m_isConnected && !m_conConf->isViewOnly();
+  bool canUseKeys = canType && !m_keyboardReleased;
 
   state.enabled.set();
   state.checked[SESSION_ACTION_FULL_SCREEN] = m_isFullScr;
 
-  state.enabled[SESSION_ACTION_CTRL_ALT_DEL] = canType;
-  state.enabled[SESSION_ACTION_WIN_KEY] = canType;
-  state.enabled[SESSION_ACTION_CTRL_LATCH] = canType;
-  state.enabled[SESSION_ACTION_ALT_LATCH] = canType;
+  state.enabled[SESSION_ACTION_CTRL_ALT_DEL] = canUseKeys;
+  state.enabled[SESSION_ACTION_WIN_KEY] = canUseKeys;
+  state.enabled[SESSION_ACTION_CTRL_LATCH] = canUseKeys;
+  state.enabled[SESSION_ACTION_ALT_LATCH] = canUseKeys;
   state.enabled[SESSION_ACTION_SPECIAL_KEYS] = canType;
   state.checked[SESSION_ACTION_CTRL_LATCH] = canType && m_dsktWnd.getCtrlState();
   state.checked[SESSION_ACTION_ALT_LATCH] = canType && m_dsktWnd.getAltState();
+  // The keyboard can be released whenever the session hook may own it, so a
+  // view-only session can hand the keyboard back as well.
+  state.checked[SESSION_ACTION_KEYBOARD] = m_keyboardReleased;
+  state.keyboardReleased = m_keyboardReleased;
 
   state.enabled[SESSION_ACTION_FILE_TRANSFER] = canType && m_fileTransfer != 0 &&
                                                 m_fileTransfer->isEnabled();
@@ -1421,7 +1450,7 @@ HMENU ViewerWindow::createMonitorMenu()
 
 HMENU ViewerWindow::createSpecialKeysMenu()
 {
-  bool canType = !m_conConf->isViewOnly();
+  bool canType = m_isConnected && !m_keyboardReleased && !m_conConf->isViewOnly();
   HMENU menu = CreatePopupMenu();
   appendCommand(menu, IDS_TB_CTRLESC, canType);
   AppendMenu(menu, MF_STRING | (canType ? 0 : MF_GRAYED), ID_SEND_WIN_KEY, _T("Send Win key"));
@@ -1429,6 +1458,8 @@ HMENU ViewerWindow::createSpecialKeysMenu()
   AppendMenu(menu, MF_SEPARATOR, 0, 0);
   appendCommand(menu, IDS_TB_CTRL, canType, canType && m_dsktWnd.getCtrlState());
   appendCommand(menu, IDS_TB_ALT, canType, canType && m_dsktWnd.getAltState());
+  AppendMenu(menu, MF_SEPARATOR, 0, 0);
+  appendCommand(menu, IDS_TB_RELEASE_KEYBOARD, true, m_keyboardReleased);
   return menu;
 }
 
@@ -1444,6 +1475,7 @@ HMENU ViewerWindow::createMoreMenu()
   appendCommand(menu, IDS_TB_CONNINFO, m_isConnected);
   AppendMenu(menu, MF_SEPARATOR, 0, 0);
   appendCommand(menu, IDS_TB_TOOLBAR, !m_isFullScr, m_bToolBar && !m_isFullScr);
+  appendCommand(menu, IDS_TB_RELEASE_KEYBOARD, true, m_keyboardReleased);
   AppendMenu(menu, MF_SEPARATOR, 0, 0);
   appendCommand(menu, IDS_TB_CONFIGURATION);
   appendCommand(menu, IDS_CHECK_FOR_UPDATES);
@@ -1534,6 +1566,9 @@ LRESULT ViewerWindow::onHookProc(int code, WPARAM wParam, LPARAM lParam)
   if (!m_isFullScr && (!m_isConnected || m_conConf->isViewOnly())) {
     ownsKeyboard = false;
   }
+  // The keyboard release toggle: while it is on the viewer owns no key, so
+  // every local hot key reaches Windows with its modifiers.
+  ownsKeyboard = WinHooks::viewerOwnsKeyboard(ownsKeyboard, m_keyboardReleased);
   KBDLLHOOKSTRUCT *str = (KBDLLHOOKSTRUCT*) lParam;
   // The key-up of a key follows its key-down: a Ctrl pressed in another
   // window and released in the viewer reaches Windows, a Ctrl pressed in the

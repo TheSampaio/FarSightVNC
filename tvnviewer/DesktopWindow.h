@@ -26,6 +26,7 @@
 // Modified for FarSightVNC on 2026-11-11: the remote screen always fits the window (no scale modes, no scroll bars).
 // Modified for FarSightVNC on 2026-11-14: scan code of a dropped local key-down (its WM_CHAR is dropped too).
 // Modified for FarSightVNC on 2026-11-16: Ctrl+V over files on the local clipboard becomes a clipboard file paste.
+// Modified for FarSightVNC on 2026-11-16: releaseRemoteKeys() for the keyboard release toggle.
 //
 
 #ifndef _DESKTOP_WINDOW_H_
@@ -46,6 +47,7 @@
 #include "viewer-core/RemoteViewerCore.h"
 #include "GpuPresenter.h"
 
+#include <bitset>
 #include <memory>
 #include <vector>
 
@@ -126,6 +128,15 @@ public:
   // this function sends to remote viewer core the combination
   // Ctrl + Alt + Del
   void sendCtrlAltDel();
+
+  // Releases on the server every key it still has pressed and forgets the
+  // Ctrl/Alt latches, exactly like a focus loss. Used by the keyboard release
+  // toggle: the user may hold Ctrl when they hand the keyboard back to their
+  // own machine, and the key-up would then never reach the server. Nothing is
+  // pressed again afterwards (RfbKeySym::processFocusLoss() also makes the
+  // next focus restoration press nothing).
+  void releaseRemoteKeys();
+  void setKeyboardReleased(bool released);
 
   // Set function for m_winKeyIgnore.
   void setWinKeyIgnore(bool winKeyIgnore) { m_rfbKeySym->setWinKeyIgnore(winKeyIgnore); }
@@ -220,6 +231,9 @@ protected:
 
   bool m_ctrlDown;
   bool m_altDown;
+  bool m_keyboardReleased;
+  // Keys Windows holds when capture resumes stay local until their key-up.
+  std::bitset<256> m_keysHeldLocally;
   // Scan code (bits 16-24 of lParam: scan code and extended flag) of the
   // local key whose key-down was dropped, or -1. TranslateMessage still
   // makes a WM_CHAR of it ('-' for Numpad Minus), dropped as well.

@@ -41,7 +41,10 @@ SessionToolbar::SessionToolbar()
   m_strip(SESSION_PLACEMENT_BAR),
   m_latency(D2D1::RectF()),
   m_lock(D2D1::RectF()),
-  m_showConnection(false)
+  m_showConnection(false),
+  m_keyboardBadge(D2D1::RectF()),
+  m_keyboardReleased(false),
+  m_showKeyboardBadge(false)
 {
 }
 
@@ -151,6 +154,12 @@ void SessionToolbar::setDpi(UINT dpi)
 void SessionToolbar::setState(const SessionToolbarState &state)
 {
   m_strip.setState(state);
+  if (state.keyboardReleased != m_keyboardReleased) {
+    // The badge takes room from the buttons, so the bar is laid out again
+    // instead of only being redrawn.
+    m_keyboardReleased = state.keyboardReleased;
+    layout();
+  }
 }
 
 void SessionToolbar::show()
@@ -190,8 +199,17 @@ void SessionToolbar::layout()
                        width - theme.spacing, bottom);
   m_latency = D2D1::RectF(m_lock.left - kLatencyWidth, top, m_lock.left, bottom);
 
-  float end = m_strip.layout(theme.spacing, width - theme.spacing, 0.0f, height);
-  m_showConnection = end + theme.spacingLarge <= m_latency.left;
+  // Badge of the released keyboard, before the connection area. It replaces
+  // the connection placeholders, which carry no state yet.
+  float badgeWidth = sessionKeyboardBadgeWidth(&m_chrome);
+  m_keyboardBadge = D2D1::RectF(width - theme.spacing - badgeWidth, top,
+                                width - theme.spacing, bottom);
+
+  float right = m_keyboardReleased ? m_keyboardBadge.left - theme.spacing
+                                   : width - theme.spacing;
+  float end = m_strip.layout(theme.spacing, right, 0.0f, height);
+  m_showKeyboardBadge = m_keyboardReleased && m_keyboardBadge.left > theme.spacing;
+  m_showConnection = !m_showKeyboardBadge && end + theme.spacingLarge <= m_latency.left;
   invalidate();
 }
 
@@ -219,6 +237,9 @@ void SessionToolbar::paint()
       m_chrome.fillRect(D2D1::RectF(0.0f, height - line, width, height), theme.border);
 
       m_strip.paint();
+      if (m_showKeyboardBadge) {
+        paintSessionKeyboardBadge(&m_chrome, m_keyboardBadge);
+      }
       if (m_showConnection) {
         // Placeholders until the connection metrics exist.
         m_chrome.drawText(L"\x2014 ms", m_latency, theme.mutedText, theme.fontSizeSmall,

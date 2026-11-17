@@ -47,6 +47,7 @@ enum SessionAction
   SESSION_ACTION_WIN_KEY,
   SESSION_ACTION_CTRL_LATCH,
   SESSION_ACTION_ALT_LATCH,
+  SESSION_ACTION_KEYBOARD,      // Toggle: release the keyboard to this computer.
   SESSION_ACTION_SPECIAL_KEYS,  // Drop-down: key combinations.
   // Transfer.
   SESSION_ACTION_FILE_TRANSFER,
@@ -76,9 +77,23 @@ struct SessionToolbarState
 {
   std::bitset<SESSION_ACTION_COUNT> enabled;
   std::bitset<SESSION_ACTION_COUNT> checked;
+  // The keyboard is released to the local machine: the keys of the user go to
+  // their own computer, not to the server. It is the checked state of
+  // SESSION_ACTION_KEYBOARD, kept apart because the bars also show it as a
+  // badge of their own (a toggle button alone is too quiet for a state in
+  // which a keystroke goes somewhere unexpected).
+  bool keyboardReleased = false;
 
   bool operator==(const SessionToolbarState &other) const = default;
 };
+
+// Badge of the released keyboard, shared by the session toolbar and the full
+// screen pill so the state looks the same in both: an accent colored pill with
+// a short label. While it is shown the keys of the user go to their own
+// machine, so the state must be impossible to miss. Colors come from the theme
+// tokens.
+float sessionKeyboardBadgeWidth(ChromeRenderer *chrome);
+void paintSessionKeyboardBadge(ChromeRenderer *chrome, const D2D1_RECT_F &rect);
 
 // Receives the drop-down buttons of a toolbar. Plain buttons post their
 // WM_COMMAND to the command target instead, like a toolbar control.
