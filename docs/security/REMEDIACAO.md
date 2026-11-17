@@ -117,13 +117,13 @@ Rodados pelo coordenador na árvore final, não apenas relatados pelos executore
 | Build CMake completo, x64 Release, todos os alvos | exit 0 |
 | `ctest --preset x64-release` | **8/8, zero falhas**, 25,02 s |
 | Build oficial MSBuild: viewer, updater e seis testes | exit 0, "All requested configurations built successfully" |
-| `viewer-security-test.exe`, build oficial e build CMake | **397 passaram, 0 falharam** nos dois |
+| `viewer-security-test.exe`, build oficial e build CMake | **418 passaram, 0 falharam** nos dois |
 | `viewer-clipboard-files-test.exe` (canário de regressão) | 171 passaram, 0 falharam |
 | `viewer-keyboard-test.exe` (canário) | 548 passaram, 0 falharam |
 | `viewer-input-queue-test.exe` (canário) | 39 passaram, 0 falharam |
 | `viewer-favorites-test.exe` (canário) | 146 passaram, 0 falharam |
 
-O total de 397 depende do ambiente: dois dos checks só rodam onde é possível plantar um link
+O total de 418 depende do ambiente: dois dos checks só rodam onde é possível plantar um link
 simbólico de arquivo, e nesta máquina eles imprimem `SKIP` e não contam. Numa máquina com Modo de
 Desenvolvedor o total é maior. Um binário de teste não reconstruído depois da última mudança informa
 396; conferir a data do executável antes de comparar números.
@@ -312,21 +312,17 @@ Declarado explicitamente, porque não foi corrigido nesta rodada:
    (F-02).
 9. ***Overwrite All* não limitado ao lote do operador**, a terceira recomendação de D-01. Ver a seção
    da revisão independente.
-10. **Dois resíduos na tabela de nomes de dispositivo**, achados pela revisão, sem travessia possível:
-    `CONIN$` e `CONOUT$` não estão na lista, e `COM¹`/`COM²`/`COM³` (U+00B9, U+00B2, U+00B3) passam
-    porque o teste compara `'1'`–`'9'` ASCII. O pior caso é uma gravação virar dispositivo e o download
-    falhar, nunca sair da pasta.
-11. **A contenção não protege o que está dentro da pasta escolhida.** Se o operador baixar para a
+10. **A contenção não protege o que está dentro da pasta escolhida.** Se o operador baixar para a
     própria pasta de instalação, um servidor hostil ainda pode trocar o `fsvncviewer.exe`; o que se
     interpõe é só o diálogo com *Skip* padrão, e *Overwrite All* o anula. Isso já consta no impacto de
     D-01 na auditoria.
-12. **`FILE_FLAG_OPEN_REPARSE_POINT` cobre só o componente final do caminho.** Um processo local do
+11. **`FILE_FLAG_OPEN_REPARSE_POINT` cobre só o componente final do caminho.** Um processo local do
     mesmo usuário que troque um diretório intermediário por junção depois do `mkdir` redireciona as
     gravações. Modelo de ameaça local, não o servidor hostil remoto de D-01.
-13. **Tecla Windows engolida pelo hook de teclado (C-06)**, confirmada no código atual. `Win+L` não
+12. **Tecla Windows engolida pelo hook de teclado (C-06)**, confirmada no código atual. `Win+L` não
    bloqueia a estação local enquanto a sessão captura o teclado. O interruptor de liberação da v1.3.0a
    mitiga sob gesto do operador, mas o padrão continua capturando.
-14. **Nada aqui foi validado contra um servidor TightVNC real nem contra o computador do amigo.** Os
+13. **Nada aqui foi validado contra um servidor TightVNC real nem contra o computador do amigo.** Os
     testes desta rodada são determinísticos, locais e offline.
 
 ---
