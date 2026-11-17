@@ -103,8 +103,34 @@ public:
   //
   // Sets relative (from parent folder) file name
   //
+  // Remark: use this entry point only for a name that comes from the local
+  // filesystem (an enumeration of a local folder, FileInfo(File *)) or from
+  // the operator. A name chosen by the remote peer must go through
+  // setRemoteFileName instead, which checks it.
+  //
 
   void setFileName(const TCHAR *fileName);
+
+  //
+  // Sets relative (from parent folder) file name that was chosen by the remote
+  // peer, after checking that it really is one single, usable name component.
+  //
+  // The file transfer protocol only ever carries a bare entry name in a file
+  // listing, never a path: a legitimate TightVNC server sends the name as its
+  // own enumeration produced it, and it filters "." and ".." itself. A name
+  // that is a path, that climbs to the parent directory, that names a DOS
+  // device or that Windows would silently resolve to another file is therefore
+  // never sent by a correct server, and accepting one would let the peer pick
+  // where on the local disk the downloaded bytes land. The rules themselves
+  // live in WindowsFileName::isSafeNameComponent, shared with the other
+  // components that receive names from the other end of the connection.
+  //
+  // @param fileName the name as it arrived from the peer.
+  // @return false when the name is refused; the name held by this object is
+  // then left unchanged, and the caller must drop the entry.
+  //
+
+  bool setRemoteFileName(const TCHAR *fileName);
 
   //
   // Returns file last modified time (in secords, starts from unix epoch)

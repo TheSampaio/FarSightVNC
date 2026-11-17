@@ -24,6 +24,8 @@
 
 #include "FileInfo.h"
 
+#include "util/WindowsFileName.h"
+
 FileInfo::FileInfo()
 : m_sizeInBytes(0), m_lastModified(0), m_flags(0)
 {
@@ -81,6 +83,18 @@ void FileInfo::setFlags(UINT16 flags)
 void FileInfo::setFileName(const TCHAR *fileName)
 {
   m_fileName.setString(fileName);
+}
+
+bool FileInfo::setRemoteFileName(const TCHAR *fileName)
+{
+  if (fileName == NULL) {
+    return false;
+  }
+  if (!WindowsFileName::isSafeNameComponent(fileName, _tcslen(fileName))) {
+    return false;
+  }
+  m_fileName.setString(fileName);
+  return true;
 }
 
 UINT64 FileInfo::lastModified() const
