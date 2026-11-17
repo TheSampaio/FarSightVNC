@@ -1,16 +1,16 @@
-FarSightVNC Viewer v1.2.1a (alpha)
+FarSightVNC Viewer v1.3.0a (alpha)
 ==================================
 
 Cliente VNC para Windows baseado no TightVNC Viewer 2.8.90.
 Licença: GNU GPL versão 2 ou posterior (ver LICENSE.txt).
-Data: 2026-11-14 - branch develop.
+Data: 2026-11-16 - branch develop.
 
 
-Correções e atualizador completo dentro do programa (v1.2.1a). Agora é
-possível instalar atualizações pelo próprio viewer, o Ctrl remoto não fica
-mais preso, e você pode manter teclas como o Numpad Menos só no seu
-computador. Tudo da v1.2.0a (temas, ícone) e da v1.1.0a (nova interface)
-continua aqui. Ver O QUE MUDOU NA v1.2.1a abaixo.
+Favoritos fixos na Home, captura de atalhos locais e botão para liberar o
+teclado ao computador local (v1.3.0a). Print Screen é local por padrão e
+pode ser configurado. A colagem de arquivos por Ctrl+V é opcional e exige
+suporte FarSightVNC nas duas pontas; fica dormente em servidores TightVNC.
+Tudo da v1.2.1a continua aqui. Ver O QUE MUDOU NA v1.3.0a abaixo.
 
 
 *** MUDANÇA INCOMPATÍVEL na v1.0.0a (continua valendo) ***
@@ -86,6 +86,28 @@ pode ignorá-lo e manter os arquivos onde estão.
   fsvncviewer.exe e o fsvncupdater.exe são trocados ou adicionados; nenhum
   documento (README.txt, ...) é gravado ali, então um README.txt seu continua
   como está.
+
+
+O QUE MUDOU NA v1.3.0a (teclado local, favoritos e colagem opcional)
+------------------------------------------------------------------
+- Favoritos ficam fixos; só as conexões recentes acompanham a rolagem.
+- Add key captura o pressionar da tecla antes dos atalhos normais do
+  Windows. Para screenshot no menos numérico, adicione essa tecla exata em
+  Settings > Input > Local shortcuts; ela é diferente do menos comum.
+- Release keyboard na barra da sessão, tela cheia e menus deixa o teclado
+  no Windows local, inclusive modificadores. Clique novamente para digitar
+  no remoto. As teclas remotas pressionadas são soltas ao liberar.
+- Print Screen é local por padrão, como entrada editável. Remova-o da lista
+  para enviá-lo ao remoto. Para combinações locais, use Release keyboard.
+- Colagem de arquivos/pastas: exige capacidade FSVC anunciada pelo remoto.
+  Primeiro envia os arquivos e confirma o clipboard remoto; só então envia
+  Ctrl+V. Timeout/cancelamento do handshake exige reconectar antes de tentar
+  novamente, pois o protocolo não possui identificador de requisição.
+- Servidores TightVNC existentes não oferecem colagem de arquivos FSVC.
+  Nessas sessões o Ctrl+V normal é preservado. O pacote inclui só o viewer
+  e o atualizador, sem servidor ou serviço.
+- Fontes de instalador por usuário disponíveis no repositório; o Setup ainda
+  depende de compilação e validação separadas. O zip portátil continua igual.
 
 
 O QUE MUDOU NA v1.2.1a (correções e atualizador dentro do programa)
@@ -215,31 +237,20 @@ Base técnica (sem mudança visível para quem usa):
 
 VERIFICADO NESTA VERSÃO
 -----------------------
-- Testes automáticos (x64, Release): teclado 480/0, fila de entrada 39/0,
-  favoritos 88/0, atualizador 2103/0. Os testes de teclado cobrem Ctrl+C/V/X/Z/A
-  com os dois Ctrl, a soltura de teclas pelo mesmo caminho e o Print Screen.
-- Contra um servidor falso em 127.0.0.1, com os renderizadores GDI e GPU: o
-  teste de conexão (4 codificações), o teste de exibição e ponteiro (194/0,
-  com os modos de ajuste à janela e tela cheia) e o teste de teclado de ponta
-  a ponta (39 casos). O botão "+" foi conferido na janela (hit test, estados
-  hover e pressionado, abertura de uma nova janela).
-- (Verificado na v1.0.0a, sem mudança de código do atualizador desde então)
-  Instalação da versão assinada sobre uma cópia do executável x64 da v0.2.1a
-  colocado na nova estrutura plana, com o viewer antigo aberto (o atualizador
-  espera), arquivos do usuário preservados, atualização adulterada rejeitada
-  e downgrade recusado. Também o caso de um executável sozinho em uma pasta
-  compartilhada (só os dois .exe são gravados; um README.txt seu continua
-  intacto). Teste automático de ponta a ponta, sem rede.
+- O relatório docs/reports/continuidade-codex-2026-11-16.md no repositório
+  registra os builds e resultados atuais, separados dos testes históricos.
+- O servidor falso de colagem usa o núcleo RFB real sobre pipes em memória;
+  não executa upload nem grava CF_HDROP no Windows remoto.
 
 
 AINDA NÃO VERIFICADO
 --------------------
-- Download de uma atualização do GitHub em rede real (a primeira versão com
-  o atualizador não tem versão anterior que possa atualizar para ela) e o
-  pedido de permissão (UAC) para pastas protegidas.
-- Conexão com um TightVNC Server real nesta versão (o código de conexão não
-  mudou desde a v0.2.1a, que foi verificada com o TightVNC Server 2.8.85 em
-  127.0.0.1).
+- Download/instalação de atualização desta versão em rede real e pedido de
+  permissão (UAC) para pastas protegidas.
+- Conexão com servidor TightVNC real nesta versão.
+- Colagem de arquivos ponta a ponta com upload e clipboard Windows remoto.
+- Screenshot com Lightshot e menos numérico no teclado ABNT2 físico do amigo.
+- Compilação e instalação/desinstalação do Setup em conta descartável ou VM.
 - Uso em rede real (fora de 127.0.0.1) e com outros servidores além do
   TightVNC.
 - Digitação real com teclado e uso real do mouse nesta versão (os testes são

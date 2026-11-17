@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.2.1a-blue" alt="Version 1.2.1a">
+  <img src="https://img.shields.io/badge/version-1.3.0a-blue" alt="Version 1.3.0a">
   <img src="https://img.shields.io/badge/status-alpha-orange" alt="Alpha status">
   <img src="https://img.shields.io/badge/platform-Windows-0078D4" alt="Platform: Windows">
   <img src="https://img.shields.io/badge/language-C%2B%2B-00599C" alt="Language: C++">
@@ -31,7 +31,7 @@ FarSightVNC is a **fork of TightVNC 2.8.90**, focused on improving the Windows V
 
 It keeps the native C++/Win32 foundation and RFB protocol implementation of TightVNC, with targeted changes rather than a rewrite. The repository also retains the upstream server, shared libraries and installer projects; FarSightVNC development currently centers on the **Viewer**.
 
-**Current version: v1.2.1a (alpha).** Features and behavior are still evolving. The original TightVNC version remains the upstream baseline, separate from FarSightVNC's own version number. See [MODIFICATIONS.md](MODIFICATIONS.md) for the dated modification history.
+**Current version: v1.3.0a (alpha).** Features and behavior are still evolving. The original TightVNC version remains the upstream baseline, separate from FarSightVNC's own version number. See [MODIFICATIONS.md](MODIFICATIONS.md) for the dated modification history.
 
 ## Highlights
 
@@ -45,6 +45,12 @@ It keeps the native C++/Win32 foundation and RFB protocol implementation of Tigh
 | **Stability** | zlib 1.3.2, decoder fuzzing tools, a framebuffer bounds fix and regression harnesses for input, rendering and connection behavior. |
 
 The Viewer also retains TightVNC capabilities such as multiple RFB encodings, view-only sessions, clipboard exchange and file transfer where supported by the server.
+
+The session toolbar can release keyboard input to the local computer. Local shortcuts are configurable in Settings > Input; Print Screen is local by default. Favorites stay fixed above the scrolling recent connections.
+
+Clipboard **file** paste is an optional FSVC extension requiring FarSightVNC support on both ends. It is dormant with existing TightVNC servers, which keep their normal Ctrl+V behavior. Only the viewer and updater are distributed.
+
+Per-user installer sources and build prerequisites are in [docs/installer/README.md](docs/installer/README.md). The installer still needs compilation and installation testing before publication; the portable package remains available as before.
 
 ## Getting started
 

@@ -1,16 +1,16 @@
-FarSightVNC Viewer v1.2.1a (alpha)
+FarSightVNC Viewer v1.3.0a (alpha)
 ==================================
 
 VNC client for Windows based on TightVNC Viewer 2.8.90.
 License: GNU GPL version 2 or later (see LICENSE.txt).
-Date: 2026-11-14 - branch develop.
+Date: 2026-11-16 - branch develop.
 
 
-Bug fixes and a complete in-app updater (v1.2.1a). Updates can now be
-installed from inside the viewer, the remote Ctrl key no longer gets stuck,
-and you can keep keys such as Numpad Minus local. Everything from v1.2.0a
-(themes, icon) and v1.1.0a (new interface) is still here. See CHANGES IN
-v1.2.1a below.
+Pinned favorites on Home, local shortcut capture and a button to release
+the keyboard to the local computer (v1.3.0a). Print Screen is local by
+default and configurable. Optional Ctrl+V file paste requires FarSightVNC
+support on both ends; it stays dormant with existing TightVNC servers.
+Everything from v1.2.1a is retained. See CHANGES IN v1.3.0a below.
 
 
 *** BREAKING CHANGE in v1.0.0a (still applies) ***
@@ -82,6 +82,27 @@ can ignore it and keep the files where they are.
   (README.txt, ...) is ever written there, so a README.txt of your own stays
   as it is.
 
+
+CHANGES IN v1.3.0a (local keyboard, favorites and optional file paste)
+--------------------------------------------------------------------
+- Favorites stay fixed; only recent connections scroll.
+- Add key captures key-down before ordinary Windows hotkey handling. For a
+  screenshot on Numpad Minus, add that exact key in Settings > Input > Local
+  shortcuts; it is different from the regular minus key.
+- Release keyboard in the session toolbar, full-screen toolbar and menus
+  hands the keyboard to local Windows, including modifiers. Click again to
+  type remotely. Held remote keys are released when switching.
+- Print Screen is a local, editable entry by default. Remove it from the
+  list to send it remotely. Use Release keyboard for local combinations.
+- File/folder paste requires the FSVC capability advertised by the server.
+  Files are staged and the remote clipboard confirmed before Ctrl+V is sent.
+  A handshake timeout/cancellation requires reconnecting before retrying,
+  because the protocol has no request identifier.
+- Existing TightVNC servers do not offer FSVC clipboard file paste. Normal
+  Ctrl+V is preserved there. Only the viewer and updater are distributed,
+  without a VNC server or service.
+- Per-user installer sources are in the repository; Setup still needs its
+  own compilation and validation. The portable zip layout is unchanged.
 
 CHANGES IN v1.2.1a (bug fixes and in-app updater)
 -------------------------------------------------
@@ -206,32 +227,20 @@ Technical base (no visible change for users):
 
 VERIFIED IN THIS VERSION
 ------------------------
-- Automated tests (x64, Release): keyboard 480/0, input queue 39/0,
-  favorites 88/0, updater 2103/0. The keyboard tests cover Ctrl+C/V/X/Z/A with
-  both Ctrl keys, releasing keys on the path that pressed them, and Print
-  Screen.
-- Against a fake server on 127.0.0.1, with the GDI and the GPU renderers: the
-  connection smoke test (4 encodings), the display and pointer test (194/0,
-  including the fit-to-window and full screen modes) and the keyboard
-  end-to-end test (39 cases). The "+" button was checked against the window
-  (hit test, hover and pressed states, a new window opens).
-- (Verified in v1.0.0a; the updater code did not change since)
-  Installation of the signed release over a copy of the v0.2.1a x64
-  executable placed in the new flat layout: with the old viewer open (the
-  updater waits), user files kept, a tampered update rejected and a downgrade
-  refused. Also the case of a lone executable in a shared folder (only the two
-  .exe files are written; a README.txt of your own stays untouched). Automatic
-  end-to-end test, no network.
+- The repository report docs/reports/continuidade-codex-2026-11-16.md records
+  current build/test results separately from historical tests.
+- The fake clipboard server exercises the real RFB core over in-memory pipes;
+  it does not upload files or set CF_HDROP on a remote Windows machine.
 
 
 NOT YET VERIFIED
 ----------------
-- Download of an update from GitHub over a real network (the first release
-  with the updater has no older version that can update to it) and the UAC
-  prompt for protected folders.
-- Connection to a real TightVNC Server in this version (the connection code
-  is unchanged since v0.2.1a, which was verified against TightVNC Server
-  2.8.85 on 127.0.0.1).
+- Download/install of this version over a real network and the UAC prompt
+  for protected folders.
+- Connection to a real TightVNC server in this version.
+- Full file paste with actual upload and the remote Windows clipboard.
+- Lightshot on the friend's physical ABNT2 keyboard using Numpad Minus.
+- Setup compilation and install/uninstall in a disposable account or VM.
 - Use on a real network (outside 127.0.0.1) and with servers other than
   TightVNC.
 - Real typing on a physical keyboard and real mouse use in this version
