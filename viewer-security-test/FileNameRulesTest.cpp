@@ -53,7 +53,8 @@ void testReservedDeviceNames(SecurityTest::Counters *c)
     _T("COM1"), _T("COM2"), _T("COM3"), _T("COM4"), _T("COM5"),
     _T("COM6"), _T("COM7"), _T("COM8"), _T("COM9"),
     _T("LPT1"), _T("LPT2"), _T("LPT3"), _T("LPT4"), _T("LPT5"),
-    _T("LPT6"), _T("LPT7"), _T("LPT8"), _T("LPT9")
+    _T("LPT6"), _T("LPT7"), _T("LPT8"), _T("LPT9"),
+    _T("CONIN$"), _T("CONOUT$")
   };
   for (size_t i = 0; i < sizeof(DEVICES) / sizeof(DEVICES[0]); i++) {
     StringStorage bare(DEVICES[i]);
@@ -93,6 +94,24 @@ void testReservedDeviceNames(SecurityTest::Counters *c)
   // ".CON" starts with the extension separator, so the part before the first
   // '.' is empty and the name is not a device.
   c->check(!reserved(_T(".CON")), "device: .CON is an ordinary name");
+
+  //
+  // Windows maps the Unicode superscript one, two and three to the digits 1,
+  // 2 and 3 when it resolves a device name, so these reach the same devices as
+  // COM1, COM2 and COM3 and must be refused the same way.
+  //
+  c->check(reserved(_T("COM\x00B9")), "device: COM with a superscript 1 is reserved");
+  c->check(reserved(_T("COM\x00B2")), "device: COM with a superscript 2 is reserved");
+  c->check(reserved(_T("COM\x00B3")), "device: COM with a superscript 3 is reserved");
+  c->check(reserved(_T("LPT\x00B9")), "device: LPT with a superscript 1 is reserved");
+  c->check(!safe(_T("COM\x00B9")), "device: COM with a superscript 1 is not safe");
+  // The other superscripts do not name a device.
+  c->check(!reserved(_T("COM\x2074")), "device: COM with a superscript 4 is not a device");
+
+  // CONIN$ and CONOUT$ are devices; a name that merely contains '$' is not.
+  c->check(!reserved(_T("CONIN")), "device: CONIN without the dollar is ordinary");
+  c->check(!reserved(_T("CONOUT")), "device: CONOUT without the dollar is ordinary");
+  c->check(safe(_T("report$.txt")), "device: a dollar in a plain name is safe");
 }
 
 //----------------------------------------------------------------------------

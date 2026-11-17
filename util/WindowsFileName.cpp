@@ -82,12 +82,26 @@ bool WindowsFileName::isReservedDosDeviceName(const TCHAR *name, size_t length)
   if (stemLength == 4) {
     // COM1..COM9 and LPT1..LPT9 only: there is no COM0, and "COM10" is four
     // characters plus a '0', so it does not reach this branch at all.
+    //
+    // The superscript digits are accepted as digits on purpose: Windows maps
+    // the Unicode superscript one, two and three to 1, 2 and 3 when it
+    // resolves a device name, so "COM<superscript one>" reaches the same
+    // device as "COM1".
     TCHAR digit = name[3];
-    if (digit < _T('1') || digit > _T('9')) {
+    bool isDeviceDigit = (digit >= _T('1') && digit <= _T('9')) ||
+                         digit == 0x00B9 || digit == 0x00B2 || digit == 0x00B3;
+    if (!isDeviceDigit) {
       return false;
     }
     return regionEqualsNoCase(name, 3, _T("COM")) ||
            regionEqualsNoCase(name, 3, _T("LPT"));
+  }
+  // CONIN$ and CONOUT$ are the console input and output devices.
+  if (stemLength == 6) {
+    return regionEqualsNoCase(name, stemLength, _T("CONIN$"));
+  }
+  if (stemLength == 7) {
+    return regionEqualsNoCase(name, stemLength, _T("CONOUT$"));
   }
   return false;
 }
