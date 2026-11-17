@@ -114,8 +114,21 @@ private:
   // Start download of folder
   void processFolder();
 
-  // Sets m_toCopy member to next file to download
+  // Sets m_toCopy member to next file to download.
+  //
+  // gotoNext() and startDownload() call each other, and the paths that finish
+  // synchronously (a refused local target, a folder that cannot be created, a
+  // file the operator skips) ask for the next entry straight away, with
+  // nothing waiting on the server in between, so the stack does not unwind
+  // between siblings. The remote peer chooses both how many entries a listing
+  // has and how many of them fail, so it would choose the depth. This is a
+  // trampoline: the walk itself happens in advanceOnce(), and a re-entrant
+  // call only asks the loop here for another round, which keeps the walk flat
+  // however many entries are refused in a row.
   void gotoNext();
+
+  // One step of the walk. Only gotoNext() may call this.
+  void advanceOnce();
 
   // Sends get folder size request to server to know
   // how many bytes must be receivied during
@@ -163,6 +176,11 @@ protected:
 
   // What this operation is waiting for
   DownloadState m_state;
+
+  // Trampoline state of gotoNext(): whether the walk is running, and whether
+  // a re-entrant call asked for another round. See gotoNext().
+  bool m_advancing;
+  bool m_advanceAgain;
 
 };
 

@@ -37,7 +37,9 @@ DownloadOperation::DownloadOperation(LogWriter *logWriter,
   m_fileOffset(0),
   m_bufferSize(20000),
   m_isTargetPathSafe(false),
-  m_state(DS_IDLE)
+  m_state(DS_IDLE),
+  m_advancing(false),
+  m_advanceAgain(false)
 {
   m_pathToSourceRoot.setString(pathToSourceRoot);
   m_pathToTargetRoot.setString(pathToTargetRoot);
@@ -477,6 +479,32 @@ void DownloadOperation::processFolder()
 }
 
 void DownloadOperation::gotoNext()
+{
+  //
+  // See the comment on the declaration: this is a trampoline, because the
+  // entry count and the number of entries that fail are both the remote
+  // peer's to choose, and the synchronous failure paths would otherwise turn
+  // each refused entry into stack frames that never unwind.
+  //
+  if (m_advancing) {
+    m_advanceAgain = true;
+    return ;
+  }
+
+  m_advancing = true;
+  try {
+    do {
+      m_advanceAgain = false;
+      advanceOnce();
+    } while (m_advanceAgain);
+  } catch (...) {
+    m_advancing = false;
+    throw;
+  }
+  m_advancing = false;
+}
+
+void DownloadOperation::advanceOnce()
 {
   FileInfoList *current = m_toCopy;
 
