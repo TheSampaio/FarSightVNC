@@ -78,5 +78,10 @@ add_subdirectory(viewer-keyboard-test)
 add_subdirectory(viewer-input-queue-test)
 add_subdirectory(viewer-favorites-test)
 add_subdirectory(viewer-clipboard-files-test)
+# Tests only: this does not port the server to CMake. server-identity-test
+# compiles the handful of server translation units that hold the identity
+# constants and the default ports straight into the test executable; the server
+# itself still builds through tightvnc2017.sln / MSBuild.
+add_subdirectory(server-identity-test)
 add_subdirectory(farsight-updater)
 add_subdirectory(updater-test)
