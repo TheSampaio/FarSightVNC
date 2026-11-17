@@ -89,7 +89,7 @@ correção entregue, com o restante declarado), **fora de escopo** (desta rodada
 
 | Achado | Severidade | Aplicável | Causa-raiz | Correção | Teste | Estado |
 |---|---|---|---|---|---|---|
-| D-01 / D-03 / D-06 | **Crítica** | Sim, código idêntico | O nome de cada entrada de `FILE_LIST_REPLY` vem do servidor e chega ao caminho local sem filtro nem canonicalização, e o diálogo de confirmação só aparece quando o alvo já existe | `FileInfo::setRemoteFileName` valida no parse e a entrada rejeitada é pulada, registrada e contada; `getLocalPath` devolve `bool` e exige contenção na pasta escolhida, com os dois chamadores barrando; `File::truncate()` não apaga mais para esvaziar, recusa diretório e reparse point e reconfere os atributos no handle aberto; *Skip* é o botão padrão do diálogo | `FileTransferPathTest.cpp` | **corrigido** (`97bbe9e`, `2a4fd86`) |
+| D-01 / D-03 / D-06 | **Crítica** | Sim, código idêntico | O nome de cada entrada de `FILE_LIST_REPLY` vem do servidor e chega ao caminho local sem filtro nem canonicalização, e o diálogo de confirmação só aparece quando o alvo já existe | `FileInfo::setRemoteFileName` valida no parse e a entrada rejeitada é pulada, registrada e contada; `getLocalPath` devolve `bool` e exige contenção na pasta escolhida, com os dois chamadores barrando; `File::truncate()` não apaga mais para esvaziar, recusa diretório e reparse point e reconfere os atributos no handle aberto; *Skip* é o botão padrão do diálogo | `FileTransferPathTest.cpp` | **corrigido** (`97bbe9e`, `2a4fd86`), com uma exceção: ver *Overwrite All* abaixo |
 | D-02 | Alta | Sim, código idêntico | `uncompressedSize` do fio dimensiona a gravação sobre um buffer alocado com `compressedSize` | Tamanho real do buffer como única fonte da verdade; os dois campos divergentes sem compressão é erro de protocolo. Também virou checagem real o `_ASSERT` do tamanho inflado, que no build entregue não verificava nada | `FileTransferWireTest.cpp` | **corrigido** (`2a4fd86`) |
 | D-04 | Média | Sim, código idêntico | Despacho de mensagens de FT dirigido só pelo código da mensagem, sem estado; `m_fos->close()` sobre nulo | `DownloadState` explícito e `acceptsReply` consultado no despacho, mais checagem de nulo. O corpo da mensagem continua sendo lido, então a recusa não dessincroniza a sessão | `FileTransferWireTest.cpp` | **corrigido** (`2a4fd86`) |
 | D-05 | Média | Sim, código idêntico | Contagem de arquivos u32 do fio dimensiona `new FileInfo[]` antes de qualquer validação | Teto nomeado de 1.000.000 e, mais apertado, limite pelos bytes que realmente chegaram (`(bytes - 4) / 22`), com os dois consumidores limitando de novo | `FileTransferWireTest.cpp` | **corrigido** (`2a4fd86`) |
@@ -117,11 +117,16 @@ Rodados pelo coordenador na árvore final, não apenas relatados pelos executore
 | Build CMake completo, x64 Release, todos os alvos | exit 0 |
 | `ctest --preset x64-release` | **8/8, zero falhas**, 25,02 s |
 | Build oficial MSBuild: viewer, updater e seis testes | exit 0, "All requested configurations built successfully" |
-| `viewer-security-test.exe` do build oficial | **397 passaram, 0 falharam** |
+| `viewer-security-test.exe`, build oficial e build CMake | **397 passaram, 0 falharam** nos dois |
 | `viewer-clipboard-files-test.exe` (canário de regressão) | 171 passaram, 0 falharam |
 | `viewer-keyboard-test.exe` (canário) | 548 passaram, 0 falharam |
 | `viewer-input-queue-test.exe` (canário) | 39 passaram, 0 falharam |
 | `viewer-favorites-test.exe` (canário) | 146 passaram, 0 falharam |
+
+O total de 397 depende do ambiente: dois dos checks só rodam onde é possível plantar um link
+simbólico de arquivo, e nesta máquina eles imprimem `SKIP` e não contam. Numa máquina com Modo de
+Desenvolvedor o total é maior. Um binário de teste não reconstruído depois da última mudança informa
+396; conferir a data do executável antes de comparar números.
 
 #### Os testes falham de verdade contra o código não corrigido
 
@@ -162,6 +167,59 @@ elevação que esta sessão não tem. Não há resultado de Application Verifier
   no repositório. Verificada apenas por leitura.
 - **Nenhuma conexão real**, a nenhum servidor TightVNC nem ao computador do amigo.
 
+### Revisão independente
+
+Um revisor independente releu o diff inteiro `6538cec..HEAD` com a instrução de **atacar** o trabalho,
+não de confirmá-lo. Ele percorreu o nome do servidor desde `readUTF8` até cada criação, abertura,
+truncagem e exclusão local e não achou nome que passe a validação e ainda saia da pasta, nem caminho
+local montado em outro lugar, nem `setFileName` alcançável por nome remoto. Verificou que a validação
+roda **depois** da conversão UTF-8, que é a ordem certa: um `\` em UTF-8 overlongo ou um best-fit de
+`U+FF3C` já virou `\` quando a checagem acontece. Veredito dele sobre o achado crítico: fechado.
+
+Mas ele encontrou três defeitos reais, todos corrigidos:
+
+1. **Dessincronização da sessão, Média — o mais grave, e era pior que o bug corrigido.**
+   `IOException` deriva de `Exception`, então o `catch` do despacho de capacidades em
+   `RemoteViewerCore.cpp` engolia **todas** as recusas novas de transferência de arquivos e o laço
+   seguia. Como a recusa acontece antes de o resto da mensagem ser lido, o
+   `receiveServerMessageType()` seguinte passava a ler o tipo de dentro do corpo da mensagem recusada
+   — o atacante escolhia o enquadramento do fluxo. Isso também contradizia a política escrita em
+   `RfbLimits.h`, que diz que valor acima do teto encerra a sessão. Corrigido em `a5494b7`:
+   `IOException` é relançada e chega ao handler externo, que reporta a desconexão.
+2. **`File::isReparsePoint()` falhava aberto, Baixa.** Usava `FindFirstFile` no diretório pai e
+   devolvia `false` quando a enumeração falhava, o que é a direção perigosa. No caminho de **pasta**
+   essa checagem é a única barreira, então uma junção não detectada levaria a subárvore inteira para
+   fora da pasta escolhida com a contenção textual intacta. Era o argumento mais forte do próprio
+   revisor contra a traversal estar fechada. Corrigido em `69e370c`.
+3. **Recursão sem limite no passeio do download, Baixa/Média.** `gotoNext()` e `startDownload()` se
+   chamam, e os caminhos de falha síncrona pedem a entrada seguinte sem esperar o servidor, então a
+   pilha não desenrola entre irmãos. O servidor escolhe quantas entradas a listagem tem e quantas
+   falham, logo escolheria a profundidade; o teto de um milhão de entradas de D-05 limitava a contagem
+   sem limitar a recursão que ela dirige, e as duas recusas novas acrescentaram gatilhos. Corrigido em
+   `7b6bc0f` com um trampolim.
+
+Duas imprecisões deste documento que ele achou estão corrigidas no texto acima: a frase sobre C-04 e
+servidores de paleta, e a justificativa incompleta do truncamento de `getBufferSize`.
+
+#### Recomendação de D-01 que **não** foi implementada
+
+A auditoria tem três recomendações para D-01 (`FARSIGHT_SECURITY_AUDIT.md`, seção 5, item 10). As duas
+primeiras estão feitas. A terceira, **limitar *Overwrite All* ao lote selecionado pelo operador**, não
+está: `FileExistDialog::m_overwriteAll` continua valendo para a operação inteira. O caso que importa é
+o operador clicar *Overwrite All* vendo um arquivo e aquilo passar a valer para os filhos que o
+servidor devolveu numa listagem de pasta, que ele nunca viu. Com a contenção em vigor o dano fica
+dentro da pasta escolhida, e o padrão *Skip* reduz o acionamento acidental, mas *Overwrite All* anula
+esse padrão. Fica como risco remanescente, não como corrigido.
+
+#### `File::truncate()` também mudou o servidor
+
+`truncate()` é usado pelo caminho de upload do servidor (`ft-server-lib/FileTransferRequestHandler.cpp`
+linha 547). A reescrita recusa diretório e reparse point e abre com `shareMode 0`, então o servidor
+FarSightVNC — autorizado em 2026-11-17 e distribuível — teve comportamento alterado por esta rodada,
+sem auditoria. O revisor não achou quebra concreta (upload para arquivo comum segue funcionando, e o
+`remove()` antigo também falhava em arquivo somente-leitura), mas a declaração de compatibilidade da
+seção 4 fala só do viewer e está incompleta nesse ponto.
+
 ### Achados laterais encontrados durante a remediação
 
 Dois problemas que a auditoria de 13/11 não lista, encontrados ao corrigir o código:
@@ -174,7 +232,11 @@ Dois problemas que a auditoria de 13/11 não lista, encontrados ao corrigir o c�
   lado a 16384, com um `static_assert` que garante em tempo de compilação que 16384 × 16384 × 4 cabe em
   `INT_MAX`. O pior caso alcançável é exatamente 1 GiB. Não foi alterado: a conversão continua frágil
   se algum dia o teto de geometria subir, e o `static_assert` é justamente o que quebra o build nesse
-  caso.
+  caso. A revisão independente completou a justificativa: existe um terceiro caminho que dimensiona um
+  `FrameBuffer`, o `viewer-core/CursorPainter.cpp:64-65` com a geometria de `RICH_CURSOR` vinda do fio,
+  e ele **não** passa por `fitsDesktopGeometry`. Quem o limita é
+  `ViewerBufferSize::fitsDecoderBuffer(w, h, 4)` em `RemoteViewerCore.cpp:1167`, que garante área
+  ≤ `INT_MAX / 4`. A conclusão se mantém, por dois mecanismos diferentes.
 - **`DibSection::releaseTargetDC` chama `ReleaseDC(0, dc)`** para um DC obtido com `GetDC(hwnd)`, o que
   parece vazamento de DC. Não é falha de segurança e está fora do escopo desta rodada.
 
@@ -194,8 +256,18 @@ sem mudança nenhuma do outro lado. Avaliação de cada correção desta rodada:
   o que um servidor TightVNC correto já envia.
 - Os tetos de R3 e o teto de geometria de A-04 ficam acima de qualquer valor que tráfego real produza.
   Um teto apertado demais quebraria conexões legítimas, e esse é o risco a vigiar nesta frente.
-- As correções de RAII (A-04, A-09, B-10) e a validação de formato de pixel (C-04) são internas ou
-  recusam apenas o que nenhum servidor real anuncia.
+- As correções de RAII (A-04, A-09, B-10) são internas.
+- **C-04 merece uma ressalva que a primeira versão deste documento errou.** A recusa de formato com
+  máximo zero não afeta servidor TightVNC, que sempre anuncia true colour — a regra do projeto está
+  preservada. Mas é falso dizer que ela "recusa apenas o que nenhum servidor real anuncia": um Xvnc ou
+  RealVNC em 8 bits com paleta anuncia exatamente `redMax = greenMax = blueMax = 0`. Antes, o viewer
+  conectava a esses servidores com cores erradas (`readPixelFormat` registrava erro e seguia, e o
+  handler de `SetColourMapEntries` existia mas descartava os dados); agora a conexão falha em
+  `ServerInit` com mensagem clara. Trocar cores erradas por falha limpa é melhora, e modo paleta nunca
+  foi suportado de verdade, mas é mudança de comportamento com servidor não-TightVNC.
+- O teto de geometria de 16384 por lado está acima de qualquer desktop plausível no parque do dono,
+  mas não é "acima de qualquer valor que tráfego real produza": cinco monitores 4K em linha dão
+  19200 px e seriam recusados.
 - O padrão **Ask** de D-08 muda **comportamento visível**: transferência de arquivos, e também a
   colagem de arquivos por Ctrl+V, passam a exigir uma confirmação na primeira vez de cada sessão. Não
   muda o protocolo — não anunciar a capacidade é mecanismo previsto — mas precisa constar na nota de
@@ -238,10 +310,23 @@ Declarado explicitamente, porque não foi corrigido nesta rodada:
    anti-DLL-planting no viewer, e dois sistemas de build que já divergiram.
 8. **Senha salva com DES de chave fixa pública (A-05/A-06/C-09)** e sem Authenticode nos executáveis
    (F-02).
-9. **Tecla Windows engolida pelo hook de teclado (C-06)**, confirmada no código atual. `Win+L` não
+9. ***Overwrite All* não limitado ao lote do operador**, a terceira recomendação de D-01. Ver a seção
+   da revisão independente.
+10. **Dois resíduos na tabela de nomes de dispositivo**, achados pela revisão, sem travessia possível:
+    `CONIN$` e `CONOUT$` não estão na lista, e `COM¹`/`COM²`/`COM³` (U+00B9, U+00B2, U+00B3) passam
+    porque o teste compara `'1'`–`'9'` ASCII. O pior caso é uma gravação virar dispositivo e o download
+    falhar, nunca sair da pasta.
+11. **A contenção não protege o que está dentro da pasta escolhida.** Se o operador baixar para a
+    própria pasta de instalação, um servidor hostil ainda pode trocar o `fsvncviewer.exe`; o que se
+    interpõe é só o diálogo com *Skip* padrão, e *Overwrite All* o anula. Isso já consta no impacto de
+    D-01 na auditoria.
+12. **`FILE_FLAG_OPEN_REPARSE_POINT` cobre só o componente final do caminho.** Um processo local do
+    mesmo usuário que troque um diretório intermediário por junção depois do `mkdir` redireciona as
+    gravações. Modelo de ameaça local, não o servidor hostil remoto de D-01.
+13. **Tecla Windows engolida pelo hook de teclado (C-06)**, confirmada no código atual. `Win+L` não
    bloqueia a estação local enquanto a sessão captura o teclado. O interruptor de liberação da v1.3.0a
    mitiga sob gesto do operador, mas o padrão continua capturando.
-10. **Nada aqui foi validado contra um servidor TightVNC real nem contra o computador do amigo.** Os
+14. **Nada aqui foi validado contra um servidor TightVNC real nem contra o computador do amigo.** Os
     testes desta rodada são determinísticos, locais e offline.
 
 ---
