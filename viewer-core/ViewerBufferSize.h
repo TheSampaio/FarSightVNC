@@ -6,16 +6,12 @@
 
 namespace ViewerBufferSize {
 
-inline bool fitsFrameBuffer(int width, int height, int bytesPerPixel)
-{
-  if (width < 0 || height < 0 || bytesPerPixel <= 0) {
-    return false;
-  }
-
-  const UINT64 alignedWidth = (static_cast<UINT64>(width) + 3) & ~static_cast<UINT64>(3);
-  const UINT64 alignedHeight = (static_cast<UINT64>(height) + 3) & ~static_cast<UINT64>(3);
-  return alignedWidth * alignedHeight <= INT_MAX / bytesPerPixel;
-}
+// The ceiling on the desktop geometry the viewer accepts from the server lives
+// in RfbLimits::fitsDesktopGeometry, not here. There used to be a
+// fitsFrameBuffer helper in this namespace that only kept a framebuffer under
+// INT_MAX bytes, which allowed a desktop of about 2 GiB per buffer; it was
+// removed rather than left next to the live ceiling, where a future caller
+// could reach for the wrong one.
 
 inline bool fitsDecoderBuffer(int width, int height, int bytesPerPixel)
 {

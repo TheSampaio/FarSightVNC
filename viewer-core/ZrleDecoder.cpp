@@ -29,6 +29,7 @@
 #include "ZrleDecoder.h"
 
 #include "io-lib/ByteArrayInputStream.h"
+#include "RfbLimits.h"
 
 #include <vector>
 #include <algorithm>
@@ -205,12 +206,17 @@ void ZrleDecoder::putPixel(vector<char> &pixels,
 void ZrleDecoder::readAndInflate(RfbInputGate *input, size_t maximalUnpackedSize)
 {
   UINT32 length = input->readUInt32();
+  // The ceiling that the caller computed for this rectangle bounds the
+  // compressed data too. Checked before anything is allocated, and the data
+  // is read in blocks so the memory follows the bytes that really arrive.
+  if (length > RfbLimits::maxZrleCompressedBytes(maximalUnpackedSize)) {
+    throw Exception(_T("Bad data received from the server: the ZRLE compressed length is larger than the rectangle can hold."));
+  }
   std::vector<char> zlibData;
-  zlibData.resize(length);
+  input->readFullyInBlocks(&zlibData, length);
   if (length == 0) {
     zlibData.resize(1);
   }
-  input->readFully(&zlibData.front(), length);
 
   m_inflater.setInput(&zlibData.front(), length);
   m_inflater.setUnpackedSize(maximalUnpackedSize);

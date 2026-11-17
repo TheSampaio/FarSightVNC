@@ -279,6 +279,7 @@
     <ClInclude Include="RawDecoder.h" />
     <ClInclude Include="RemoteViewerCore.h" />
     <ClInclude Include="ViewerBufferSize.h" />
+    <ClInclude Include="RfbLimits.h" />
     <ClInclude Include="RfbClientToServerMessage.h" />
     <ClInclude Include="RfbCutTextEventClientMessage.h" />
     <ClInclude Include="RfbFramebufferUpdateRequestClientMessage.h" />

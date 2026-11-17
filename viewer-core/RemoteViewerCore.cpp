@@ -48,6 +48,7 @@
 #include "RfbSetPixelFormatClientMessage.h"
 #include "WatermarksController.h"
 #include "ViewerBufferSize.h"
+#include "RfbLimits.h"
 
 #include "RawDecoder.h"
 #include "CopyRectDecoder.h"
@@ -629,7 +630,7 @@ void RemoteViewerCore::authenticate()
       }
       // if version 3.8 then try read reasonAuth.
       StringStorage reasonAuth;
-      m_input->readUTF8(&reasonAuth);
+      m_input->readUTF8(&reasonAuth, RfbLimits::MAX_AUTH_REASON_BYTES);
       StringStorage errorMessage = _T("Authentication reason: ");
       errorMessage.appendString(reasonAuth.getString());
       m_logWriter.message(_T("%s"), errorMessage.getString());
@@ -764,6 +765,9 @@ void RemoteViewerCore::initTunnelling()
 {
   m_logWriter.detail(_T("Initialization of tight-tunneling..."));
   UINT32 tunnelCount = m_input->readUInt32();
+  if (!RfbLimits::tightCapabilityCountFits(tunnelCount)) {
+    throw Exception(_T("Bad data received from the server: too many tunnel types."));
+  }
   if (tunnelCount > 0) {
     bool hasNoTunnel = false;
     for (UINT32 i = 0; i < tunnelCount; i++) {
@@ -791,6 +795,9 @@ int RemoteViewerCore::initAuthentication()
 {
   m_logWriter.detail(_T("Initialization of tight-authentication..."));
   UINT32 authTypesNumber = m_input->readUInt32();
+  if (!RfbLimits::tightCapabilityCountFits(authTypesNumber)) {
+    throw Exception(_T("Bad data received from the server: too many authentication types."));
+  }
 
   m_logWriter.info(_T("Number of auth-types is %d"), authTypesNumber);
   if (authTypesNumber == 0) {
@@ -845,8 +852,17 @@ void RemoteViewerCore::setFbProperties(const Dimension *fbDimension,
     throw Exception(_T("Invalid framebuffer properties"));
   }
 
-  if (!ViewerBufferSize::fitsFrameBuffer(width, height, bitsPerPixel / 8)) {
+  // The one geometry ceiling, for ServerInit and for DesktopSize alike.
+  if (!RfbLimits::fitsDesktopGeometry(width, height)) {
     throw Exception(_T("Framebuffer is too large"));
+  }
+
+  // A zero maximum or a shift outside the pixel would make a later stage
+  // divide by zero or shift past the pixel width: refuse the format here,
+  // before it is adopted.
+  if (!RfbLimits::isUsablePixelFormat(*fbPixelFormat)) {
+    throw Exception(_T("Invalid pixel format received from the server: ")
+                    _T("a colour maximum is zero or a colour shift is outside the pixel."));
   }
 
 #ifdef _DEMO_VERSION_
@@ -1226,13 +1242,13 @@ void RemoteViewerCore::receiveServerCutText()
   m_input->readUInt16();
   m_input->readUInt8();
 
-  size_t length = m_input->readUInt32();
-  if (length > SIZE_MAX - 1) {
-    throw Exception(_T("Integer overflow in clipboard allocation"));
+  UINT32 length = m_input->readUInt32();
+  if (!RfbLimits::clipboardLengthFits(length)) {
+    throw Exception(_T("Bad data received from the server: the clipboard text is too long."));
   }
-  std::vector<char> buffer(length + 1);
-  m_input->readFully(&buffer.front(), length);
-  buffer[length] = '\0';
+  std::vector<char> buffer;
+  m_input->readFullyInBlocks(&buffer, length);
+  buffer.push_back('\0');
   StringStorage cutText;
   AnsiStringStorage cutTextAnsi(&buffer.front());
   cutTextAnsi.toStringStorage(&cutText);
@@ -1252,13 +1268,13 @@ void RemoteViewerCore::receiveServerCutTextUtf8()
   UINT32 length = m_input->readUInt32();
   if (length == 0)
     return;
-  if (length > SIZE_MAX - 1) {
-    throw Exception(_T("Integer overflow in clipboard allocation"));
+  if (!RfbLimits::clipboardLengthFits(length)) {
+    throw Exception(_T("Bad data received from the server: the clipboard text is too long."));
   }
 
-  std::vector<char> buffer(length + 1);
-  m_input->readFully(&buffer.front(), length);
-  buffer[length] = '\0';
+  std::vector<char> buffer;
+  m_input->readFullyInBlocks(&buffer, length);
+  buffer.push_back('\0');
   StringStorage cutText;
   Utf8StringStorage cutTextUtf8(&buffer);
   cutTextUtf8.toStringStorage(&cutText);
@@ -1379,8 +1395,8 @@ void RemoteViewerCore::clientAndServerInit()
 
   // The name length comes from the server: keep at most MAX_DESKTOP_NAME_BYTES
   // of it and consume the rest in small blocks so the stream stays in sync.
-  static const UINT32 MAX_DESKTOP_NAME_BYTES = 64 * 1024;
-  static const UINT32 DISCARD_BLOCK_BYTES = 4096;
+  static const UINT32 MAX_DESKTOP_NAME_BYTES = RfbLimits::DESKTOP_NAME_MAX_BYTES;
+  static const UINT32 DISCARD_BLOCK_BYTES = RfbLimits::DISCARD_BLOCK_BYTES;
   const UINT32 declaredBytes = m_input->readUInt32();
   const UINT32 keptBytes = std::min(declaredBytes, MAX_DESKTOP_NAME_BYTES);
   std::vector<char> buffer(static_cast<size_t>(keptBytes) + 1, '\0');

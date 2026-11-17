@@ -24,6 +24,8 @@
 
 #include "RreDecoder.h"
 
+#include "RfbLimits.h"
+
 RreDecoder::RreDecoder(LogWriter *logWriter)
 : DecoderOfRectangle(logWriter)
 {
@@ -39,6 +41,11 @@ void RreDecoder::decode(RfbInputGate *input,
                         const Rect *dstRect)
 {
   UINT32 numberRectangle = input->readUInt32();
+  // A rectangle of N pixels cannot hold more than N subrectangles. Checked
+  // before the loop that the count would drive.
+  if (!RfbLimits::rreCountFitsRect(numberRectangle, dstRect->area())) {
+    throw Exception(_T("Bad data received from the server: the RRE subrectangle count is larger than the rectangle area."));
+  }
   size_t bytesPerPixel = frameBuffer->getBytesPerPixel();
 
   UINT32 backgroundColor;

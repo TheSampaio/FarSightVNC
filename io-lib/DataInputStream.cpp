@@ -59,6 +59,19 @@ void DataInputStream::readFully(void *buffer, size_t len)
   }
 }
 
+void DataInputStream::readFullyInBlocks(std::vector<char> *buffer, size_t size)
+{
+  buffer->clear();
+  size_t done = 0;
+  while (done < size) {
+    size_t left = size - done;
+    size_t block = left < READ_BLOCK_BYTES ? left : READ_BLOCK_BYTES;
+    buffer->resize(done + block);
+    readFully(&(*buffer)[done], block);
+    done += block;
+  }
+}
+
 UINT8 DataInputStream::readUInt8()
 {
   UINT8 x;
@@ -128,10 +141,20 @@ INT64 DataInputStream::readInt64()
 
 void DataInputStream::readUTF8(StringStorage *storage)
 {
+  readUTF8(storage, DEFAULT_MAX_UTF8_BYTES);
+}
+
+void DataInputStream::readUTF8(StringStorage *storage, UINT32 maxSizeInBytes)
+{
   UINT32 sizeInBytes = readUInt32();
+  if (sizeInBytes > maxSizeInBytes) {
+    // Checked before anything is allocated or read.
+    throw Exception(_T("Protocol error: a string sent by the peer is longer than the limit (%u bytes)."),
+                    maxSizeInBytes);
+  }
   if (sizeInBytes > 0) {
-    std::vector<char> buffer(sizeInBytes);
-    readFully(&buffer.front(), sizeInBytes);
+    std::vector<char> buffer;
+    readFullyInBlocks(&buffer, sizeInBytes);
     Utf8StringStorage utf8String(&buffer);
     utf8String.toStringStorage(storage);
   } else {

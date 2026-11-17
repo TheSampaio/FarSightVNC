@@ -29,6 +29,8 @@
 #include "InputStream.h"
 #include "IOException.h"
 
+#include <vector>
+
 /**
  * Data input stream class (decorator pattern).
  * Allows to read typed data from input stream.
@@ -60,6 +62,14 @@ public:
    */
   void readFully(void *buffer, size_t len);
 
+  /**
+   * Reads exactly size bytes into *buffer (replacing its contents) in blocks
+   * of READ_BLOCK_BYTES, so that the memory grows with the bytes that really
+   * arrived and not with the size that a peer declared.
+   * @throws IOException on error.
+   */
+  void readFullyInBlocks(std::vector<char> *buffer, size_t size);
+
   UINT8 readUInt8();
   UINT16 readUInt16();
   UINT32 readUInt32();
@@ -70,7 +80,23 @@ public:
   INT32 readInt32();
   INT64 readInt64();
 
+  /**
+   * Reads a string that is preceded by its size in bytes (UINT32).
+   * The size is checked against maxSizeInBytes before anything is read or
+   * allocated. The caller knows what the string is, so the caller owns the
+   * limit; the one-argument version uses DEFAULT_MAX_UTF8_BYTES, a backstop
+   * and not a policy.
+   * @throws Exception (not IOException: it is a protocol error, not a lost
+   *         connection) when the declared size is above the limit.
+   * @throws IOException on error.
+   */
   void readUTF8(StringStorage *storage);
+  void readUTF8(StringStorage *storage, UINT32 maxSizeInBytes);
+
+  // Block size of readFullyInBlocks().
+  static constexpr size_t READ_BLOCK_BYTES = 64 * 1024;
+  // Ceiling of the one-argument readUTF8().
+  static constexpr UINT32 DEFAULT_MAX_UTF8_BYTES = 64 * 1024 * 1024;
 
 protected:
   InputStream *m_inputStream;
