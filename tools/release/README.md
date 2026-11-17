@@ -42,3 +42,9 @@ the manifest grammar is in `updater-lib/Manifest.h`.
 | `farsightvnc-update.manifest.sig` | raw 64-byte P1363 signature of the manifest bytes |
 
 The manifest version must equal the release tag without the `v`.
+
+A compiled and validated viewer-only Setup can be attached separately as
+`FarSightVNC-v<version>-Setup-x64.exe`. It is optional and does not replace
+any of the three required update assets. Never put Setup inside the shipping
+folder or update zip. See `docs/installer/README.md` for its build and acceptance
+requirements.

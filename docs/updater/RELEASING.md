@@ -1,7 +1,7 @@
 # Releasing FarSightVNC (owner procedure)
 
 Every release that the in-app updater can install is a GitHub release of
-`TheSampaio/FarSightVNC` with exactly three assets, one of them signed by the
+`TheSampaio/FarSightVNC` with three required update assets, one of them signed by the
 owner's offline key. **Every shipped release must have all three.** A release
 with only the zip is not installable: the viewer says "This release cannot be
 installed automatically" and offers only the releases page. (v1.0.0a to
@@ -12,6 +12,12 @@ manifest grammar is in `updater-lib/Manifest.h`; the scripts are described in
 
 The public key that the viewer trusts is compiled into
 `updater-lib/TrustedKeys.cpp`. The private key never enters the repository.
+
+An optional viewer-only installer may be attached as a fourth asset, after
+compilation and install/uninstall validation described in
+[`docs/installer/README.md`](../installer/README.md). It stays outside the
+portable shipping folder, zip and update manifest. Installer sources alone
+do not mean that a tested Setup is available.
 
 ## 1. Prepare the version
 
