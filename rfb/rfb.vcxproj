@@ -250,6 +250,7 @@
     <ClCompile Include="FrameBuffer.cpp" />
     <ClCompile Include="HostPath.cpp" />
     <ClCompile Include="MsgDefs.cpp" />
+    <ClCompile Include="ClipboardFilesMessage.cpp" />
     <ClCompile Include="PixelFormat.cpp" />
     <ClCompile Include="RfbKeySym.cpp" />
     <ClCompile Include="StandardPixelFormatFactory.cpp" />
@@ -265,6 +266,7 @@
     <ClInclude Include="HostPath.h" />
     <ClInclude Include="keysymdef.h" />
     <ClInclude Include="MsgDefs.h" />
+    <ClInclude Include="ClipboardFilesMessage.h" />
     <ClInclude Include="PixelFormat.h" />
     <ClInclude Include="RfbKeySym.h" />
     <ClInclude Include="RfbKeySymListener.h" />

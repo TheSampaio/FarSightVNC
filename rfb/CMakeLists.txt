@@ -5,6 +5,7 @@ add_library(rfb STATIC
   FrameBuffer.cpp
   HostPath.cpp
   MsgDefs.cpp
+  ClipboardFilesMessage.cpp
   PixelFormat.cpp
   RfbKeySym.cpp
   StandardPixelFormatFactory.cpp

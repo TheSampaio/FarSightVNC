@@ -29,6 +29,9 @@
     <ClCompile Include="MsgDefs.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="ClipboardFilesMessage.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="PixelFormat.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -68,6 +71,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="MsgDefs.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ClipboardFilesMessage.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="PixelFormat.h">

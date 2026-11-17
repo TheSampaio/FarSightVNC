@@ -30,3 +30,8 @@ const char *const Utf8CutTextDefs::ENABLE_CUT_TEXT_UTF8_SIG = "UTF8CUTE";
 
 const char *const EchoExtensionDefs::ECHO_REQUEST_SIG = "ECHOCREQ";
 const char *const EchoExtensionDefs::ECHO_RESPONSE_SIG = "ECHOSRES";
+
+// Modified for FarSightVNC on 2026-11-16: clipboard file paste.
+const char *const ClipboardFilesDefs::CLIPBOARD_FILES_BEGIN_SIG = "FSVCFBEG";
+const char *const ClipboardFilesDefs::CLIPBOARD_FILES_SET_SIG = "FSVCFSET";
+const char *const ClipboardFilesDefs::CLIPBOARD_FILES_REPLY_SIG = "FSVCFREP";

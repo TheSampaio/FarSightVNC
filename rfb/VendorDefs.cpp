@@ -26,3 +26,7 @@
 
 const char *const VendorDefs::STANDARD = "STDV";
 const char *const VendorDefs::TIGHTVNC = "TGHT";
+
+// Modified for FarSightVNC on 2026-11-16: own vendor for the FarSightVNC
+// extensions, so that a stock TightVNC peer never matches one of them.
+const char *const VendorDefs::FARSIGHT = "FSVC";

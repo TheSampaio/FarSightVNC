@@ -30,6 +30,9 @@ class VendorDefs
 public:
   static const char *const STANDARD;
   static const char *const TIGHTVNC;
+  // Modified for FarSightVNC on 2026-11-16: vendor of the FarSightVNC
+  // protocol extensions.
+  static const char *const FARSIGHT;
 };
 
 #endif // __RFB_VENDOR_DEFS_H_INCLUDED__
