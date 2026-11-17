@@ -34,7 +34,8 @@ UploadOperation::UploadOperation(LogWriter *logWriter,
                                  const TCHAR *pathToTargetRoot)
 : CopyOperation(logWriter),
   m_file(0), m_fis(0), m_gotoChild(false), m_gotoParent(false), m_firstUpload(true),
-  m_remoteFilesInfo(0), m_remoteFilesCount(0), m_bufferSize(20000)
+  m_remoteFilesInfo(0), m_remoteFilesCount(0), m_isSourcePathSafe(false),
+  m_bufferSize(20000)
 {
   m_pathToSourceRoot.setString(pathToSourceRoot);
   m_pathToTargetRoot.setString(pathToTargetRoot);
@@ -51,7 +52,8 @@ UploadOperation::UploadOperation(LogWriter *logWriter,
                                  const TCHAR *pathToTargetRoot)
 : CopyOperation(logWriter),
   m_file(0), m_fis(0), m_gotoChild(false), m_gotoParent(false), m_firstUpload(true),
-  m_remoteFilesInfo(0), m_remoteFilesCount(0), m_bufferSize(20000)
+  m_remoteFilesInfo(0), m_remoteFilesCount(0), m_isSourcePathSafe(false),
+  m_bufferSize(20000)
 {
   m_pathToSourceRoot.setString(pathToSourceRoot);
   m_pathToTargetRoot.setString(pathToTargetRoot);
@@ -266,6 +268,28 @@ void UploadOperation::startUpload()
     killOp();
     return ;
   } // terminate operation is needed
+
+  //
+  // Every upload of the current file goes through here, so this is the one
+  // gate where the local source has to be proven to be inside the folder the
+  // operator picked. The names of an upload come from the local filesystem,
+  // not from the server, so this is not expected to fire; it is here because
+  // the same path building code serves both directions and must not be able to
+  // read outside the chosen folder in either.
+  //
+
+  if (!m_isSourcePathSafe) {
+    StringStorage message;
+
+    message.format(_T("Error: refused to upload '%s': the path is not inside ")
+                   _T("the chosen local folder"),
+                   m_pathToSourceFile.getString());
+
+    notifyError(message.getString());
+
+    gotoNext();
+    return ;
+  }
 
   // Current file info
   FileInfo *fileInfo = m_toCopy->getFileInfo();
@@ -534,6 +558,19 @@ void UploadOperation::initRemoteFiles(FileInfo *remoteFilesInfo, UINT32 count)
 {
   releaseRemoteFilesInfo();
 
+  //
+  // The count comes from a reply the server chose, and the parser already
+  // refuses a file listing over this ceiling; checking it again here means
+  // that this allocation stays bounded even if it is ever fed from somewhere
+  // else. A count over the ceiling is a malformed reply, not a listing to
+  // copy.
+  //
+  if (count > FileTransferReplyBuffer::MAX_FILE_LIST_ENTRIES) {
+    m_logWriter->warning(_T("Refused a remote file list of %d entries: the ")
+                         _T("count is over the limit\n"), count);
+    return ;
+  }
+
   m_remoteFilesCount = count;
   m_remoteFilesInfo = new FileInfo[count];
   for (UINT32 i = 0; i < count; i++) {
@@ -557,6 +594,7 @@ void UploadOperation::changeFileToUpload(FileInfoList *toUpload)
 {
   m_toCopy = toUpload;
 
-  getLocalPath(m_toCopy, m_pathToSourceRoot.getString(), &m_pathToSourceFile);
+  m_isSourcePathSafe = getLocalPath(m_toCopy, m_pathToSourceRoot.getString(),
+                                    &m_pathToSourceFile);
   getRemotePath(m_toCopy, m_pathToTargetRoot.getString(), &m_pathToTargetFile);
 }

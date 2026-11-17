@@ -62,7 +62,35 @@ public:
 
   virtual void start();
 
+  //
+  // Inherited from FileTransferOperation
+  //
+
+  virtual bool acceptsReply(UINT32 rfbMessage);
+
 protected:
+
+  //
+  // What this operation is waiting for. The server may send any reply at any
+  // moment, so every handler below is only allowed to run in the state the
+  // matching request left behind (see acceptsReply).
+  //
+
+  enum DownloadState
+  {
+    // Nothing is outstanding: no reply is expected.
+    DS_IDLE,
+    // Folder size requests were sent and are still being answered.
+    DS_CALC_SIZE,
+    // A file list request was sent.
+    DS_FILE_LIST,
+    // A download request was sent; the file is not open yet.
+    DS_DOWNLOAD_START,
+    // A download data request was sent; the local file is open.
+    DS_DOWNLOAD_DATA,
+    // The operation is over and accepts nothing further.
+    DS_FINISHED
+  };
 
   //
   // Inherited from FileTransferEventHandler
@@ -108,6 +136,10 @@ private:
   // m_pathToSourceFile, m_pathToTargetFile members
   void changeFileToDownload(FileInfoList *toDownload);
 
+  // Helper method that notifies listeners that the local target cannot be
+  // used and continues with the next file
+  void refuseLocalTarget(const TCHAR *reason);
+
 protected:
   // Target local file
   File *m_file;
@@ -124,6 +156,13 @@ protected:
   // request data size changes dynamicaly depends on request rate
   size_t m_bufferSize;
   DateTime m_lastRequestTime;
+
+  // False when m_pathToTargetFile left the folder the operator picked, in
+  // which case nothing of the current file may be written
+  bool m_isTargetPathSafe;
+
+  // What this operation is waiting for
+  DownloadState m_state;
 
 };
 

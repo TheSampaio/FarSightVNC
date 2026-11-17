@@ -79,6 +79,24 @@ public:
 
   virtual void terminate();
 
+  //
+  // Tells whether a reply carrying this message code belongs to the state the
+  // operation is in right now.
+  //
+  // The message processor dispatches on the message code alone, so without
+  // this a server can answer a request that was never sent, from the first
+  // byte of the session on, and the handler then works on members that no
+  // request has set up yet. An operation that keeps track of what it asked for
+  // overrides this and refuses anything else; the reply is then dropped, not
+  // acted upon.
+  //
+  // The default accepts every code, which is what the operations that keep no
+  // state did before: they still refuse the codes they do not handle at all
+  // through FileTransferEventAdapter.
+  //
+
+  virtual bool acceptsReply(UINT32 rfbMessage);
+
 protected:
 
   //
@@ -119,8 +137,18 @@ protected:
   // Sets absolute path to @currentFile, using @localFolder string as root folder
   // to @out parameter, '\' character used as separator for splitting directories.
   //
+  // The path is built from the names held by the file info list, and in a
+  // download every one of those names was chosen by the remote peer. The names
+  // are already checked where they are parsed, so this is the second line of
+  // defence: the finished path is canonicalized and must sit strictly below
+  // @localFolder, the folder the operator picked.
+  //
+  // @return false when the path leaves @localFolder. @out is then set to the
+  // empty string, so that even a caller that ignored the result cannot open
+  // anything with it, but every caller must check and must not continue.
+  //
 
-  void getLocalPath(FileInfoList *currentFile, const TCHAR *localFolder, StringStorage *out);
+  bool getLocalPath(FileInfoList *currentFile, const TCHAR *localFolder, StringStorage *out);
 
   //
   // Sets absolute path to @currentFile, using @remoteFolder string as root folder

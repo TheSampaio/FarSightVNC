@@ -184,6 +184,10 @@ protected:
   FileInfo *m_remoteFilesInfo;
   UINT32 m_remoteFilesCount;
 
+  // False when m_pathToSourceFile left the local folder the operator picked,
+  // in which case nothing of the current file may be read or uploaded
+  bool m_isSourcePathSafe;
+
   //
   // Helper members of 'Remote file list trick'
   //

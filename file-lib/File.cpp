@@ -142,6 +142,17 @@ bool File::isDirectory() const
   return false;
 }
 
+bool File::isReparsePoint() const
+{
+  WIN32_FIND_DATA fileInfo;
+
+  if (!getFileInfo(&fileInfo)) {
+    return false;
+  }
+
+  return (fileInfo.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
+}
+
 void File::getPath(StringStorage *pathname) const
 {
   *pathname = m_pathName;
@@ -335,12 +346,50 @@ bool File::setLastModified(INT64 time)
 
 bool File::truncate()
 {
-  if (exists()) {
-    if (!remove()) {
-      return false;
-    }
+  //
+  // Refuse a link before opening anything: following it would empty, and then
+  // let the caller overwrite, a file somewhere else entirely.
+  //
+  if (isReparsePoint()) {
+    return false;
   }
-  return createNewFile();
+
+  //
+  // FILE_FLAG_OPEN_REPARSE_POINT means that a link that appears between the
+  // test above and this call is opened as the link itself instead of
+  // redirecting the truncation; the attributes of the handle are checked below
+  // so that even then nothing is written. A directory fails to open here,
+  // which is intended: a directory is not a file to empty.
+  //
+  HANDLE hfile = CreateFile(m_pathName.getString(),
+                            GENERIC_WRITE,
+                            0,
+                            NULL,
+                            OPEN_ALWAYS,
+                            FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT,
+                            NULL);
+
+  if (hfile == INVALID_HANDLE_VALUE) {
+    return false;
+  }
+
+  BY_HANDLE_FILE_INFORMATION info;
+
+  if (GetFileInformationByHandle(hfile, &info) == FALSE) {
+    CloseHandle(hfile);
+    return false;
+  }
+
+  if ((info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0) {
+    CloseHandle(hfile);
+    return false;
+  }
+
+  bool truncated = (SetEndOfFile(hfile) != FALSE);
+
+  CloseHandle(hfile);
+
+  return truncated;
 }
 
 bool File::getFileInfo(WIN32_FIND_DATA *fileInfo) const

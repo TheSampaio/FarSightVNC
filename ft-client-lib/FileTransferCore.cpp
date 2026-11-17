@@ -132,6 +132,20 @@ void FileTransferCore::ftOpFinished(FileTransferOperation *sender)
       //
 
       UINT32 numberFiles = m_replyBuffer->getFilesInfoCount();
+
+      //
+      // The count comes from a reply the server chose, and the parser already
+      // refuses a file listing over this ceiling; checking it again here means
+      // that this resize stays bounded even if it is ever fed from somewhere
+      // else. A count over the ceiling is a malformed reply, not a listing to
+      // show.
+      //
+      if (numberFiles > FileTransferReplyBuffer::MAX_FILE_LIST_ENTRIES) {
+        m_logWriter->warning(_T("Refused a remote file list of %d entries: ")
+                             _T("the count is over the limit\n"), numberFiles);
+        numberFiles = 0;
+      }
+
       m_remoteFilesInfo.resize(numberFiles);
       for (UINT32 i = 0; i < numberFiles; i++) {
         m_remoteFilesInfo[i] = m_replyBuffer->getFilesInfo()[i];

@@ -23,6 +23,7 @@
 //
 
 #include "FileTransferMessageProcessor.h"
+#include "FileTransferOperation.h"
 #include "ft-common/FTMessage.h"
 
 FileTransferMessageProcessor::FileTransferMessageProcessor()
@@ -40,6 +41,22 @@ void FileTransferMessageProcessor::processRfbMessage(DataInputStream *input,
 
   for (size_t i = 0; i < m_listeners.size(); i++) {
     FileTransferEventHandler *listener = m_listeners.at(i);
+
+    //
+    // Dispatching on the message code alone lets a server answer a request
+    // that was never sent: the handler then runs before the request that
+    // prepares it, on members that are still null. An operation that keeps
+    // track of what it asked for is asked first, and a reply that does not
+    // belong to its current state is dropped instead of being acted upon. The
+    // reply buffer is not an operation and keeps parsing every reply, so the
+    // bytes of the message are still consumed from the stream.
+    //
+    FileTransferOperation *operation =
+      dynamic_cast<FileTransferOperation *>(listener);
+
+    if (operation != NULL && !operation->acceptsReply(rfbMessage)) {
+      continue;
+    }
 
     switch (rfbMessage) {
     case FTMessage::COMPRESSION_SUPPORT_REPLY:

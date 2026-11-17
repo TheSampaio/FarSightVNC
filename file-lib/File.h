@@ -97,6 +97,20 @@ public:
   bool isDirectory() const;
 
   /**
+  Tests whether the file or directory denoted by this pathname is a reparse
+  point: a symbolic link, a junction or a mount point.
+
+  Opening such a path reaches the file it points at, which is chosen by
+  whoever created the link and not by the caller. Code that is about to write
+  to a path it checked must therefore ask this first and refuse, because the
+  check it made was about the link, not about the file that receives the bytes.
+
+  @return true if this path is a reparse point. False when the path does not
+  exist, so a caller must not read this as "it is safe to create".
+  */
+  bool isReparsePoint() const;
+
+  /**
   Returns full path to file or directory.
   @param pathname out parameter for path to file or directory.
   */
@@ -166,7 +180,17 @@ public:
   bool setLastModified(INT64 time);
 
   //
-  // Truncates file, removes file if it exists and creates new file with same pathname
+  // Sets the length of the file named by this pathname to zero, creating it
+  // when it does not exist.
+  //
+  // The file is emptied in place: it is never deleted and recreated, because
+  // deleting it destroys its contents before it is known that it can be
+  // created again, and in the window between the two calls another process, or
+  // a link planted at the path, decides what the name refers to. A reparse
+  // point at the path is refused rather than followed.
+  //
+  // @return false when the file could not be emptied; its contents are then
+  // left as they were, and the caller must not write to it.
   //
 
   bool truncate();

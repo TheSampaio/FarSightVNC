@@ -25,6 +25,8 @@
 #include "FileTransferOperation.h"
 #include "OperationEventListener.h"
 
+#include "util/WindowsFileName.h"
+
 FileTransferOperation::FileTransferOperation(LogWriter *logWriter)
 : m_logWriter(logWriter),
   m_sender(0),
@@ -55,6 +57,11 @@ void FileTransferOperation::terminate()
 bool FileTransferOperation::isTerminating()
 {
   return m_isTerminating;
+}
+
+bool FileTransferOperation::acceptsReply(UINT32 rfbMessage)
+{
+  return true;
 }
 
 void FileTransferOperation::notifyStart()
@@ -105,7 +112,7 @@ void FileTransferOperation::notifyInformation(const TCHAR *message)
   }
 }
 
-void FileTransferOperation::getLocalPath(FileInfoList *currentFile,
+bool FileTransferOperation::getLocalPath(FileInfoList *currentFile,
                                          const TCHAR *localFolder,
                                          StringStorage *out)
 {
@@ -116,6 +123,22 @@ void FileTransferOperation::getLocalPath(FileInfoList *currentFile,
     out->appendString(_T("\\"));
   }
   out->appendString(pathNoRoot.getString());
+
+  //
+  // The folder the operator picked is the boundary of the operation: a path
+  // built out of remote names that canonicalizes anywhere else must not be
+  // used, however it got that way. The check fails closed, so a path that
+  // cannot even be canonicalized is refused too.
+  //
+  if (!WindowsFileName::isPathInsideDirectory(out->getString(), localFolder)) {
+    m_logWriter->warning(_T("Refused the local path '%s': it is not inside ")
+                         _T("the folder '%s'\n"),
+                         out->getString(), localFolder);
+    out->setString(_T(""));
+    return false;
+  }
+
+  return true;
 }
 
 void FileTransferOperation::getRemotePath(FileInfoList *currentFile,

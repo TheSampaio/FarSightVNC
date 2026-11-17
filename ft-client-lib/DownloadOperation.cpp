@@ -24,6 +24,8 @@
 
 #include "DownloadOperation.h"
 
+#include "ft-common/FTMessage.h"
+
 DownloadOperation::DownloadOperation(LogWriter *logWriter,
                                      const FileInfo *filesToDownload,
                                      size_t filesCount,
@@ -33,7 +35,9 @@ DownloadOperation::DownloadOperation(LogWriter *logWriter,
   m_file(0),
   m_fos(0),
   m_fileOffset(0),
-  m_bufferSize(20000)
+  m_bufferSize(20000),
+  m_isTargetPathSafe(false),
+  m_state(DS_IDLE)
 {
   m_pathToSourceRoot.setString(pathToSourceRoot);
   m_pathToTargetRoot.setString(pathToTargetRoot);
@@ -84,8 +88,49 @@ void DownloadOperation::start()
   }
 }
 
+bool DownloadOperation::acceptsReply(UINT32 rfbMessage)
+{
+  if (m_state == DS_FINISHED) {
+    return false;
+  }
+
+  //
+  // A failure reply answers whatever is outstanding, so it is accepted
+  // whenever something is.
+  //
+  if (rfbMessage == FTMessage::LAST_REQUEST_FAILED_REPLY) {
+    return m_state != DS_IDLE;
+  }
+
+  switch (rfbMessage) {
+  case FTMessage::DIRSIZE_REPLY:
+    return m_state == DS_CALC_SIZE;
+  case FTMessage::FILE_LIST_REPLY:
+    return m_state == DS_FILE_LIST;
+  case FTMessage::DOWNLOAD_START_REPLY:
+    return m_state == DS_DOWNLOAD_START;
+  case FTMessage::DOWNLOAD_DATA_REPLY:
+  case FTMessage::DOWNLOAD_END_REPLY:
+    //
+    // The server answers a download data request either with data or, at the
+    // end of the file, with the end reply, so both belong to this one state.
+    //
+    return m_state == DS_DOWNLOAD_DATA;
+  default:
+    break;
+  }
+
+  //
+  // Any other code is not a reply this operation handles at all: leave it to
+  // FileTransferEventAdapter, which has always refused those.
+  //
+  return true;
+}
+
 void DownloadOperation::onFileListReply(DataInputStream *input)
 {
+  m_state = DS_IDLE;
+
   m_toCopy->setChild(m_replyBuffer->getFilesInfo(),
                      m_replyBuffer->getFilesInfoCount());
   gotoNext();
@@ -100,9 +145,25 @@ void DownloadOperation::onDownloadReply(DataInputStream *input)
   if (m_fos != NULL) {
     try { m_fos->close(); } catch (...) { }
     delete m_fos;
+    m_fos = NULL;
   }
   if (m_file != NULL) {
     delete m_file;
+    m_file = NULL;
+  }
+
+  m_state = DS_IDLE;
+
+  //
+  // The path was checked when it was built, but the file is created here, so
+  // the check is repeated at the moment of the write: nothing is created or
+  // truncated under a path that left the operator's folder.
+  //
+
+  if (!m_isTargetPathSafe) {
+    refuseLocalTarget(_T("the name the server sent would place the file ")
+                      _T("outside the chosen local folder"));
+    return ;
   }
 
   //
@@ -111,14 +172,43 @@ void DownloadOperation::onDownloadReply(DataInputStream *input)
 
   m_file = new File(m_pathToTargetFile.getString());
 
+  //
+  // A symbolic link or a junction planted at the target path sends the write
+  // to whatever it points at, which is a path the operator never chose, so an
+  // existing reparse point at the target is a refusal and never something to
+  // follow. Only the target of the download is tested; an ordinary folder that
+  // happens to contain a junction still lists and still downloads.
+  //
+
+  if (m_file->isReparsePoint()) {
+    delete m_file;
+    m_file = NULL;
+    refuseLocalTarget(_T("the local target is a symbolic link or a junction"));
+    return ;
+  }
+
   if (m_fileOffset == 0) {
-    m_file->truncate();
+    //
+    // The result must be checked: a truncate that failed leaves a file whose
+    // old contents are still there, and writing the download into it from
+    // offset zero would mix the two.
+    //
+    if (!m_file->truncate()) {
+      delete m_file;
+      m_file = NULL;
+      refuseLocalTarget(_T("the local file cannot be emptied"));
+      return ;
+    }
   }
 
   try {
     StringStorage path;
     m_file->getPath(&path);
-    m_fos = new WinFileChannel(path.getString(), F_WRITE, FM_OPEN);
+    // The last leg of the traversal defence: the remote peer chose the name
+    // this path was built from, so the handle the file data is written through
+    // must not traverse a reparse point either. Checking the path before this
+    // open is not enough on its own, because a link can be planted in between.
+    m_fos = new WinFileChannel(path.getString(), F_WRITE, FM_OPEN, true, true);
     // Seek to initial file position to continue writting
     m_fos->seek((INT64)m_fileOffset);
     m_totalBytesCopied += m_fileOffset;
@@ -136,6 +226,7 @@ void DownloadOperation::onDownloadReply(DataInputStream *input)
 
   m_sender->sendDownloadDataRequest((UINT32)m_bufferSize,
                                     compression);
+  m_state = DS_DOWNLOAD_DATA;
   m_lastRequestTime = DateTime::now();
 }
 
@@ -143,6 +234,16 @@ void DownloadOperation::onDownloadDataReply(DataInputStream *input)
 {
   if (isTerminating()) {
     gotoNext();
+    return ;
+  }
+
+  //
+  // The state machine already keeps this handler from running before the file
+  // is open; the null check is the second line of defence, because a null
+  // stream here would be a write through a null pointer.
+  //
+  if (m_fos == NULL) {
+    m_logWriter->warning(_T("Ignored download data: no local file is open\n"));
     return ;
   }
 
@@ -186,27 +287,38 @@ void DownloadOperation::onDownloadDataReply(DataInputStream *input)
     m_bufferSize = 400000;
   }
   m_sender->sendDownloadDataRequest((UINT32)m_bufferSize, compression);
+  m_state = DS_DOWNLOAD_DATA;
   m_lastRequestTime = DateTime::now();
 }
 
 void DownloadOperation::onDownloadEndReply(DataInputStream *input)
 {
+  m_state = DS_IDLE;
+
   //
   // Cleanup
   //
+  // Both members start out null and stay null whenever no file was opened, so
+  // neither may be used without a check: an end reply that arrives before any
+  // download started used to close a null stream.
+  //
 
-  try { m_fos->close(); } catch (...) { }
-  delete m_fos;
-  m_fos = NULL;
-
-  try {
-    m_file->setLastModified(m_replyBuffer->getDownloadLastModified());
-  } catch (...) {
-    notifyFailedToDownload(_T("Cannot set modification time"));
+  if (m_fos != NULL) {
+    try { m_fos->close(); } catch (...) { }
+    delete m_fos;
+    m_fos = NULL;
   }
 
-  delete m_file;
-  m_file = NULL;
+  if (m_file != NULL) {
+    try {
+      m_file->setLastModified(m_replyBuffer->getDownloadLastModified());
+    } catch (...) {
+      notifyFailedToDownload(_T("Cannot set modification time"));
+    }
+
+    delete m_file;
+    m_file = NULL;
+  }
 
   gotoNext();
 }
@@ -221,6 +333,8 @@ void DownloadOperation::onLastRequestFailedReply(DataInputStream *input)
   if (m_foldersToCalcSizeLeft > 0) {
     decFoldersToCalcSizeCount();
   } else {
+    m_state = DS_IDLE;
+
     // Logging
     StringStorage message;
 
@@ -245,6 +359,19 @@ void DownloadOperation::startDownload()
     killOp();
     return ;
   } // if terminating
+
+  //
+  // Every download of the current file goes through here, so this is the one
+  // gate where the local target has to be proven to be inside the folder the
+  // operator picked. A refused name costs its own entry and nothing else: the
+  // rest of the selection still downloads.
+  //
+
+  if (!m_isTargetPathSafe) {
+    refuseLocalTarget(_T("the name the server sent would place the file ")
+                      _T("outside the chosen local folder"));
+    return ;
+  }
 
   FileInfo *fileInfo = m_toCopy->getFileInfo();
 
@@ -309,11 +436,24 @@ void DownloadOperation::processFile()
 
   // Send request that we want to download file
   m_sender->sendDownloadRequest(m_pathToSourceFile.getString(), m_fileOffset);
+  m_state = DS_DOWNLOAD_START;
 }
 
 void DownloadOperation::processFolder()
 {
   File local(m_pathToTargetFile.getString());
+
+  //
+  // A junction or a directory symbolic link at the target would place the
+  // whole downloaded subtree wherever it points, so it is refused instead of
+  // being followed. Only the target of this download is tested.
+  //
+
+  if (local.isReparsePoint()) {
+    refuseLocalTarget(_T("the local target is a symbolic link or a junction"));
+    return ;
+  }
+
   if (local.exists() && local.isDirectory()) {
   } else {
     if (!local.mkdir()) {
@@ -333,6 +473,7 @@ void DownloadOperation::processFolder()
 
   m_sender->sendFileListRequest(m_pathToSourceFile.getString(),
                                 m_replyBuffer->isCompressionSupported());
+  m_state = DS_FILE_LIST;
 }
 
 void DownloadOperation::gotoNext()
@@ -390,6 +531,7 @@ void DownloadOperation::tryCalcInputFilesSize()
 
       m_foldersToCalcSizeLeft++;
       m_sender->sendFolderSizeRequest(pathToFile.getString());
+      m_state = DS_CALC_SIZE;
     } else {
       m_totalBytesToCopy += fil->getFileInfo()->getSize();
     }
@@ -406,6 +548,8 @@ void DownloadOperation::killOp()
 
   delete m_toCopy->getRoot();
   m_toCopy = NULL;
+
+  m_state = DS_FINISHED;
 
   notifyFinish();
 }
@@ -436,5 +580,19 @@ void DownloadOperation::changeFileToDownload(FileInfoList *toDownload)
   m_toCopy = toDownload;
 
   getRemotePath(m_toCopy, m_pathToSourceRoot.getString(), &m_pathToSourceFile);
-  getLocalPath(m_toCopy, m_pathToTargetRoot.getString(), &m_pathToTargetFile);
+  m_isTargetPathSafe = getLocalPath(m_toCopy, m_pathToTargetRoot.getString(),
+                                    &m_pathToTargetFile);
+}
+
+void DownloadOperation::refuseLocalTarget(const TCHAR *reason)
+{
+  StringStorage message;
+
+  message.format(_T("Error: refused to download '%s': %s"),
+                 m_pathToSourceFile.getString(), reason);
+
+  notifyError(message.getString());
+
+  // Download next file
+  gotoNext();
 }

@@ -31,7 +31,8 @@ FileTransferReplyBuffer::FileTransferReplyBuffer(LogWriter *logWriter)
 : m_logWriter(logWriter),
   m_isCompressionSupported(false),
   m_filesInfoCount(0), m_filesInfo(NULL),
-  m_downloadBufferSize(0), 
+  m_rejectedFilesInfoCount(0),
+  m_downloadBufferSize(0),
   m_downloadFileFlags(0), m_downloadLastModified(0),
   m_dirSize(0)
 {
@@ -63,6 +64,11 @@ UINT32 FileTransferReplyBuffer::getFilesInfoCount()
 FileInfo *FileTransferReplyBuffer::getFilesInfo()
 {
   return m_filesInfo;
+}
+
+UINT32 FileTransferReplyBuffer::getRejectedFilesInfoCount()
+{
+  return m_rejectedFilesInfoCount;
 }
 
 UINT32 FileTransferReplyBuffer::getDownloadBufferSize()
@@ -118,33 +124,91 @@ void FileTransferReplyBuffer::onFileListReply(DataInputStream *input)
   }
 
   if (!buffer.empty()) {
+    //
+    // The number of bytes that really arrived is the only length allowed to
+    // size this stream. uncompressedSize is a number the peer chose, and when
+    // the peer did not compress readCompressedDataBlock has already refused the
+    // reply if the two sizes disagreed; reading through buffer.size() means
+    // that no length from the wire can reach past the memory that exists.
+    //
     // FIXME: type conversion in C-style
     ByteArrayInputStream memoryInputStream(reinterpret_cast<char *>(&buffer.front()),
-                                           uncompressedSize);
+                                           buffer.size());
     DataInputStream filesInfoReader(&memoryInputStream);
 
     if (m_filesInfo != 0) {
       delete[] m_filesInfo;
       m_filesInfo = 0;
     }
+    m_filesInfoCount = 0;
+    m_rejectedFilesInfoCount = 0;
 
-    m_filesInfoCount = filesInfoReader.readUInt32();
-    if (m_filesInfoCount != 0) {
-      m_filesInfo = new FileInfo[m_filesInfoCount];
+    UINT32 announcedCount = filesInfoReader.readUInt32();
+
+    //
+    // The count is read before any entry is, so it must be checked against
+    // what the protocol can really deliver before it sizes an allocation.
+    //
+    if (announcedCount > MAX_FILE_LIST_ENTRIES) {
+      throw IOException(_T("Malformed file list reply: the announced file ")
+                        _T("count is over the limit"));
+    }
+    if (announcedCount >
+        (buffer.size() - sizeof(UINT32)) / MIN_FILE_LIST_ENTRY_SIZE) {
+      throw IOException(_T("Malformed file list reply: the announced file ")
+                        _T("count is larger than the received data can hold"));
     }
 
-    for (UINT32 i = 0; i < m_filesInfoCount; i++) {
-      FileInfo *fileInfo = &m_filesInfo[i];
+    if (announcedCount != 0) {
+      //
+      // Owned by the member from here on, so that an exception raised while
+      // the entries are being read cannot leak the array.
+      //
+      m_filesInfo = new FileInfo[announcedCount];
+    }
 
-      fileInfo->setSize(filesInfoReader.readUInt64());
-      fileInfo->setLastModified(filesInfoReader.readUInt64());
-      fileInfo->setFlags(filesInfoReader.readUInt16());
+    UINT32 accepted = 0;
+
+    for (UINT32 i = 0; i < announcedCount; i++) {
+      UINT64 size = filesInfoReader.readUInt64();
+      UINT64 lastModified = filesInfoReader.readUInt64();
+      UINT16 flags = filesInfoReader.readUInt16();
 
       StringStorage t;
       filesInfoReader.readUTF8(&t);
 
-      fileInfo->setFileName(t.getString());
+      //
+      // The name is the one thing in this reply that reaches the local
+      // filesystem, so it is checked here, where it enters. A rejected entry
+      // is dropped and the rest of the listing is kept: the listing stays
+      // usable, the session is not killed over it, and no dialog is shown,
+      // because a hostile server could otherwise make the viewer spam the
+      // operator with one message box per entry.
+      //
+      FileInfo *fileInfo = &m_filesInfo[accepted];
+
+      if (!fileInfo->setRemoteFileName(t.getString())) {
+        m_rejectedFilesInfoCount++;
+        m_logWriter->warning(_T("Refused a file list entry: the server sent ")
+                             _T("the name '%s', which is not a usable file ")
+                             _T("name\n"),
+                             t.getString());
+        continue;
+      }
+
+      fileInfo->setSize(size);
+      fileInfo->setLastModified(lastModified);
+      fileInfo->setFlags(flags);
+
+      accepted++;
     } // for all newly created file's info
+
+    m_filesInfoCount = accepted;
+
+    if (m_rejectedFilesInfoCount != 0) {
+      m_logWriter->warning(_T("Refused %d of %d entries of a file list reply\n"),
+                           m_rejectedFilesInfoCount, announcedCount);
+    }
 
     m_logWriter->info(_T("Received file list reply: \n")
                       _T("\t files count = %d\n")
@@ -188,7 +252,13 @@ void FileTransferReplyBuffer::onDownloadDataReply(DataInputStream *input)
   UINT32 uncoBufferSize = input->readUInt32();
 
   m_downloadBuffer = readCompressedDataBlock(input, coBufferSize, uncoBufferSize, coLevel);
-  m_downloadBufferSize = uncoBufferSize;
+  //
+  // The size of the buffer that was really produced, never a length the peer
+  // chose: this number is what DownloadOperation writes out of the buffer, so
+  // it must describe the buffer and nothing else. A reply that claims more
+  // than it delivers was already refused by readCompressedDataBlock.
+  //
+  m_downloadBufferSize = (UINT32)m_downloadBuffer.size();
 
   m_logWriter->info(_T("Received download data reply:\n")
                     _T("\tcompressed size: %d\n")
@@ -252,6 +322,24 @@ vector<UINT8> FileTransferReplyBuffer::readCompressedDataBlock(DataInputStream *
   UINT32 coSize = compressedSize;
   UINT32 uncoSize = uncompressedSize;
 
+  //
+  // When the peer says it did not compress, the two sizes describe the very
+  // same bytes, and a legitimate TightVNC server sends them equal. A
+  // disagreement means the reply is malformed and neither number can be
+  // trusted, so the reply is refused instead of being parsed with whichever
+  // number is larger: trusting uncompressedSize would read and then write out
+  // the heap that follows a buffer only compressedSize bytes long.
+  //
+  if (compressionLevel == 0 && uncoSize != coSize) {
+    throw IOException(_T("Malformed file transfer reply: uncompressed data ")
+                      _T("whose compressed and uncompressed sizes disagree"));
+  }
+
+  if (coSize > MAX_DATA_BLOCK_SIZE || uncoSize > MAX_DATA_BLOCK_SIZE) {
+    throw IOException(_T("Malformed file transfer reply: the announced data ")
+                      _T("block size is over the limit"));
+  }
+
   vector<UINT8> coBuffer(coSize);
 
   //
@@ -276,7 +364,17 @@ vector<UINT8> FileTransferReplyBuffer::readCompressedDataBlock(DataInputStream *
 
   m_inflater.inflate();
 
-  _ASSERT(m_inflater.getOutputSize() == uncoSize);
+  //
+  // The memcpy below copies uncoSize bytes out of the inflater, so the
+  // inflater must really hold that many. This was an _ASSERT, which checks
+  // nothing in the shipped build and left the peer's uncompressedSize to drive
+  // a read past the inflated data. A server that compresses correctly produces
+  // exactly the size it announced.
+  //
+  if (m_inflater.getOutputSize() != uncoSize) {
+    throw IOException(_T("Malformed file transfer reply: the inflated data ")
+                      _T("is not as large as the reply announced"));
+  }
 
   if (uncoSize != 0) {
     memcpy(&uncoBuffer.front(), m_inflater.getOutput(), uncoSize);

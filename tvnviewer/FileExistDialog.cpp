@@ -92,7 +92,35 @@ BOOL FileExistDialog::onInitDialog()
 
   m_fileNameLabel.setText(m_pathToFileCaption.getString());
 
-  return TRUE;
+  //
+  // Skip is the default, not Overwrite: this dialog can appear for a file the
+  // operator never meant to touch, and pressing Enter on it must not be what
+  // destroys a local file. Every button of the dialog stays; only which one
+  // answers Enter changes, so the resource keeps Overwrite as its
+  // DEFPUSHBUTTON and it is moved here, where the dialog is set up.
+  //
+
+  HWND hwnd = m_ctrlThis.getWindow();
+  HWND overwriteButton = GetDlgItem(hwnd, IDC_OVERWRITE_BUTTON);
+  HWND skipButton = GetDlgItem(hwnd, IDC_SKIP_BUTTON);
+
+  if (skipButton == NULL) {
+    return TRUE;
+  }
+
+  if (overwriteButton != NULL) {
+    SendMessage(overwriteButton, BM_SETSTYLE, BS_PUSHBUTTON, TRUE);
+  }
+
+  SendMessage(skipButton, BM_SETSTYLE, BS_DEFPUSHBUTTON, TRUE);
+  SendMessage(hwnd, DM_SETDEFID, IDC_SKIP_BUTTON, 0);
+  SetFocus(skipButton);
+
+  //
+  // FALSE, because the keyboard focus was set here: returning TRUE would let
+  // the dialog manager move it back to the first control, which is Overwrite.
+  //
+  return FALSE;
 }
 
 BOOL FileExistDialog::onNotify(UINT controlID, LPARAM data)
