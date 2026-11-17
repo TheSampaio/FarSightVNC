@@ -21,6 +21,21 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-17: own default ports and conservative
+// defaults, so the server can coexist with the TightVNC server installed on the
+// same machine instead of fighting it for machine-wide resources.
+//
+//   * RFB port 5900 -> 5920. A second bind on 5900 fails with WSAEADDRINUSE and
+//     TvnServer::restartMainRfbServer() only logs the error, which would leave
+//     the server running with no listener at all: a silent failure.
+//   * HTTP server off by default, port 5800 -> 5820. Same port clash, plus it is
+//     extra attack surface that is of no use here.
+//   * Mirror driver off by default: dfmirage is a single machine-wide resource
+//     that the TightVNC server may already be using.
+//
+// The registry value names and the serialization format are untouched, so a
+// TightVNC configuration is still readable and importable.
+//
 
 #include "ServerConfig.h"
 
@@ -30,14 +45,14 @@
 #include "io-lib/DataCopy.h"
 
 ServerConfig::ServerConfig()
-: m_rfbPort(5900), m_httpPort(5800),
+: m_rfbPort(5920), m_httpPort(5820),
   m_disconnectAction(DA_DO_NOTHING), m_logLevel(0), m_useControlAuth(false),
   m_controlAuthAlwaysChecking(false),
   m_acceptRfbConnections(true), m_useAuthentication(true),
-  m_onlyLoopbackConnections(false), m_acceptHttpConnections(true),
+  m_onlyLoopbackConnections(false), m_acceptHttpConnections(false),
   m_enableAppletParamInUrl(true), m_enableFileTransfers(true),
   m_D3DAllowed(true),
-  m_mirrorDriverAllowed(true),
+  m_mirrorDriverAllowed(false),
   m_removeWallpaper(true), m_hasReadOnlyPassword(false),
   m_hasPrimaryPassword(false), m_alwaysShared(false), m_neverShared(false),
   m_disconnectClients(true), m_pollingInterval(1000), m_localInputPriorityTimeout(3),
