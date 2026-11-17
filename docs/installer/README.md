@@ -47,6 +47,17 @@ pode continuar sendo a do último Setup executado. A versão mostrada pelo viewe
 é a dos executáveis. Não há assinatura Authenticode configurada para o Setup;
 a assinatura ECDSA do manifesto não assina o instalador.
 
+## Estado
+
+O Setup da v1.3.0a foi compilado e verificado aqui com o Inno Setup 6.7.3
+(instalado por usuário): `FarSightVNC-v1.3.0a-Setup-x64.exe`, 2.995.849 bytes,
+SHA-256 `C03C0633FD5425CA3A192384BC9D18515CCB12472E73EF5067A8E336CC9D8D86`,
+FileVersion e ProductVersion `1.3.0a`, manifesto `asInvoker`.
+
+Isso cobre apenas o passo 1 da validação abaixo. Instalar, reinstalar e
+desinstalar **não** foram executados: faltam os passos 2 a 5, em VM ou conta
+descartável. Um Setup compilado não é um Setup aceito.
+
 ## Validação antes de publicar
 
 1. Compile o Setup com o shipping exato da versão e guarde o SHA-256 emitido.

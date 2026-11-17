@@ -31,11 +31,18 @@ MinVersion=10.0.10240
 WizardStyle=modern
 LicenseFile={#PayloadDir}\LICENSE.txt
 UninstallDisplayIcon={app}\fsvncviewer.exe
-SetupIconFile=..\..\assets\icons\logo-far-sigh-vnc.ico
+; Dedicated Setup icon: the application icon is a 1.6 MB file whose two
+; entries are 1024x1024 PNGs declared as 256x256, which Inno refuses as
+; too large. This one carries the same artwork at 16-256 px with real alpha.
+SetupIconFile=..\..\assets\icons\logo-far-sigh-vnc-setup.ico
 OutputDir={#InstallerOutputDir}
 OutputBaseFilename=FarSightVNC-v{#AppVersion}-Setup-x64
 VersionInfoVersion={#NumericVersion}
-VersionInfoProductVersion={#AppVersion}
+; Inno requires a numeric product version here; the readable "1.3.0a" goes in
+; the text directives, so Setup shows the same string as the executables.
+VersionInfoProductVersion={#NumericVersion}
+VersionInfoTextVersion={#AppVersion}
+VersionInfoProductTextVersion={#AppVersion}
 Compression=lzma2
 SolidCompression=yes
 CloseApplications=no
