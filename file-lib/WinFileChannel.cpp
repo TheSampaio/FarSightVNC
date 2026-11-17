@@ -27,9 +27,10 @@
 WinFileChannel::WinFileChannel(const TCHAR *pathName,
                                DesiredAccess dAcc,
                                FileMode fMode,
-                               bool sharedToRead)
+                               bool sharedToRead,
+                               bool refuseReparsePoint)
 {
-  m_winFile.open(pathName, dAcc, fMode, sharedToRead);
+  m_winFile.open(pathName, dAcc, fMode, sharedToRead, refuseReparsePoint);
 }
 
 WinFileChannel::~WinFileChannel()

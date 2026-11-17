@@ -32,9 +32,11 @@ class WinFileChannel : public FileChannel
 {
 public:
   // Creates a channel with opens or creates a file with desired access.
-  // See WinFile for detail.
+  // See WinFile for detail, including what refuseReparsePoint is for: pass it
+  // for a path a remote peer had a say in, so a planted symlink or junction
+  // cannot redirect the write.
   WinFileChannel(const TCHAR *pathName, DesiredAccess dAcc, FileMode fMode,
-                 bool sharedToRead = true);
+                 bool sharedToRead = true, bool refuseReparsePoint = false);
   ~WinFileChannel();
 
   // Inherited from FileChannel.

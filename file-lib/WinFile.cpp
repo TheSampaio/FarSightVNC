@@ -35,10 +35,11 @@ WinFile::WinFile()
 WinFile::WinFile(const TCHAR *pathToFile,
                  DesiredAccess dAcc,
                  FileMode fMode,
-                 bool shareToRead)
+                 bool shareToRead,
+                 bool refuseReparsePoint)
 : m_hFile(INVALID_HANDLE_VALUE)
 {
-  open(pathToFile, dAcc, fMode, shareToRead);
+  open(pathToFile, dAcc, fMode, shareToRead, refuseReparsePoint);
 }
 
 WinFile::~WinFile()
@@ -49,7 +50,8 @@ WinFile::~WinFile()
 void WinFile::open(const TCHAR *pathToFile,
                    DesiredAccess dAcc,
                    FileMode fMode,
-                   bool shareToRead)
+                   bool shareToRead,
+                   bool refuseReparsePoint)
 {
   m_pathToFile.setString(pathToFile);
 
@@ -98,15 +100,38 @@ void WinFile::open(const TCHAR *pathToFile,
     shareMode |= FILE_SHARE_READ;
   }
 
+  DWORD flagsAndAttributes = FILE_ATTRIBUTE_NORMAL;
+  if (refuseReparsePoint) {
+    // Open the link itself instead of what it points at, so the open cannot
+    // be redirected. The flag is a no-op on a path that is not a reparse
+    // point, and the handle is checked below.
+    flagsAndAttributes |= FILE_FLAG_OPEN_REPARSE_POINT;
+  }
+
   m_hFile = CreateFile(m_pathToFile.getString(),
                        desiredAccess,
                        shareMode,
                        0,
                        creationDisposition,
-                       FILE_ATTRIBUTE_NORMAL,
+                       flagsAndAttributes,
                        0);
   if (!isValid()) {
     throw SystemException();
+  }
+
+  if (refuseReparsePoint) {
+    // Asking the handle, not the path, is what makes this free of a race: the
+    // answer describes the object that was just opened.
+    BY_HANDLE_FILE_INFORMATION info;
+    if (!GetFileInformationByHandle(m_hFile, &info)) {
+      DWORD errCode = GetLastError();
+      close();
+      throw SystemException(errCode);
+    }
+    if ((info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0) {
+      close();
+      throw SystemException(ERROR_ACCESS_DENIED);
+    }
   }
 
   if (append) {

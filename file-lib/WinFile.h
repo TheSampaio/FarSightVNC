@@ -63,15 +63,22 @@ enum FileMode
 class WinFile
 {
 public:
+  // When refuseReparsePoint is true the file is opened without traversing a
+  // reparse point, and the open fails if the path turns out to be one. Pass it
+  // for a path that a remote peer had a say in: a symlink or a junction
+  // planted there would otherwise redirect the write to any file the user can
+  // write, which is what the containment check on the path cannot see, because
+  // GetFullPathName does not resolve reparse points. The check is made on the
+  // open handle, so there is no window between the test and the open.
   WinFile(const TCHAR *pathToFile, DesiredAccess dAcc, FileMode fMode,
-          bool shareToRead = false);
+          bool shareToRead = false, bool refuseReparsePoint = false);
   WinFile();
 
   virtual ~WinFile();
 
   // Call this function after this object creation by the default constructor.
   void open(const TCHAR *pathToFile, DesiredAccess dAcc, FileMode fMode,
-            bool shareToRead = false);
+            bool shareToRead = false, bool refuseReparsePoint = false);
 
   // Closes handle to a file if handle is valid.
   void close();
