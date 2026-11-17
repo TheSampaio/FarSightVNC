@@ -22,7 +22,11 @@
 //-------------------------------------------------------------------------
 //
 
+// Modified for FarSightVNC on 2026-11-16: reading the CF_HDROP file list of
+// the local clipboard (clipboard file paste).
+
 #include "WinClipboard.h"
+#include "DropFilesBuffer.h"
 
 WinClipboard::WinClipboard(HWND hwnd) 
   : m_hndClipboard(0), m_hWnd(hwnd)
@@ -100,6 +104,37 @@ bool WinClipboard::setString(const StringStorage *serverClipboard)
       return true;
   }
   return false;
+}
+
+bool WinClipboard::hasFileList() const
+{
+  return IsClipboardFormatAvailable(CF_HDROP) != FALSE;
+}
+
+bool WinClipboard::getFileList(std::vector<StringStorage> *paths)
+{
+  paths->clear();
+
+  if (!IsClipboardFormatAvailable(CF_HDROP) || !OpenClipboard(m_hWnd)) {
+    return false;
+  }
+
+  bool result = false;
+  HANDLE hndData = GetClipboardData(CF_HDROP);
+  if (hndData != NULL) {
+    SIZE_T size = GlobalSize(hndData);
+    const void *data = GlobalLock(hndData);
+    if (data != 0) {
+      result = DropFilesBuffer::parse(data, size, paths);
+      GlobalUnlock(hndData);
+    }
+  }
+  CloseClipboard();
+
+  if (!result) {
+    paths->clear();
+  }
+  return result && !paths->empty();
 }
 
 StringStorage WinClipboard::addCR(const StringStorage *str)

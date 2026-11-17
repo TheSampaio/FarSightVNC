@@ -7,6 +7,7 @@ add_library(win-system STATIC
   CurrentConsoleProcess.cpp
   DibSection.cpp
   DynamicLibrary.cpp
+  DropFilesBuffer.cpp
   EmulatedAnonymousPipeFactory.cpp
   Environment.cpp
   Impersonator.cpp

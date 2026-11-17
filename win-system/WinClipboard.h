@@ -25,7 +25,12 @@
 #ifndef _WIN_CLIPBOARD_H_
 #define _WIN_CLIPBOARD_H_
 
+// Modified for FarSightVNC on 2026-11-16: reading the CF_HDROP file list of
+// the local clipboard (clipboard file paste).
+
 #include "util/CommonHeader.h"
+
+#include <vector>
 
 class WinClipboard
 {
@@ -41,6 +46,16 @@ public:
 
   // update windows clipboard
   bool setString(const StringStorage *str);
+
+  // True when the clipboard holds a file list (CF_HDROP), which is what
+  // Explorer puts there when files are copied. Does not open the clipboard.
+  bool hasFileList() const;
+
+  // Reads the file list (CF_HDROP) of the clipboard. Returns false when the
+  // clipboard holds no file list or could not be read; 'paths' then holds
+  // nothing. The paths are the absolute local paths of the copied files and
+  // folders, exactly as Explorer wrote them.
+  bool getFileList(std::vector<StringStorage> *paths);
 
 protected:
   static const TCHAR CR = _T('\r');

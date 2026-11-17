@@ -308,6 +308,7 @@
     <ClCompile Include="CurrentConsoleProcess.cpp" />
     <ClCompile Include="DibSection.cpp" />
     <ClCompile Include="DynamicLibrary.cpp" />
+    <ClCompile Include="DropFilesBuffer.cpp" />
     <ClCompile Include="EmulatedAnonymousPipeFactory.cpp" />
     <ClCompile Include="Environment.cpp" />
     <ClCompile Include="Impersonator.cpp" />
@@ -360,6 +361,7 @@
     <ClInclude Include="CurrentConsoleProcess.h" />
     <ClInclude Include="DibSection.h" />
     <ClInclude Include="DynamicLibrary.h" />
+    <ClInclude Include="DropFilesBuffer.h" />
     <ClInclude Include="EmulatedAnonymousPipeFactory.h" />
     <ClInclude Include="Environment.h" />
     <ClInclude Include="Impersonator.h" />
