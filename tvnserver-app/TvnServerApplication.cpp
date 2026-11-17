@@ -83,14 +83,19 @@ int TvnServerApplication::run()
     return 1;
   }
 
-  // check the HKLM\SOFTWARE\TightVNC\Server\ has ServiceOnly subsection and exit if found
+  // check the HKLM\<RegistryPaths::SERVER_PATH>\ has ServiceOnly subsection and
+  // exit if found. The path is derived from RegistryPaths::SERVER_PATH instead of
+  // being hardcoded: with a hardcoded TightVNC path, the TightVNC server already
+  // installed on the owner's machine would block FarSightVNC's application mode.
   // to create the key and set acces rights run the PS script:
-  // New-Item -Path HKLM:\SOFTWARE\TightVNC\Server -Name ServiceOnly
-  // $ACL = Get-Acl HKLM:\SOFTWARE\TightVNC\Server\ServiceOnly
+  // New-Item -Path HKLM:\SOFTWARE\FarSightVNC\Server -Name ServiceOnly
+  // $ACL = Get-Acl HKLM:\SOFTWARE\FarSightVNC\Server\ServiceOnly
   // $AccessRule = new-object System.Security.AccessControl.RegistryAccessRule("Users", "ReadKey", "None", "None", "Allow")
   // $ACL.SetAccessRule($AccessRule)
-  // $ACL | Set-Acl HKLM:\SOFTWARE\TightVNC\Server\ServiceOnly
-  RegistryKey key(HKEY_LOCAL_MACHINE, _T("SOFTWARE\\TightVNC\\Server\\ServiceOnly"), false);
+  // $ACL | Set-Acl HKLM:\SOFTWARE\FarSightVNC\Server\ServiceOnly
+  StringStorage serviceOnlyKeyPath;
+  serviceOnlyKeyPath.format(_T("%s\\ServiceOnly"), RegistryPaths::SERVER_PATH);
+  RegistryKey key(HKEY_LOCAL_MACHINE, serviceOnlyKeyPath.getString(), false);
   if (key.isOpened()) {
     MessageBox(0,
       _T("Couldn't run the server in Application mode"),
