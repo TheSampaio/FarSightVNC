@@ -21,6 +21,8 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-17: client-side file transfer policy (ask, allow, never).
+//
 
 #ifndef _FILE_TRANSFER_CAPABILITY_H_
 #define _FILE_TRANSFER_CAPABILITY_H_
@@ -42,9 +44,47 @@ public:
   virtual ~FileTransferCapability();
 
   //
-  // This method return true, if server support File Transfer.
+  // Client-side switch for file transfer (audit finding D-08): until now the
+  // server alone decided whether the viewer offered file transfer.
+  //
+  // POLICY_ASK    The capability is advertised, but file transfer is not used
+  //               until the operator confirms it once in the session.
+  // POLICY_ALLOW  File transfer works whenever the server supports it.
+  // POLICY_NEVER  The capability is not advertised at all, which is how an
+  //               optional RFB feature is switched off: a TightVNC server
+  //               handles a client that does not ask for file transfer, and
+  //               file transfer is simply absent (isEnabled() is false).
+  //
+  // Must be set before addCapabilities().
+  //
+  enum Policy {
+    POLICY_ASK,
+    POLICY_ALLOW,
+    POLICY_NEVER
+  };
+  void setPolicy(Policy policy);
+  Policy getPolicy() const;
+
+  //
+  // This method return true, if server support File Transfer and the policy
+  // does not switch it off.
   //
   virtual bool isEnabled();
+
+  //
+  // The answer of the operator for this session (POLICY_ASK only). It lives
+  // as long as this object, which is one session: a reconnection asks again.
+  // These methods are for the window thread.
+  //
+  // True when file transfer can be offered: enabled and not declined.
+  bool isAvailable();
+  // True when file transfer may be used right now without asking anything.
+  bool isPermitted();
+  // True when the operator must still be asked (POLICY_ASK, no answer yet).
+  bool needsConsent();
+  // Stores the answer. The question is asked at most once per session, so a
+  // server can never make the viewer ask again.
+  void setConsent(bool granted);
 
   //
   // This method must called from event onConnected() in CoreEventsAdapter.
@@ -73,6 +113,15 @@ protected:
   FileTransferMessageProcessor m_ftMessageProcessor;
 
   FileTransferCore m_ftCore;
+
+  enum Consent {
+    CONSENT_UNDECIDED,
+    CONSENT_GRANTED,
+    CONSENT_DENIED
+  };
+
+  Policy m_policy;
+  Consent m_consent;
 };
 
 #endif

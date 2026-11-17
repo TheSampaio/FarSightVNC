@@ -21,6 +21,7 @@
 // Modified for FarSightVNC on 2026-11-14: Local shortcuts (keys never sent to the server) in Input.
 // Modified for FarSightVNC on 2026-11-14: the Local shortcuts note says that only the bare key is local and that Numpad keys depend on Num Lock.
 // Modified for FarSightVNC on 2026-11-16: Add key... takes the key-down through a swallowing keyboard hook (a screenshot tool no longer fires during the capture).
+// Modified for FarSightVNC on 2026-11-17: File transfer policy (ask, allow, never) in Input.
 //
 
 #include "SettingsSections.h"
@@ -56,6 +57,11 @@ const wchar_t kConnectionSubtitle[] =
   L"options it was last used with.";
 const wchar_t kInputSubtitle[] =
   L"Keyboard, mouse and clipboard options of new connections.";
+const wchar_t kFileTransferNote[] =
+  L"Ask: the File Transfer window, which lists the remote folders as it opens, and the paste "
+  L"of files with Ctrl+V stay off until you confirm once in the session. Allow: they work "
+  L"whenever the remote computer supports them. Never: file transfer is not announced to the "
+  L"remote computer, so it is unavailable and the paste of files is off.";
 const wchar_t kDisplaySubtitle[] = L"How the remote screen is drawn.";
 const wchar_t kGeneralSubtitle[] = L"Toolbar, history, listening mode and logging.";
 const wchar_t kUpdatesSubtitle[] = L"FarSightVNC can check GitHub for new versions.";
@@ -127,7 +133,10 @@ enum ControlId
   CTL_LICENSE,
   CTL_LOCAL_KEYS,
   CTL_LOCAL_ADD,
-  CTL_LOCAL_CLEAR
+  CTL_LOCAL_CLEAR,
+  CTL_FT_ASK,
+  CTL_FT_ALLOW,
+  CTL_FT_NEVER
 };
 
 std::wstring toWide(const TCHAR *text)
@@ -481,12 +490,14 @@ class ConnectionOptionsSection : public SettingsSection
 public:
   ConnectionOptionsSection(SettingsSectionId id, ConnectionConfig *defaults)
   : m_id(id),
+    m_form(0),
     m_defaults(defaults)
   {
   }
 
   virtual void build(SettingsForm *form)
   {
+    m_form = form;
     if (m_id == SETTINGS_CONNECTION) {
       buildConnection(form);
     } else {
@@ -494,11 +505,22 @@ public:
     }
     m_options.bind([form](UINT controlId) { return form->control(controlId); });
     m_options.load(m_defaults, false);
+    if (m_id == SETTINGS_INPUT) {
+      // Not part of ConnectionOptionsForm, which the Options dialog shares.
+      check(form->control(CTL_FT_ASK + m_defaults->getFileTransferPolicy()), true);
+    }
   }
 
   virtual void onCommand(UINT controlId, UINT notification)
   {
     if (m_localKeys.onCommand(controlId, notification)) {
+      return;
+    }
+    if (controlId >= CTL_FT_ASK && controlId <= CTL_FT_NEVER) {
+      if (notification == BN_CLICKED && isChecked(m_form->control(controlId))) {
+        m_defaults->setFileTransferPolicy(controlId - CTL_FT_ASK);
+        save();
+      }
       return;
     }
     if (m_options.onCommand(controlId, notification)) {
@@ -546,6 +568,11 @@ private:
     form->header(L"Restrictions");
     form->checkBox(IDC_CVIEWONLY, L"View only (keyboard and mouse are not sent)");
     form->checkBox(IDC_CDISCLIP, L"Disable clipboard transfer");
+    form->header(L"File transfer");
+    form->radio(CTL_FT_ASK, L"Ask once per session before using it (recommended)", true);
+    form->radio(CTL_FT_ALLOW, L"Allow, without asking", false);
+    form->radio(CTL_FT_NEVER, L"Never (not offered to the remote computer)", false);
+    form->note(kFileTransferNote);
     form->header(L"Mouse");
     form->checkBox(IDC_CSWAPMOUSE, L"Swap the right and middle buttons");
     m_localKeys.build(form);
@@ -558,6 +585,7 @@ private:
   }
 
   SettingsSectionId m_id;
+  SettingsForm *m_form;
   ConnectionConfig *m_defaults;
   ConnectionOptionsForm m_options;
   // Input only.

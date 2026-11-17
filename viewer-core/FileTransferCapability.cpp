@@ -21,6 +21,8 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-17: client-side file transfer policy (ask, allow, never).
+//
 
 
 #include "FileTransferCapability.h"
@@ -40,7 +42,9 @@ FileTransferCapability::FileTransferCapability(Logger *logger)
   m_ftCore(&m_logWriter,
            &m_ftRequestSender,
            &m_ftReplyBuffer,
-           &m_ftMessageProcessor)
+           &m_ftMessageProcessor),
+  m_policy(POLICY_ASK),
+  m_consent(CONSENT_UNDECIDED)
 {
   m_ftMessageProcessor.addListener(&m_ftReplyBuffer);
 }
@@ -49,9 +53,48 @@ FileTransferCapability::~FileTransferCapability()
 {
 }
 
+void FileTransferCapability::setPolicy(Policy policy)
+{
+  m_policy = policy;
+}
+
+FileTransferCapability::Policy FileTransferCapability::getPolicy() const
+{
+  return m_policy;
+}
+
 bool FileTransferCapability::isEnabled()
 {
+  // Under POLICY_NEVER nothing was advertised, so the server cannot have
+  // enabled file transfer; the explicit test keeps the answer false even if
+  // the supported operations were filled in some other way.
+  if (m_policy == POLICY_NEVER) {
+    return false;
+  }
   return m_ftCore.getSupportedOps().isFileListSupported();
+}
+
+bool FileTransferCapability::isAvailable()
+{
+  return isEnabled() && !(m_policy == POLICY_ASK && m_consent == CONSENT_DENIED);
+}
+
+bool FileTransferCapability::isPermitted()
+{
+  if (!isEnabled()) {
+    return false;
+  }
+  return m_policy == POLICY_ALLOW || m_consent == CONSENT_GRANTED;
+}
+
+bool FileTransferCapability::needsConsent()
+{
+  return isEnabled() && m_policy == POLICY_ASK && m_consent == CONSENT_UNDECIDED;
+}
+
+void FileTransferCapability::setConsent(bool granted)
+{
+  m_consent = granted ? CONSENT_GRANTED : CONSENT_DENIED;
 }
 
 void FileTransferCapability::setOutput(RfbOutputGate *output)
@@ -76,6 +119,13 @@ void FileTransferCapability::onServerMessage(UINT32 code, DataInputStream *input
 
 void FileTransferCapability::addCapabilities(CapabilitiesManager *capabilities)
 {
+  // Not announcing a capability is the protocol-sanctioned way to switch an
+  // optional feature off: the server then neither enables file transfer nor
+  // sends any of its messages, and the connection is otherwise unchanged.
+  if (m_policy == POLICY_NEVER) {
+    return;
+  }
+
   // Client-to-Server messages:
   capabilities->addClientMsgCapability(FTMessage::COMPRESSION_SUPPORT_REQUEST,
                                   VendorDefs::TIGHTVNC,

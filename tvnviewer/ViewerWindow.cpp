@@ -41,6 +41,7 @@
 // Modified for FarSightVNC on 2026-11-14: a key Windows already has down when the hook sees it first stays with Windows until its key-up.
 // Modified for FarSightVNC on 2026-11-14: the local keys of the settings are applied to the keyboard hook.
 // Modified for FarSightVNC on 2026-11-16: keyboard release toggle (toolbar, full screen pill and session menu) that hands every key back to the local machine.
+// Modified for FarSightVNC on 2026-11-17: file transfer policy (ask once per session, allow, never).
 //
 
 #include "config-lib/IniFileSettingsManager.h"
@@ -69,6 +70,7 @@ ViewerWindow::ViewerWindow(WindowsApplication *application,
   m_isFullScr(false),
   m_covered(false),
   m_ftDialog(0),
+  m_askingFileTransfer(false),
   m_clipboardFiles(0),
   m_viewerCore(0),
   m_fileTransfer(0),
@@ -147,7 +149,19 @@ bool ViewerWindow::isFilePasteSupported() const
 
 bool ViewerWindow::isFileTransferSupported() const
 {
-  return m_fileTransfer != 0 && m_fileTransfer->isEnabled();
+  // The clipboard file paste is gated by the same file transfer policy, and
+  // that is deliberate. A paste starts on this computer, with the operator's
+  // own files, which differs from the listing of the remote folders that
+  // D-08 is about. But it runs on the file transfer core, so for as long as
+  // it lasts the server's file transfer replies reach the same parsers, and
+  // it cannot work at all without the file transfer capability: with the
+  // policy "never" the capability is not announced, the server cannot
+  // enable it and the paste is never taken over (Ctrl+V reaches the remote
+  // application unchanged). With "ask" the first paste asks the same single
+  // question as the file transfer window (startFilePaste()); a declined
+  // question also lets Ctrl+V through unchanged, because nothing is
+  // available any more. With "allow" nothing changes.
+  return m_fileTransfer != 0 && m_fileTransfer->isAvailable();
 }
 
 bool ViewerWindow::isFilePasteInProgress() const
@@ -165,6 +179,12 @@ bool ViewerWindow::isFileTransferBusy() const
 bool ViewerWindow::startFilePaste(const std::vector<StringStorage> *localFiles)
 {
   if (m_clipboardFiles == 0 || m_fileTransfer == 0) {
+    return false;
+  }
+  // The same once-per-session question as the file transfer window. When it
+  // is declined the paste is not started and Ctrl+V reaches the remote
+  // application.
+  if (!confirmFileTransfer()) {
     return false;
   }
   if (m_clipboardPaste.get() == 0) {
@@ -236,16 +256,25 @@ void ViewerWindow::enableUserElements()
   updateToolbar();
 }
 
+void ViewerWindow::updateFileTransferUi()
+{
+  // Unavailable (grayed out) when the server does not offer file transfer,
+  // when the policy is "never" (then nothing was announced and the server
+  // cannot offer it) or when the operator declined it for this session.
+  bool bFileTransfer = m_fileTransfer && m_fileTransfer->isAvailable();
+
+  UINT enableMenu = static_cast<UINT>(!(bFileTransfer && !m_conConf->isViewOnly()));
+  m_menu.enableMenuItem(IDS_TB_TRANSFER, enableMenu);
+  updateToolbar();
+}
+
 bool ViewerWindow::viewerCoreSettings()
 {
   if (!m_viewerCore) {
     return false;
   }
 
-  bool bFileTransfer = m_fileTransfer && m_fileTransfer->isEnabled();
-
-  UINT enableMenu = static_cast<UINT>(!(bFileTransfer && !m_conConf->isViewOnly()));
-  m_menu.enableMenuItem(IDS_TB_TRANSFER, enableMenu);
+  updateFileTransferUi();
 
   m_viewerCore->allowCopyRect(m_conConf->isCopyRectAllowed());
   m_viewerCore->setPreferredEncoding(m_conConf->getPreferredEncoding());
@@ -821,6 +850,40 @@ bool ViewerWindow::onCommand(WPARAM wParam, LPARAM lParam)
   return false;
 }
 
+bool ViewerWindow::confirmFileTransfer()
+{
+  if (m_fileTransfer == 0 || !m_fileTransfer->isEnabled()) {
+    return false;
+  }
+  if (m_fileTransfer->isPermitted()) {
+    return true;
+  }
+  // Policy "ask". The question comes only from an action of the operator
+  // (the file transfer window, a paste of files) and is asked once: the
+  // answer holds for the rest of the session, and nothing a server sends can
+  // cause another question.
+  if (!m_fileTransfer->needsConsent() || m_askingFileTransfer) {
+    return false;
+  }
+  m_askingFileTransfer = true;
+  int answer = MessageBox(getHWnd(),
+                          _T("Allow file transfer with this remote computer for")
+                          _T(" this session?\n\n")
+                          _T("The file transfer window lists the remote folders as")
+                          _T(" soon as it opens, and a paste of files uses the same")
+                          _T(" channel. File and folder names come from the remote")
+                          _T(" computer. Allow it only for a computer you trust.\n\n")
+                          _T("The answer holds until this session ends. Choose")
+                          _T(" Allow in Settings, Input, File transfer, to skip")
+                          _T(" this question."),
+                          _T("File Transfer"),
+                          MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2);
+  m_askingFileTransfer = false;
+  m_fileTransfer->setConsent(answer == IDYES);
+  updateFileTransferUi();
+  return answer == IDYES;
+}
+
 void ViewerWindow::showFileTransferDialog()
 {
   // The file transfer dialog and a clipboard file paste share one file
@@ -833,7 +896,7 @@ void ViewerWindow::showFileTransferDialog()
     return;
   }
   bool canTransfer = m_fileTransfer != 0 && m_fileTransfer->isEnabled() &&
-                     !m_conConf->isViewOnly();
+                     !m_conConf->isViewOnly() && confirmFileTransfer();
   if (canTransfer) {
     // FIXME: FT check it
     if (m_ftDialog != 0) {
@@ -1394,7 +1457,7 @@ SessionToolbarState ViewerWindow::toolbarState() const
   state.keyboardReleased = m_keyboardReleased;
 
   state.enabled[SESSION_ACTION_FILE_TRANSFER] = canType && m_fileTransfer != 0 &&
-                                                m_fileTransfer->isEnabled();
+                                                m_fileTransfer->isAvailable();
   state.enabled[SESSION_ACTION_PAUSE] = m_isConnected;
   state.enabled[SESSION_ACTION_REFRESH] = m_isConnected;
   state.checked[SESSION_ACTION_PAUSE] = m_isPaused;

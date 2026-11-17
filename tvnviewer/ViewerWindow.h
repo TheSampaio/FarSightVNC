@@ -36,6 +36,7 @@
 // Modified for FarSightVNC on 2026-11-11: the Settings page of the shell covers the running session.
 // Modified for FarSightVNC on 2026-11-16: clipboard file paste (Ctrl+V over files copied on the local machine).
 // Modified for FarSightVNC on 2026-11-16: keyboard release toggle (the keys go to the local machine while it is on).
+// Modified for FarSightVNC on 2026-11-17: file transfer policy (ask once per session, allow, never).
 //
 
 #ifndef _VIEWER_WINDOW_H_
@@ -210,6 +211,9 @@ protected:
   RemoteViewerCore *m_viewerCore;
   FileTransferCapability *m_fileTransfer;
   FileTransferMainDialog *m_ftDialog;
+  // The file transfer question is on the screen (it is modal and pumps
+  // messages, so it must not be asked a second time meanwhile).
+  bool m_askingFileTransfer;
   // Clipboard file paste; the paste object is created with the first paste
   // of the session, because it needs the remote desktop window.
   ClipboardFilesCapability *m_clipboardFiles;
@@ -293,6 +297,11 @@ private:
   void doSize();
   void doCommand(int iCommand);
   void showFileTransferDialog();
+  // File transfer policy: true when file transfer may be used now. With the
+  // policy "ask" the operator is asked once per session (see the definition).
+  bool confirmFileTransfer();
+  // Menu item and toolbar follow the availability of file transfer.
+  void updateFileTransferUi();
   void showWindow();
   void enableUserElements();
   bool viewerCoreSettings();

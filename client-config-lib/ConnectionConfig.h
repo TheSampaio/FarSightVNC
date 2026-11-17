@@ -44,6 +44,16 @@ public:
   static const int NORMAL_CURSOR = 2;
   static const int SMALL_CURSOR = 3;
 
+  // File transfer policy (audit finding D-08), who decides whether the
+  // viewer offers file transfer. The default is FILE_TRANSFER_ASK.
+  // ASK:   offered, but used only after the operator confirms it once in
+  //        the session.
+  // ALLOW: offered and used whenever the server supports it.
+  // NEVER: not announced to the server at all.
+  static const int FILE_TRANSFER_ASK = 0;
+  static const int FILE_TRANSFER_ALLOW = 1;
+  static const int FILE_TRANSFER_NEVER = 2;
+
 public:
   ConnectionConfig();
   ConnectionConfig(const ConnectionConfig &conConfig);
@@ -160,6 +170,12 @@ public:
   // Gets local cursor shape
   int getLocalCursorShape();
 
+  // Sets file transfer policy (one of FILE_TRANSFER_*; any other value
+  // becomes FILE_TRANSFER_ASK)
+  void setFileTransferPolicy(int policy);
+  // Returns file transfer policy
+  int getFileTransferPolicy();
+
   //
   // Serialization / deserialization methods
   //
@@ -236,6 +252,9 @@ protected:
   bool m_ignoreShapeUpdates;
 
   int m_localCursor;
+
+  // File transfer policy (FILE_TRANSFER_*)
+  int m_fileTransferPolicy;
 
   // Critical section
   mutable LocalMutex m_cs;

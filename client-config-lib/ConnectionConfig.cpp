@@ -40,7 +40,8 @@ ConnectionConfig::ConnectionConfig()
   m_customCompressionLevel(-1), m_jpegCompressionLevel(6),
   m_fitWindow(true), m_requestShapeUpdates(true),
   m_ignoreShapeUpdates(false), m_scaleNumerator(1), m_scaleDenominator(1),
-  m_localCursor(DOT_CURSOR), m_allowedCopyRect(true)
+  m_localCursor(DOT_CURSOR), m_allowedCopyRect(true),
+  m_fileTransferPolicy(FILE_TRANSFER_ASK)
 {
 }
 
@@ -72,6 +73,7 @@ ConnectionConfig& ConnectionConfig::operator=(const ConnectionConfig& other)
   bool requestShapeUpdates;
   bool ignoreShapeUpdates;
   int localCursor;
+  int fileTransferPolicy;
 
   {
     AutoLock lockOther(&other.m_cs);
@@ -92,6 +94,7 @@ ConnectionConfig& ConnectionConfig::operator=(const ConnectionConfig& other)
     requestShapeUpdates = other.m_requestShapeUpdates;
     ignoreShapeUpdates = other.m_ignoreShapeUpdates;
     localCursor = other.m_localCursor;
+    fileTransferPolicy = other.m_fileTransferPolicy;
   }
 
   {
@@ -113,6 +116,7 @@ ConnectionConfig& ConnectionConfig::operator=(const ConnectionConfig& other)
     m_requestShapeUpdates = requestShapeUpdates;
     m_ignoreShapeUpdates = ignoreShapeUpdates;
     m_localCursor = localCursor;
+    m_fileTransferPolicy = fileTransferPolicy;
   }
   return *this;
 }
@@ -383,6 +387,30 @@ int ConnectionConfig::getLocalCursorShape()
   return m_localCursor;
 }
 
+void ConnectionConfig::setFileTransferPolicy(int policy)
+{
+  switch (policy) {
+  case FILE_TRANSFER_ASK:
+  case FILE_TRANSFER_ALLOW:
+  case FILE_TRANSFER_NEVER:
+    break;
+  default:
+    // A value this version does not know is never read as "allow".
+    policy = FILE_TRANSFER_ASK;
+  }
+
+  {
+    AutoLock l(&m_cs);
+    m_fileTransferPolicy = policy;
+  }
+}
+
+int ConnectionConfig::getFileTransferPolicy()
+{
+  AutoLock l(&m_cs);
+  return m_fileTransferPolicy;
+}
+
 bool ConnectionConfig::saveToStorage(SettingsManager *sm) const
 {
   AutoLock l(&m_cs);
@@ -411,6 +439,10 @@ bool ConnectionConfig::saveToStorage(SettingsManager *sm) const
   TEST_FAIL(sm->setInt(_T("scale_num"),            m_scaleNumerator), saveAllOk);
 
   TEST_FAIL(sm->setInt(_T("local_cursor_shape"),   m_localCursor), saveAllOk);
+
+  // FarSightVNC extension, unknown to the original TightVNC Viewer, which
+  // ignores the entry (a .vnc file and the registry key both keep working).
+  TEST_FAIL(sm->setInt(_T("farsight_filetransfer"), m_fileTransferPolicy), saveAllOk);
 
   return saveAllOk;
 }
@@ -454,6 +486,24 @@ bool ConnectionConfig::loadFromStorage(SettingsManager *sm)
   TEST_FAIL(sm->getInt(_T("scale_num"),            &m_scaleNumerator), loadAllOk);
 
   TEST_FAIL(sm->getInt(_T("local_cursor_shape"),   &m_localCursor), loadAllOk);
+
+  // FarSightVNC extension. A configuration written by the original TightVNC
+  // Viewer or by an earlier FarSightVNC does not carry it: that is not a
+  // load error, and the value stays as it was (FILE_TRANSFER_ASK in a new
+  // ConnectionConfig, or what an earlier layer such as the defaults of new
+  // connections set). A value that is not a known policy means ASK.
+  int fileTransferPolicy = m_fileTransferPolicy;
+  if (sm->getInt(_T("farsight_filetransfer"), &fileTransferPolicy)) {
+    switch (fileTransferPolicy) {
+    case FILE_TRANSFER_ASK:
+    case FILE_TRANSFER_ALLOW:
+    case FILE_TRANSFER_NEVER:
+      m_fileTransferPolicy = fileTransferPolicy;
+      break;
+    default:
+      m_fileTransferPolicy = FILE_TRANSFER_ASK;
+    }
+  }
 
   return loadAllOk;
 }

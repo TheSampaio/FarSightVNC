@@ -24,12 +24,28 @@
 // Modified for FarSightVNC on 2026-11-03: a reconnection attempt shows its window while connecting.
 // Modified for FarSightVNC on 2026-11-11: the session window is a child of the given frame (SessionHost).
 // Modified for FarSightVNC on 2026-11-11: a session started in a frame that is already shown (reconnection) shows the "connecting" state.
+// Modified for FarSightVNC on 2026-11-17: the file transfer policy of the connection decides whether file transfer is announced to the server.
 //
 
 #include "ViewerInstance.h"
 
 #include "viewer-core/RemoteViewerCore.h"
 #include "viewer-core/FileTransferCapability.h"
+
+namespace {
+
+FileTransferCapability::Policy toFileTransferPolicy(int policy)
+{
+  switch (policy) {
+  case ConnectionConfig::FILE_TRANSFER_ALLOW:
+    return FileTransferCapability::POLICY_ALLOW;
+  case ConnectionConfig::FILE_TRANSFER_NEVER:
+    return FileTransferCapability::POLICY_NEVER;
+  }
+  return FileTransferCapability::POLICY_ASK;
+}
+
+} // namespace
 
 ViewerInstance::ViewerInstance(WindowsApplication *application,
                                ConnectionData *condata,
@@ -116,8 +132,17 @@ void ViewerInstance::start()
 
   m_vncAuthHandler.addAuthCapability(&m_viewerCore);
 
+  // The policy must be set before the capabilities are announced: with
+  // "never" nothing about file transfer is announced (FileTransferCapability),
+  // and the clipboard file paste, which needs file transfer to stage the
+  // files, is not announced either. The connection is otherwise unchanged.
+  FileTransferCapability::Policy policy =
+    toFileTransferPolicy(m_conConf.getFileTransferPolicy());
+  m_fileTransfer.setPolicy(policy);
   m_fileTransfer.addCapabilities(&m_viewerCore);
-  m_clipboardFiles.addCapabilities(&m_viewerCore);
+  if (policy != FileTransferCapability::POLICY_NEVER) {
+    m_clipboardFiles.addCapabilities(&m_viewerCore);
+  }
 
   if (m_socket) {
     m_viewerCore.start(m_socket,
