@@ -6,7 +6,9 @@
 - Extensão de protocolo é permitida, mas **só como capacidade negociada e opcional**, nunca como requisito. O servidor anuncia, o viewer habilita apenas o que foi anunciado (`RemoteViewerCore::readCapabilities`), e quando a capacidade está ausente o comportamento tem de ser **idêntico ao anterior**, sem erro, sem aviso e sem caminho degradado visível.
 - Toda extensão nova usa a assinatura de fornecedor própria `VendorDefs::FARSIGHT` (`"FSVC"`), nunca `"TGHT"` nem `"STDV"`: `CapsContainer::enable` casa código, fornecedor e nome juntos, e um fornecedor privado impede que um par TightVNC case os mesmos códigos por acidente, hoje ou se o TightVNC passar a usá-los. Códigos novos ficam na faixa `0xFC0004xx` em diante.
 - Funcionalidade que exige as duas pontas FarSightVNC (ex.: colagem de arquivos pelo clipboard) é **dormente** enquanto o remoto for TightVNC. Isso é aceitável; quebrar a conexão com TightVNC não é.
-- **O shipping contém somente o viewer.** Não empacote servidor: ele disputaria o nome de serviço, a porta 5900 e a chave `HKLM\SOFTWARE\TightVNC\Server` com o TightVNC instalado. Mudar isso exige decisão explícita do dono.
+- **O shipping atual contém somente o viewer** (`fsvncviewer.exe` + `fsvncupdater.exe`), mais o Setup opcional como asset separado. Nada do TightVNC instalado é tocado.
+- **Servidor FarSightVNC: autorizado pelo dono em 2026-11-17, com identidade própria e convivendo com o TightVNC.** Ele NUNCA pode disputar recurso com o servidor TightVNC instalado: precisa de nome de serviço próprio, chave de registro própria (não `HKLM\SOFTWARE\TightVNC\Server`), porta padrão própria (não 5900) e regra de firewall própria. Instalar o servidor FarSight não pode desinstalar, reconfigurar, parar nem migrar o TightVNC existente; as duas coisas ficam de pé na mesma máquina. Substituir o TightVNC server exigiria nova decisão explícita do dono.
+- O servidor é asset de instalação separado do viewer: o zip portátil e o manifesto do atualizador continuam com os cinco arquivos na raiz, sem servidor.
 
 ## Versionamento (obrigatório)
 
