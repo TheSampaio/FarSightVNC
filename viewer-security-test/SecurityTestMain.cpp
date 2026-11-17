@@ -49,20 +49,16 @@ void check(bool ok, const char *what)
 // FileNameRulesTest.cpp: util/WindowsFileName.{h,cpp}.
 void runFileNameRulesTests(int *passed, int *failed);
 
-// Hook for the later phases of the security work. Each of the three runners
-// below belongs to one worker and to one new .cpp file in this directory; none
-// of them exists yet, so none of them is declared or called yet. A worker that
-// adds its file:
-//   1. adds the source to viewer-security-test.vcxproj (and to its filters
-//      file, if one has been added by then) and to CMakeLists.txt;
-//   2. declares its runner next to runFileNameRulesTests above;
-//   3. adds one RUN_AREA line for it in main below.
-// The runners, in the order the areas were planned:
-//   void runFileTransferPathTests(int *passed, int *failed);  // FileTransferPathTest.cpp
-//   void runFileTransferWireTests(int *passed, int *failed);  // FileTransferWireTest.cpp
-//   void runRfbLimitsTests(int *passed, int *failed);         // RfbLimitsTest.cpp
-// Nothing else in this file has to change: the counters, the summary line and
-// the exit code already cover every area.
+// FileTransferPathTest.cpp: the path rules of the file transfer client.
+void runFileTransferPathTests(int *passed, int *failed);
+
+// FileTransferWireTest.cpp: the lengths and the counts that a file
+// transfer reply carries.
+void runFileTransferWireTests(int *passed, int *failed);
+
+// RfbLimitsTest.cpp: the ceilings on the RFB stream and the checks on the
+// pixel format.
+void runRfbLimitsTests(int *passed, int *failed);
 
 int main()
 {
@@ -71,6 +67,9 @@ int main()
   check(g_failed == 0, "harness: the counters start empty");
 #define RUN_AREA(r) (printf("RUN " #r "\n"), r(&g_passed, &g_failed))
   RUN_AREA(runFileNameRulesTests);
+  RUN_AREA(runFileTransferPathTests);
+  RUN_AREA(runFileTransferWireTests);
+  RUN_AREA(runRfbLimitsTests);
 #undef RUN_AREA
   printf("viewer-security-test: %d passed, %d failed\n", g_passed, g_failed);
   return g_failed == 0 ? 0 : 1;
