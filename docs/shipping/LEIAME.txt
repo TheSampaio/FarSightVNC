@@ -1,16 +1,18 @@
-FarSightVNC Viewer v1.3.0a (alpha)
+FarSightVNC Viewer v1.4.0a (alpha)
 ==================================
 
 Cliente VNC para Windows baseado no TightVNC Viewer 2.8.90.
 Licença: GNU GPL versão 2 ou posterior (ver LICENSE.txt).
-Data: 2026-11-16 - branch develop.
+Data: 2026-11-19 - branch develop.
 
 
 Favoritos fixos na Home, captura de atalhos locais e botão para liberar o
 teclado ao computador local (v1.3.0a). Print Screen é local por padrão e
 pode ser configurado. A colagem de arquivos por Ctrl+V é opcional e exige
 suporte FarSightVNC nas duas pontas; fica dormente em servidores TightVNC.
-Tudo da v1.2.1a continua aqui. Ver O QUE MUDOU NA v1.3.0a abaixo.
+Correções de segurança na transferência de arquivos e um interruptor
+para ela (v1.4.0a). Tudo da v1.3.0a continua aqui. Ver O QUE MUDOU NA
+v1.4.0a abaixo.
 
 
 *** MUDANÇA INCOMPATÍVEL na v1.0.0a (continua valendo) ***
@@ -87,6 +89,39 @@ pode ignorá-lo e manter os arquivos onde estão.
   documento (README.txt, ...) é gravado ali, então um README.txt seu continua
   como está.
 
+
+O QUE MUDOU NA v1.4.0a (segurança da transferência de arquivos)
+---------------------------------------------------------------
+Esta versão é de segurança. Ela corrige falhas encontradas numa auditoria
+do código, a mais grave delas na transferência de arquivos. Nada muda na
+forma de conectar aos servidores TightVNC já instalados.
+
+- A transferência de arquivos agora pergunta uma vez por sessão, na
+  primeira vez que você a usa. Em Settings > Input > Restrictions você
+  escolhe entre perguntar (padrão), sempre permitir ou nunca permitir. Com
+  "nunca", o viewer nem anuncia o recurso ao servidor, e a conexão segue
+  normal em tudo o mais.
+- A mesma pergunta vale para a colagem de arquivos por Ctrl+V, porque ela
+  usa a mesma transferência por baixo. Se você responder que não, o Ctrl+V
+  segue para o programa remoto como sempre.
+- Ao baixar, o nome de cada arquivo enviado pelo servidor passa a ser
+  conferido. Um nome que colocaria o arquivo fora da pasta que você
+  escolheu é recusado e registrado no log. Antes, um servidor hostil ou
+  invadido podia gravar fora dessa pasta, inclusive na pasta de
+  inicialização do Windows, sem nenhum aviso.
+- Baixar por cima de um arquivo existente agora vem com Pular (Skip) como
+  botão padrão, em vez de Sobrescrever, para que um Enter distraído não
+  destrua um arquivo seu.
+- Se o alvo de um download for uma pasta que já existe, o download falha
+  com erro claro em vez de a pasta ser apagada. Se for um atalho de pasta
+  do tipo junção, ele é recusado.
+- Dados malformados vindos do servidor agora encerram a sessão com
+  mensagem, em vez de o viewer seguir lendo o fluxo fora de sincronia.
+  Reconecte normalmente.
+
+O que esta versão NÃO faz: ela não acrescenta criptografia. O protocolo VNC
+usado com os servidores TightVNC continua sem cifragem e sem autenticação
+do servidor. Para rede não confiável, use VPN ou túnel SSH.
 
 O QUE MUDOU NA v1.3.0a (teclado local, favoritos e colagem opcional)
 ------------------------------------------------------------------

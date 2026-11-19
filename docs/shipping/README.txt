@@ -1,4 +1,4 @@
-FarSightVNC Viewer v1.3.0a (alpha)
+FarSightVNC Viewer v1.4.0a (alpha)
 ==================================
 
 VNC client for Windows based on TightVNC Viewer 2.8.90.
@@ -10,7 +10,8 @@ Pinned favorites on Home, local shortcut capture and a button to release
 the keyboard to the local computer (v1.3.0a). Print Screen is local by
 default and configurable. Optional Ctrl+V file paste requires FarSightVNC
 support on both ends; it stays dormant with existing TightVNC servers.
-Everything from v1.2.1a is retained. See CHANGES IN v1.3.0a below.
+Security fixes in file transfer, and a switch for it (v1.4.0a).
+Everything from v1.3.0a is retained. See CHANGES IN v1.4.0a below.
 
 
 *** BREAKING CHANGE in v1.0.0a (still applies) ***
@@ -82,6 +83,38 @@ can ignore it and keep the files where they are.
   (README.txt, ...) is ever written there, so a README.txt of your own stays
   as it is.
 
+
+CHANGES IN v1.4.0a (file transfer security)
+-------------------------------------------
+This is a security release. It fixes problems found in a code audit, the
+most serious of them in file transfer. Nothing changes about how you
+connect to the TightVNC servers you already have.
+
+- File transfer now asks once per session, the first time you use it.
+  Under Settings > Input > Restrictions you choose between asking (the
+  default), always allowing, or never allowing. With "never" the viewer
+  does not even announce the feature to the server, and the connection is
+  normal in every other way.
+- The same question covers pasting files with Ctrl+V, because it uses the
+  same transfer underneath. If you answer no, Ctrl+V goes through to the
+  remote program as usual.
+- When downloading, the name of each file the server sends is now checked.
+  A name that would place the file outside the folder you chose is refused
+  and logged. Before, a hostile or compromised server could write outside
+  that folder, including into your Windows startup folder, with no prompt
+  at all.
+- Downloading over an existing file now has Skip as the default button
+  instead of Overwrite, so a stray Enter cannot destroy a file of yours.
+- If a download target is a folder that already exists, the download fails
+  with a clear error instead of the folder being deleted. If it is a
+  junction, it is refused.
+- Malformed data from the server now ends the session with a message,
+  instead of the viewer carrying on and reading the stream out of step.
+  Just reconnect.
+
+What this release does NOT do: it adds no encryption. The VNC protocol
+used with TightVNC servers still has no encryption and no server
+authentication. On an untrusted network, use a VPN or an SSH tunnel.
 
 CHANGES IN v1.3.0a (local keyboard, favorites and optional file paste)
 --------------------------------------------------------------------
