@@ -21,6 +21,8 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-20: new UI (theme, heading, host line, Show password).
+//
 
 #ifndef _AUTHENTICATION_DIALOG_H_
 #define _AUTHENTICATION_DIALOG_H_
@@ -28,6 +30,7 @@
 #include "gui/BaseDialog.h"
 #include "gui/TextBox.h"
 #include "resource.h"
+#include "DialogTheme.h"
 
 class AuthenticationDialog : public BaseDialog
 {
@@ -45,9 +48,15 @@ protected:
   BOOL onInitDialog();
 
   TextBox m_password;
-  TextBox m_hostname;
   StringStorage m_strPassword;
   StringStorage m_strHost;
+
+private:
+  // Show password: shows or masks the field again with its own mask char.
+  void showPassword(bool show);
+
+  DialogTheme m_theme;
+  WPARAM m_passwordChar;
 };
 
 #endif
