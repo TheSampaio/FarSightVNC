@@ -10,6 +10,7 @@
 
 #include "gui/BaseDialog.h"
 
+#include "DialogTheme.h"
 #include "MarkdownRichEdit.h"
 
 #include <cstdint>
@@ -99,12 +100,6 @@ private:
   // EDIT of the template when msftedit.dll is available.
   void createNotesControl();
   void showNotes();
-  // Colors of the current theme (Light, Dark or Auto) on the dialog.
-  void applyTheme();
-  void deleteBrushes();
-  LRESULT onSubclassMessage(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
-  static LRESULT CALLBACK subclassProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam,
-                                       UINT_PTR id, DWORD_PTR data);
 
   Host *m_host;
   State m_state;
@@ -120,8 +115,8 @@ private:
   bool m_richNotes;
   bool m_notesDirty;
   fsv::update::Document m_notes;
-  HBRUSH m_backgroundBrush;
-  HBRUSH m_fieldBrush;
+  // Colors of the current theme (Light, Dark or Auto) on the dialog.
+  DialogTheme m_theme;
 };
 
 #endif

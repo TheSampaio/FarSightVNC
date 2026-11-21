@@ -10,7 +10,6 @@
 #include "UpdateDialog.h"
 
 #include "resource.h"
-#include "gui/DpiUtils.h"
 #include "gui/d2d/Theme.h"
 #include "win-system/WindowsApplication.h"
 
@@ -65,13 +64,6 @@ const UINT ALL_CONTENT_CONTROLS[] = {
   IDC_UPDATE_PROGRESS, IDC_UPDATE_PROGRESS_TEXT,
 };
 
-const UINT_PTR SUBCLASS_ID = 1;
-
-COLORREF themeColor(ThemeColor color)
-{
-  return RGB((color >> 16) & 0xFF, (color >> 8) & 0xFF, color & 0xFF);
-}
-
 // Plain-text fallback of the release notes for the EDIT control (CRLF).
 std::wstring plainNotes(const fsv::update::Document &document)
 {
@@ -106,15 +98,12 @@ UpdateDialog::UpdateDialog(Host *host)
   m_marquee(false),
   m_owner(0),
   m_richNotes(false),
-  m_notesDirty(true),
-  m_backgroundBrush(0),
-  m_fieldBrush(0)
+  m_notesDirty(true)
 {
 }
 
 UpdateDialog::~UpdateDialog()
 {
-  deleteBrushes();
 }
 
 void UpdateDialog::setOptions(bool autoCheck, bool includePrereleases)
@@ -228,10 +217,23 @@ void UpdateDialog::close()
 
 BOOL UpdateDialog::onInitDialog()
 {
-  HWND window = m_ctrlThis.getWindow();
-  SetWindowSubclass(window, subclassProc, SUBCLASS_ID, reinterpret_cast<DWORD_PTR>(this));
   createNotesControl();
-  applyTheme();
+  // A thin border around the RichEdit: its background is the field color,
+  // which is the dialog color in the light theme.
+  if (m_richNotes) {
+    m_theme.addBorder(IDC_UPDATE_NOTES);
+  }
+  m_theme.setOnApplied([this]() {
+    if (m_richNotes) {
+      m_notesView.setTheme(currentTheme());
+    }
+  });
+  m_theme.setOnDpiChanged([this]() {
+    if (m_richNotes) {
+      m_notesView.refresh(); // font sizes follow the new DPI
+    }
+  });
+  m_theme.attach(m_ctrlThis.getWindow());
   m_notesDirty = true;
   apply();
   // No control takes the focus here: automatic results are shown unfocused.
@@ -320,7 +322,7 @@ BOOL UpdateDialog::onCommand(UINT controlID, UINT notificationID)
 BOOL UpdateDialog::onDestroy()
 {
   WindowsApplication::removeModelessDialog(m_ctrlThis.getWindow());
-  RemoveWindowSubclass(m_ctrlThis.getWindow(), subclassProc, SUBCLASS_ID);
+  m_theme.detach();
   m_richNotes = false; // the RichEdit is destroyed with the dialog
   // Also when the window goes without close() (its owner was destroyed):
   // never keep a handle that Windows may give to another window.
@@ -368,100 +370,6 @@ void UpdateDialog::showNotes()
     setText(IDC_UPDATE_NOTES, plainNotes(m_notes));
     SendDlgItemMessage(m_ctrlThis.getWindow(), IDC_UPDATE_NOTES, EM_SETSEL, 0, 0);
   }
-}
-
-void UpdateDialog::deleteBrushes()
-{
-  if (m_backgroundBrush != 0) {
-    DeleteObject(m_backgroundBrush);
-    m_backgroundBrush = 0;
-  }
-  if (m_fieldBrush != 0) {
-    DeleteObject(m_fieldBrush);
-    m_fieldBrush = 0;
-  }
-}
-
-void UpdateDialog::applyTheme()
-{
-  HWND window = m_ctrlThis.getWindow();
-  const ThemeTokens &tokens = currentTheme();
-  deleteBrushes();
-  m_backgroundBrush = CreateSolidBrush(themeColor(tokens.background));
-  m_fieldBrush = CreateSolidBrush(themeColor(tokens.field));
-  Theme::applyWindowDarkMode(window);
-  Theme::applyControlThemeTree(window);
-  if (m_richNotes) {
-    m_notesView.setTheme(tokens);
-  }
-  RedrawWindow(window, 0, 0, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_FRAME);
-}
-
-LRESULT CALLBACK UpdateDialog::subclassProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam,
-                                            UINT_PTR, DWORD_PTR data)
-{
-  return reinterpret_cast<UpdateDialog *>(data)->onSubclassMessage(hwnd, message, wParam, lParam);
-}
-
-// Theme colors of the dialog and its controls, as in shell/SettingsForm.cpp.
-LRESULT UpdateDialog::onSubclassMessage(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
-{
-  // Not a constant (RegisterWindowMessage), so it cannot be a case label.
-  if (message == Theme::changedMessage()) {
-    applyTheme();
-    return 0;
-  }
-  const ThemeTokens &tokens = currentTheme();
-  switch (message) {
-  case WM_CTLCOLORDLG:
-    return reinterpret_cast<LRESULT>(m_backgroundBrush);
-  case WM_CTLCOLORSTATIC:
-  case WM_CTLCOLORBTN:
-  case WM_CTLCOLOREDIT: {
-    // The read-only EDIT of the notes (fallback) sends WM_CTLCOLORSTATIC.
-    const bool field = message == WM_CTLCOLOREDIT ||
-                       GetDlgCtrlID(reinterpret_cast<HWND>(lParam)) == IDC_UPDATE_NOTES;
-    HDC dc = reinterpret_cast<HDC>(wParam);
-    SetTextColor(dc, themeColor(tokens.text));
-    SetBkColor(dc, themeColor(field ? tokens.field : tokens.background));
-    return reinterpret_cast<LRESULT>(field ? m_fieldBrush : m_backgroundBrush);
-  }
-  case WM_NOTIFY: {
-    // Check boxes are drawn by Theme in the dark theme (readable labels).
-    const NMHDR *header = reinterpret_cast<const NMHDR *>(lParam);
-    if (header != 0 && header->code == NM_CUSTOMDRAW &&
-        Theme::customDrawButton(header->hwndFrom, reinterpret_cast<void *>(lParam))) {
-      return CDRF_SKIPDEFAULT;
-    }
-    break;
-  }
-  case WM_DPICHANGED: {
-    LRESULT result = DefSubclassProc(hwnd, message, wParam, lParam);
-    if (m_richNotes) {
-      m_notesView.refresh(); // font sizes follow the new DPI
-    }
-    return result;
-  }
-  case WM_PAINT: {
-    // A thin border around the RichEdit: its background is the field color,
-    // which is the dialog color in the light theme.
-    LRESULT result = DefSubclassProc(hwnd, message, wParam, lParam);
-    HWND notes = GetDlgItem(hwnd, IDC_UPDATE_NOTES);
-    if (m_richNotes && notes != 0 && IsWindowVisible(notes)) {
-      RECT rect;
-      GetWindowRect(notes, &rect);
-      MapWindowPoints(0, hwnd, reinterpret_cast<POINT *>(&rect), 2);
-      InflateRect(&rect, 1, 1);
-      HDC dc = GetDC(hwnd);
-      HBRUSH border = CreateSolidBrush(themeColor(tokens.border));
-      FrameRect(dc, &rect, border);
-      DeleteObject(border);
-      ReleaseDC(hwnd, dc);
-    }
-    return result;
-  }
-  }
-  return DefSubclassProc(hwnd, message, wParam, lParam);
 }
 
 void UpdateDialog::showControl(UINT id, bool visible)
