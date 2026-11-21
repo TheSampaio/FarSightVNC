@@ -314,6 +314,7 @@
     <ClCompile Include="ClipboardFilePaste.cpp" />
     <ClCompile Include="ControlTrayIcon.cpp" />
     <ClCompile Include="DesktopWindow.cpp" />
+    <ClCompile Include="DialogTheme.cpp" />
     <ClCompile Include="GpuPresenter.cpp" />
     <ClCompile Include="FileExistDialog.cpp" />
     <ClCompile Include="FileInfoListView.cpp" />
@@ -359,6 +360,7 @@
     <ClInclude Include="ClipboardFilePaste.h" />
     <ClInclude Include="ControlTrayIcon.h" />
     <ClInclude Include="DesktopWindow.h" />
+    <ClInclude Include="DialogTheme.h" />
     <ClInclude Include="GpuPresenter.h" />
     <ClInclude Include="RenderSettings.h" />
     <ClInclude Include="FileExistDialog.h" />

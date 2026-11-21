@@ -8,6 +8,7 @@ add_executable(tvnviewer WIN32
   ClipboardFilePaste.cpp
   ControlTrayIcon.cpp
   DesktopWindow.cpp
+  DialogTheme.cpp
   GpuPresenter.cpp
   FileExistDialog.cpp
   FileInfoListView.cpp
