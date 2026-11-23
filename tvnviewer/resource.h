@@ -8,6 +8,7 @@
 // Modified for FarSightVNC on 2026-11-11: IDs of the removed login dialog, its logo bitmap and licensing URL removed.
 // Modified for FarSightVNC on 2026-11-12: IDR_LUCIDE_PLUS, the Lucide "plus" icon (RCDATA).
 // Modified for FarSightVNC on 2026-11-20: IDs of the password dialog heading, host line and Show password (IDC_EHOST removed).
+// Modified for FarSightVNC on 2026-11-20: IDs of the themed reconnect dialog (the buttons keep the ids of the task dialog).
 //
 #define IDI_CNOCURSOR                   102
 #define IDI_CSMALLDOT                   103
@@ -78,6 +79,7 @@
 #define IDD_OPTIONS_NETWORK             234
 #define IDD_UPDATE_DIALOG               235
 #define IDR_LUCIDE_PLUS                 236
+#define IDD_RECONNECT                   238
 #define IDC_LABEL                       1001
 #define IDC_FILENAME_EDIT               1002
 #define IDC_FILENAME_LABEL              1004
@@ -172,6 +174,11 @@
 #define IDC_AUTH_HEADING                1126
 #define IDC_AUTH_PROMPT                 1127
 #define IDC_AUTH_SHOW                   1128
+#define IDC_RECONNECT_INSTRUCTION       1129
+#define IDC_RECONNECT_CONTENT           1130
+#define IDC_RECONNECT_RECONNECT         1001
+#define IDC_RECONNECT_CLOSE             1002
+#define IDC_RECONNECT_STOP              1003
 #define ID_CONN_OPTIONS                 40001
 #define ID_CONN_INFO                    40002
 #define ID_SHOW_TOOLBAR                 40004
@@ -184,9 +191,9 @@
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        238
+#define _APS_NEXT_RESOURCE_VALUE        239
 #define _APS_NEXT_COMMAND_VALUE         40010
-#define _APS_NEXT_CONTROL_VALUE         1129
+#define _APS_NEXT_CONTROL_VALUE         1131
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

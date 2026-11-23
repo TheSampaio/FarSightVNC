@@ -17,180 +17,281 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //
 
-// The task dialog API is declared for Windows Vista and later only; this file
-// includes no project header that would lower the version again. The viewer
-// manifest selects Common Controls 6, which implements it.
-#ifdef WINVER
-#undef WINVER
-#endif
-#define WINVER 0x0600
-#ifdef _WIN32_WINNT
-#undef _WIN32_WINNT
-#endif
-#define _WIN32_WINNT 0x0600
-
-#include <windows.h>
-#include <commctrl.h>
-#include <stdio.h>
-#include <string>
-
 #include "ReconnectDialog.h"
 #include "ReconnectPolicy.h"
 
+#include "DialogTheme.h"
+#include "gui/BaseDialog.h"
+#include "resource.h"
+
+#include <algorithm>
+#include <stdio.h>
+#include <string>
+
 namespace {
 
-std::wstring toWide(const TCHAR *text)
-{
-  if (text == 0) {
-    return std::wstring();
-  }
-#ifdef UNICODE
-  return std::wstring(text);
-#else
-  int length = MultiByteToWideChar(CP_ACP, 0, text, -1, 0, 0);
-  if (length <= 1) {
-    return std::wstring();
-  }
-  std::wstring result(length - 1, L'\0');
-  MultiByteToWideChar(CP_ACP, 0, text, -1, &result[0], length);
-  return result;
-#endif
-}
+const UINT_PTR COUNTDOWN_TIMER = 1;
+const UINT COUNTDOWN_TICK_MS = 200;
 
-struct PromptState
-{
-  std::wstring reason;
-  std::wstring content;
-  unsigned int delayMs;
-  unsigned int nextAttempt;
-  unsigned int maxAttempts;
-  bool autoEnabled;
-  bool clicked;
-  DWORD startTick;
-  unsigned int shownSeconds;
-};
+typedef std::basic_string<TCHAR> Text;
 
-std::wstring buildContent(const PromptState *state, unsigned int secondsLeft)
+// The prompt of ReconnectDialog::show(). Button ids and results are the ones
+// the task dialog had; Esc and the close box answer "do not reconnect".
+class ReconnectPrompt : public BaseDialog
 {
-  std::wstring content = state->reason;
-  if (state->delayMs == 0) {
+public:
+  ReconnectPrompt(const TCHAR *caption, const TCHAR *instruction, const TCHAR *reason,
+                  unsigned int autoDelayMs, unsigned int nextAttempt, unsigned int maxAttempts,
+                  bool centerOnOwner)
+  : BaseDialog(IDD_RECONNECT),
+    m_caption(caption != 0 ? caption : _T("")),
+    m_instruction(instruction != 0 ? instruction : _T("")),
+    m_reason(reason != 0 ? reason : _T("")),
+    m_delayMs(autoDelayMs),
+    m_nextAttempt(nextAttempt),
+    m_maxAttempts(maxAttempts),
+    m_autoEnabled(autoDelayMs != 0),
+    m_clicked(false),
+    m_centerOnOwner(centerOnOwner),
+    m_startTick(0),
+    m_shownSeconds(0)
+  {
+  }
+
+protected:
+  BOOL onInitDialog()
+  {
+    HWND window = m_ctrlThis.getWindow();
+    m_theme.setHeading(IDC_RECONNECT_INSTRUCTION);
+    m_theme.attach(window);
+    if (!m_caption.empty()) {
+      SetWindowText(window, m_caption.c_str());
+    }
+    SetDlgItemText(window, IDC_RECONNECT_INSTRUCTION, m_instruction.c_str());
+
+    if (m_delayMs == 0) {
+      // Without a countdown there is nothing to stop: Reconnect takes the
+      // place of the Stop retrying button, next to Close.
+      moveReconnectBeforeClose(window);
+      HWND stop = GetDlgItem(window, ReconnectDialog::ID_STOP);
+      EnableWindow(stop, FALSE);
+      ShowWindow(stop, SW_HIDE);
+    }
+    m_startTick = GetTickCount();
+    refreshContent(ReconnectPolicy::secondsLeft(m_delayMs, 0));
+    fitText(IDC_RECONNECT_INSTRUCTION);
+    if (m_centerOnOwner) {
+      centerOnOwner(window);
+    }
+    // The prompt can come from a thread without an active window.
+    setForeground();
+    SetFocus(GetDlgItem(window, ReconnectDialog::ID_RECONNECT));
+    if (m_delayMs != 0) {
+      SetTimer(window, COUNTDOWN_TIMER, COUNTDOWN_TICK_MS, 0);
+    }
+    return FALSE;
+  }
+
+  BOOL onCommand(UINT controlID, UINT notificationID)
+  {
+    if (notificationID != BN_CLICKED) {
+      return FALSE;
+    }
+    HWND window = m_ctrlThis.getWindow();
+    switch (controlID) {
+    case ReconnectDialog::ID_RECONNECT:
+    case ReconnectDialog::ID_CLOSE:
+    case IDCANCEL:
+      kill(controlID);
+      return TRUE;
+    case ReconnectDialog::ID_STOP:
+      // Stops the countdown; the prompt stays open.
+      m_autoEnabled = false;
+      refreshContent(0);
+      EnableWindow(GetDlgItem(window, ReconnectDialog::ID_STOP), FALSE);
+      SetFocus(GetDlgItem(window, ReconnectDialog::ID_RECONNECT));
+      return TRUE;
+    }
+    return FALSE;
+  }
+
+  BOOL onClose()
+  {
+    kill(IDCANCEL);
+    return TRUE;
+  }
+
+  BOOL onDestroy()
+  {
+    KillTimer(m_ctrlThis.getWindow(), COUNTDOWN_TIMER);
+    return FALSE;
+  }
+
+  void onMessageReceived(UINT message, WPARAM wParam, LPARAM)
+  {
+    if (message != WM_TIMER || wParam != COUNTDOWN_TIMER || !m_autoEnabled ||
+        m_clicked || m_delayMs == 0) {
+      return;
+    }
+    unsigned int left = ReconnectPolicy::secondsLeft(m_delayMs, GetTickCount() - m_startTick);
+    if (left == 0) {
+      m_clicked = true;
+      PostMessage(m_ctrlThis.getWindow(), WM_COMMAND,
+                  MAKEWPARAM(ReconnectDialog::ID_RECONNECT, BN_CLICKED), 0);
+    } else if (left != m_shownSeconds) {
+      refreshContent(left);
+    }
+  }
+
+private:
+  Text buildContent(unsigned int secondsLeft) const
+  {
+    Text content = m_reason;
+    if (m_delayMs == 0) {
+      return content;
+    }
+    TCHAR line[160];
+    if (m_autoEnabled) {
+      _stprintf_s(line, _T("Reconnecting automatically in %u s (attempt %u of %u)."),
+                  secondsLeft, m_nextAttempt, m_maxAttempts);
+    } else {
+      _stprintf_s(line, _T("Automatic reconnection stopped."));
+    }
+    if (!content.empty()) {
+      content += _T("\n\n");
+    }
+    content += line;
     return content;
   }
-  wchar_t line[160];
-  if (state->autoEnabled) {
-    swprintf_s(line, L"Reconnecting automatically in %u s (attempt %u of %u).",
-               secondsLeft, state->nextAttempt, state->maxAttempts);
-  } else {
-    swprintf_s(line, L"Automatic reconnection stopped.");
-  }
-  if (!content.empty()) {
-    content += L"\n\n";
-  }
-  content += line;
-  return content;
-}
 
-void refreshContent(HWND hwnd, PromptState *state, unsigned int secondsLeft)
-{
-  state->shownSeconds = secondsLeft;
-  state->content = buildContent(state, secondsLeft);
-  SendMessage(hwnd, TDM_SET_ELEMENT_TEXT, TDE_CONTENT,
-              reinterpret_cast<LPARAM>(state->content.c_str()));
-}
+  void refreshContent(unsigned int secondsLeft)
+  {
+    m_shownSeconds = secondsLeft;
+    Text content = buildContent(secondsLeft);
+    SetDlgItemText(m_ctrlThis.getWindow(), IDC_RECONNECT_CONTENT, content.c_str());
+    fitText(IDC_RECONNECT_CONTENT);
+  }
 
-HRESULT CALLBACK promptCallback(HWND hwnd, UINT notification, WPARAM wParam,
-                                LPARAM lParam, LONG_PTR data)
-{
-  PromptState *state = reinterpret_cast<PromptState *>(data);
-  switch (notification) {
-  case TDN_CREATED:
-    state->startTick = GetTickCount();
-    break;
-  case TDN_BUTTON_CLICKED:
-    if (wParam == ReconnectDialog::ID_STOP) {
-      // Stops the countdown; the prompt stays open.
-      state->autoEnabled = false;
-      refreshContent(hwnd, state, 0);
-      SendMessage(hwnd, TDM_ENABLE_BUTTON, ReconnectDialog::ID_STOP, FALSE);
-      return S_FALSE;
+  static RECT rectIn(HWND window, HWND control)
+  {
+    RECT rect;
+    GetWindowRect(control, &rect);
+    MapWindowPoints(0, window, reinterpret_cast<POINT *>(&rect), 2);
+    return rect;
+  }
+
+  // Gives the label the height of its text (word wrapped at its width) and
+  // moves everything below it, and the bottom of the dialog, by the
+  // difference.
+  void fitText(UINT labelId)
+  {
+    HWND window = m_ctrlThis.getWindow();
+    HWND label = GetDlgItem(window, labelId);
+    const RECT rect = rectIn(window, label);
+
+    TCHAR buffer[2048] = { 0 };
+    GetWindowText(label, buffer, sizeof(buffer) / sizeof(buffer[0]));
+    HDC dc = GetDC(label);
+    if (dc == 0) {
+      return;
     }
-    break;
-  case TDN_TIMER:
-    if (state->autoEnabled && !state->clicked && state->delayMs != 0) {
-      unsigned int left = ReconnectPolicy::secondsLeft(state->delayMs,
-                                                       GetTickCount() - state->startTick);
-      if (left == 0) {
-        state->clicked = true;
-        PostMessage(hwnd, TDM_CLICK_BUTTON, ReconnectDialog::ID_RECONNECT, 0);
-      } else if (left != state->shownSeconds) {
-        refreshContent(hwnd, state, left);
+    HFONT font = reinterpret_cast<HFONT>(SendMessage(label, WM_GETFONT, 0, 0));
+    HGDIOBJ oldFont = font != 0 ? SelectObject(dc, font) : 0;
+    RECT measured = { 0, 0, rect.right - rect.left, 0 };
+    DrawText(dc, buffer, -1, &measured, DT_CALCRECT | DT_WORDBREAK | DT_NOPREFIX);
+    if (oldFont != 0) {
+      SelectObject(dc, oldFont);
+    }
+    ReleaseDC(label, dc);
+
+    const int delta = (measured.bottom - measured.top) - (rect.bottom - rect.top);
+    if (delta == 0) {
+      return;
+    }
+    SetWindowPos(label, 0, 0, 0, rect.right - rect.left, rect.bottom - rect.top + delta,
+                 SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+    for (HWND child = GetWindow(window, GW_CHILD); child != 0;
+         child = GetWindow(child, GW_HWNDNEXT)) {
+      const RECT childRect = rectIn(window, child);
+      if (child != label && childRect.top >= rect.bottom) {
+        SetWindowPos(child, 0, childRect.left, childRect.top + delta, 0, 0,
+                     SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
       }
     }
-    break;
+    RECT windowRect;
+    GetWindowRect(window, &windowRect);
+    SetWindowPos(window, 0, 0, 0, windowRect.right - windowRect.left,
+                 windowRect.bottom - windowRect.top + delta,
+                 SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+    InvalidateRect(window, 0, TRUE);
   }
-  return S_OK;
-}
 
-} // namespace
+  static void moveReconnectBeforeClose(HWND window)
+  {
+    HWND reconnect = GetDlgItem(window, ReconnectDialog::ID_RECONNECT);
+    const RECT reconnectRect = rectIn(window, reconnect);
+    const RECT stopRect = rectIn(window, GetDlgItem(window, ReconnectDialog::ID_STOP));
+    const RECT closeRect = rectIn(window, GetDlgItem(window, ReconnectDialog::ID_CLOSE));
+    const int gap = closeRect.left - stopRect.right;
+    const int left = closeRect.left - gap - (reconnectRect.right - reconnectRect.left);
+    SetWindowPos(reconnect, 0, left, reconnectRect.top, 0, 0,
+                 SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+  }
+
+  static void centerOnOwner(HWND window)
+  {
+    HWND owner = GetWindow(window, GW_OWNER);
+    RECT dialog, area;
+    if (owner == 0 || !GetWindowRect(window, &dialog) || !GetWindowRect(owner, &area)) {
+      return;
+    }
+    const int width = dialog.right - dialog.left;
+    const int height = dialog.bottom - dialog.top;
+    int x = area.left + ((area.right - area.left) - width) / 2;
+    int y = area.top + ((area.bottom - area.top) - height) / 2;
+    MONITORINFO monitor;
+    monitor.cbSize = sizeof(monitor);
+    if (GetMonitorInfo(MonitorFromWindow(owner, MONITOR_DEFAULTTONEAREST), &monitor)) {
+      const RECT &work = monitor.rcWork;
+      x = std::max<int>(work.left, std::min<int>(x, work.right - width));
+      y = std::max<int>(work.top, std::min<int>(y, work.bottom - height));
+    }
+    SetWindowPos(window, 0, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+  }
+
+  Text m_caption;
+  Text m_instruction;
+  Text m_reason;
+  unsigned int m_delayMs;
+  unsigned int m_nextAttempt;
+  unsigned int m_maxAttempts;
+  bool m_autoEnabled;
+  bool m_clicked;
+  bool m_centerOnOwner;
+  DWORD m_startTick;
+  unsigned int m_shownSeconds;
+  DialogTheme m_theme;
+};
+
+}
 
 bool ReconnectDialog::show(HWND owner, const TCHAR *caption, const TCHAR *instruction,
                            const TCHAR *reason, unsigned int autoDelayMs,
                            unsigned int nextAttempt, unsigned int maxAttempts)
 {
-  std::wstring captionText = toWide(caption);
-  std::wstring instructionText = toWide(instruction);
-
-  PromptState state;
-  state.reason = toWide(reason);
-  state.delayMs = autoDelayMs;
-  state.nextAttempt = nextAttempt;
-  state.maxAttempts = maxAttempts;
-  state.autoEnabled = autoDelayMs != 0;
-  state.clicked = false;
-  state.startTick = GetTickCount();
-  state.shownSeconds = ReconnectPolicy::secondsLeft(autoDelayMs, 0);
-  state.content = buildContent(&state, state.shownSeconds);
-
-  const TASKDIALOG_BUTTON buttons[] = {
-    { ID_RECONNECT, L"&Reconnect" },
-    { ID_STOP, L"&Stop retrying" },
-    { ID_CLOSE, L"&Close" },
-  };
-
-  TASKDIALOGCONFIG config;
-  ZeroMemory(&config, sizeof(config));
-  config.cbSize = sizeof(config);
-  config.hwndParent = owner;
-  config.dwFlags = TDF_ALLOW_DIALOG_CANCELLATION | TDF_CALLBACK_TIMER;
+  ReconnectPrompt prompt(caption, instruction, reason, autoDelayMs, nextAttempt, maxAttempts,
+                         owner != 0);
+  Control parent(owner);
   if (owner != 0) {
-    config.dwFlags |= TDF_POSITION_RELATIVE_TO_WINDOW;
+    prompt.setParent(&parent);
   }
-  config.pszWindowTitle = captionText.c_str();
-  config.pszMainIcon = TD_WARNING_ICON;
-  config.pszMainInstruction = instructionText.c_str();
-  config.pszContent = state.content.c_str();
-  TASKDIALOG_BUTTON noStopButtons[2];
-  // Without a countdown there is nothing to stop.
-  const UINT buttonCount = sizeof(buttons) / sizeof(buttons[0]);
-  if (autoDelayMs != 0) {
-    config.cButtons = buttonCount;
-    config.pButtons = buttons;
-  } else {
-    noStopButtons[0] = buttons[0];
-    noStopButtons[1] = buttons[2];
-    config.cButtons = 2;
-    config.pButtons = noStopButtons;
-  }
-  config.nDefaultButton = ID_RECONNECT;
-  config.pfCallback = promptCallback;
-  config.lpCallbackData = reinterpret_cast<LONG_PTR>(&state);
-
-  int button = 0;
-  if (SUCCEEDED(TaskDialogIndirect(&config, &button, 0, 0))) {
+  const int button = prompt.showModal();
+  if (button > 0) {
     return button == ID_RECONNECT;
   }
-  // Without the task dialog, a plain message box offers a manual reconnect.
-  std::wstring text = instructionText + L"\n\n" + state.reason;
-  return MessageBoxW(owner, text.c_str(), captionText.c_str(),
-                     MB_RETRYCANCEL | MB_ICONWARNING) == IDRETRY;
+  // Without the dialog, a plain message box offers a manual reconnect.
+  Text text = Text(instruction != 0 ? instruction : _T("")) + _T("\n\n") +
+              (reason != 0 ? reason : _T(""));
+  return MessageBox(owner, text.c_str(), caption != 0 ? caption : _T("FarSightVNC"),
+                    MB_RETRYCANCEL | MB_ICONWARNING) == IDRETRY;
 }

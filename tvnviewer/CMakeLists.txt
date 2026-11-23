@@ -88,7 +88,6 @@ endif()
 target_link_options(tvnviewer PRIVATE
   "/MANIFESTDEPENDENCY:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='${FSV_PROCESSOR_ARCHITECTURE}' publicKeyToken='6595b64144ccf1df' language='*'")
 
-# BuildTime.cpp includes no SDK header; ReconnectDialog.cpp sets WINVER 0x0600 before
-# <windows.h> (util/winhdr.h would fix 0x0501 first). Both compile without PCH.
+# BuildTime.cpp includes no SDK header, so it compiles without PCH.
 fsv_enable_pch(tvnviewer
-  SKIP BuildTime.cpp ReconnectDialog.cpp)
+  SKIP BuildTime.cpp)

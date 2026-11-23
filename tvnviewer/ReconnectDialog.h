@@ -20,17 +20,16 @@
 #ifndef _RECONNECT_DIALOG_H_
 #define _RECONNECT_DIALOG_H_
 
-// Only plain Windows types here: the implementation needs the Vista task
-// dialog declarations, which the project-wide WINVER hides.
-#include <windows.h>
+#include "util/CommonHeader.h"
 
-// Modal "connection lost" prompt with Reconnect and Close buttons. With a
+// Modal "connection lost" prompt with Reconnect and Close buttons, themed
+// like the rest of the viewer (IDD_RECONNECT, DialogTheme). With a
 // countdown, Reconnect is clicked when it expires and a Stop retrying button
 // stops it (the prompt stays open).
 class ReconnectDialog
 {
 public:
-  // Button ids (TDM_CLICK_BUTTON / BM_CLICK on the buttons work as well).
+  // Button ids (BM_CLICK on the buttons works as well).
   static const int ID_RECONNECT = 1001;
   static const int ID_CLOSE = 1002;
   static const int ID_STOP = 1003;
