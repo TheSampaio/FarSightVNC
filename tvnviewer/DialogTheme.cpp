@@ -14,6 +14,9 @@
 namespace {
 
 const UINT_PTR SUBCLASS_ID = 0x46534454; // "FSDT"
+const UINT_PTR GROUP_BOX_SUBCLASS_ID = 0x46534742; // "FSGB"
+const UINT_PTR TAB_SUBCLASS_ID = 0x46535442; // "FSTB"
+const UINT_PTR LABEL_SUBCLASS_ID = 0x4653534C; // "FSSL"
 
 COLORREF toColor(ThemeColor color)
 {
@@ -31,6 +34,264 @@ void controlRect(HWND parent, HWND control, RECT *rect)
 {
   GetWindowRect(control, rect);
   MapWindowPoints(0, parent, reinterpret_cast<POINT *>(rect), 2);
+}
+
+bool isGroupBox(HWND window)
+{
+  return hasClass(window, L"BUTTON") &&
+         (GetWindowLongPtr(window, GWL_STYLE) & BS_TYPEMASK) == BS_GROUPBOX;
+}
+
+// A native group box draws its caption in a color that is unreadable on the
+// dark background and ignores WM_CTLCOLORSTATIC when themed, so it is drawn
+// here: a one pixel frame in the border color, with the caption in the text
+// color in a gap of the top edge. Nothing else is painted, so the controls
+// inside and the dialog background stay as they are.
+void paintGroupBox(HWND box)
+{
+  PAINTSTRUCT paint;
+  HDC dc = BeginPaint(box, &paint);
+  if (dc == 0) {
+    return;
+  }
+  const ThemeTokens &tokens = currentTheme();
+  RECT client;
+  GetClientRect(box, &client);
+  HFONT font = reinterpret_cast<HFONT>(SendMessage(box, WM_GETFONT, 0, 0));
+  HGDIOBJ oldFont = font != 0 ? SelectObject(dc, font) : 0;
+
+  wchar_t caption[256] = { 0 };
+  GetWindowTextW(box, caption, sizeof(caption) / sizeof(caption[0]));
+  const int length = static_cast<int>(wcslen(caption));
+  SIZE extent = { 0, 0 };
+  GetTextExtentPoint32W(dc, caption, length, &extent);
+
+  const int inset = extent.cy * 2 / 3;
+  const int gap = extent.cy / 4;
+  RECT frame = client;
+  frame.top = extent.cy / 2;
+  RECT text = { inset, 0, inset + extent.cx, extent.cy };
+  RECT hole = text;
+  if (length > 0) {
+    InflateRect(&hole, gap, 0);
+    ExcludeClipRect(dc, hole.left, hole.top, hole.right, hole.bottom);
+  }
+  HBRUSH border = CreateSolidBrush(toColor(tokens.border));
+  FrameRect(dc, &frame, border);
+  DeleteObject(border);
+  if (length > 0) {
+    SelectClipRgn(dc, 0);
+    HBRUSH background = CreateSolidBrush(toColor(tokens.background));
+    FillRect(dc, &hole, background);
+    DeleteObject(background);
+    const bool enabled = IsWindowEnabled(box) != FALSE;
+    SetBkMode(dc, TRANSPARENT);
+    SetTextColor(dc, toColor(enabled ? tokens.text : tokens.disabledText));
+    DWORD flags = DT_LEFT | DT_TOP | DT_SINGLELINE | DT_NOCLIP;
+    if ((SendMessage(box, WM_QUERYUISTATE, 0, 0) & UISF_HIDEACCEL) != 0) {
+      flags |= DT_HIDEPREFIX;
+    }
+    DrawTextW(dc, caption, length, &text, flags);
+  }
+  if (oldFont != 0) {
+    SelectObject(dc, oldFont);
+  }
+  EndPaint(box, &paint);
+}
+
+// The visual style of a tab control has no dark variant (and the "Explorer"
+// theme of the other controls draws no tabs at all), so the strip is drawn
+// here: the captions on the dialog background, the selected one in the text
+// color with an accent bar under it, the others muted, and a one pixel frame
+// around the body that the page of the tab covers.
+void paintTabControl(HWND tab)
+{
+  PAINTSTRUCT paint;
+  HDC dc = BeginPaint(tab, &paint);
+  if (dc == 0) {
+    return;
+  }
+  const ThemeTokens &tokens = currentTheme();
+  RECT client;
+  GetClientRect(tab, &client);
+  HBRUSH background = CreateSolidBrush(toColor(tokens.background));
+  FillRect(dc, &client, background);
+  DeleteObject(background);
+
+  HFONT font = reinterpret_cast<HFONT>(SendMessage(tab, WM_GETFONT, 0, 0));
+  HGDIOBJ oldFont = font != 0 ? SelectObject(dc, font) : 0;
+  SetBkMode(dc, TRANSPARENT);
+
+  const int count = static_cast<int>(SendMessage(tab, TCM_GETITEMCOUNT, 0, 0));
+  const int selected = static_cast<int>(SendMessage(tab, TCM_GETCURSEL, 0, 0));
+  const int focused = static_cast<int>(SendMessage(tab, TCM_GETCURFOCUS, 0, 0));
+  const bool showFocus = GetFocus() == tab &&
+                         (SendMessage(tab, WM_QUERYUISTATE, 0, 0) & UISF_HIDEFOCUS) == 0;
+  int stripBottom = 0;
+  for (int i = 0; i < count; i++) {
+    RECT item;
+    if (SendMessage(tab, TCM_GETITEMRECT, i, reinterpret_cast<LPARAM>(&item)) &&
+        item.bottom > stripBottom) {
+      stripBottom = item.bottom;
+    }
+  }
+
+  HBRUSH border = CreateSolidBrush(toColor(tokens.border));
+  RECT body = { client.left, stripBottom, client.right, client.bottom };
+  FrameRect(dc, &body, border);
+  DeleteObject(border);
+
+  HBRUSH accent = CreateSolidBrush(toColor(tokens.accent));
+  for (int i = 0; i < count; i++) {
+    RECT item;
+    wchar_t caption[128] = { 0 };
+    TCITEMW data;
+    ZeroMemory(&data, sizeof(data));
+    data.mask = TCIF_TEXT;
+    data.pszText = caption;
+    data.cchTextMax = sizeof(caption) / sizeof(caption[0]);
+    if (!SendMessage(tab, TCM_GETITEMRECT, i, reinterpret_cast<LPARAM>(&item)) ||
+        !SendMessage(tab, TCM_GETITEMW, i, reinterpret_cast<LPARAM>(&data))) {
+      continue;
+    }
+    item.bottom = stripBottom;
+    SetTextColor(dc, toColor(i == selected ? tokens.text : tokens.mutedText));
+    RECT text = item;
+    DrawTextW(dc, caption, -1, &text, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    if (i == selected) {
+      RECT bar = { item.left, stripBottom - 2, item.right, stripBottom };
+      FillRect(dc, &bar, accent);
+    }
+    if (showFocus && i == focused) {
+      RECT focus = item;
+      InflateRect(&focus, -3, -3);
+      DrawFocusRect(dc, &focus);
+    }
+  }
+  DeleteObject(accent);
+  if (oldFont != 0) {
+    SelectObject(dc, oldFont);
+  }
+  EndPaint(tab, &paint);
+}
+
+LRESULT CALLBACK tabControlProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam,
+                                UINT_PTR, DWORD_PTR)
+{
+  switch (message) {
+  case WM_PAINT:
+    paintTabControl(hwnd);
+    return 0;
+  case WM_ERASEBKGND:
+    return 1;
+  case WM_NCDESTROY:
+    RemoveWindowSubclass(hwnd, tabControlProc, TAB_SUBCLASS_ID);
+    break;
+  }
+  return DefSubclassProc(hwnd, message, wParam, lParam);
+}
+
+bool isTextLabel(HWND window)
+{
+  if (!hasClass(window, L"STATIC")) {
+    return false;
+  }
+  const LONG_PTR type = GetWindowLongPtr(window, GWL_STYLE) & SS_TYPEMASK;
+  return type == SS_LEFT || type == SS_CENTER || type == SS_RIGHT ||
+         type == SS_SIMPLE || type == SS_LEFTNOWORDWRAP;
+}
+
+// A disabled label is drawn by the system with an embossed highlight that
+// shows as a halo on the dark background. It is drawn here in the disabled
+// text color instead, on the background the parent chooses.
+void paintDisabledLabel(HWND label)
+{
+  PAINTSTRUCT paint;
+  HDC dc = BeginPaint(label, &paint);
+  if (dc == 0) {
+    return;
+  }
+  RECT client;
+  GetClientRect(label, &client);
+  HBRUSH background = reinterpret_cast<HBRUSH>(
+    SendMessage(GetParent(label), WM_CTLCOLORSTATIC, reinterpret_cast<WPARAM>(dc),
+                reinterpret_cast<LPARAM>(label)));
+  if (background != 0) {
+    FillRect(dc, &client, background);
+  }
+  HFONT font = reinterpret_cast<HFONT>(SendMessage(label, WM_GETFONT, 0, 0));
+  HGDIOBJ oldFont = font != 0 ? SelectObject(dc, font) : 0;
+  SetBkMode(dc, TRANSPARENT);
+  SetTextColor(dc, toColor(currentTheme().disabledText));
+
+  const LONG_PTR style = GetWindowLongPtr(label, GWL_STYLE);
+  const LONG_PTR type = style & SS_TYPEMASK;
+  DWORD flags = DT_TOP;
+  flags |= type == SS_CENTER ? DT_CENTER : (type == SS_RIGHT ? DT_RIGHT : DT_LEFT);
+  flags |= (type == SS_SIMPLE || type == SS_LEFTNOWORDWRAP) ? DT_SINGLELINE : DT_WORDBREAK;
+  if ((style & SS_NOPREFIX) != 0) {
+    flags |= DT_NOPREFIX;
+  }
+  if ((SendMessage(label, WM_QUERYUISTATE, 0, 0) & UISF_HIDEACCEL) != 0) {
+    flags |= DT_HIDEPREFIX;
+  }
+  wchar_t caption[512] = { 0 };
+  GetWindowTextW(label, caption, sizeof(caption) / sizeof(caption[0]));
+  DrawTextW(dc, caption, -1, &client, flags);
+  if (oldFont != 0) {
+    SelectObject(dc, oldFont);
+  }
+  EndPaint(label, &paint);
+}
+
+LRESULT CALLBACK labelProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam,
+                           UINT_PTR, DWORD_PTR)
+{
+  switch (message) {
+  case WM_PAINT:
+    if (!IsWindowEnabled(hwnd)) {
+      paintDisabledLabel(hwnd);
+      return 0;
+    }
+    break;
+  case WM_ENABLE:
+    DefSubclassProc(hwnd, message, wParam, lParam);
+    InvalidateRect(hwnd, 0, TRUE);
+    return 0;
+  case WM_NCDESTROY:
+    RemoveWindowSubclass(hwnd, labelProc, LABEL_SUBCLASS_ID);
+    break;
+  }
+  return DefSubclassProc(hwnd, message, wParam, lParam);
+}
+
+LRESULT CALLBACK groupBoxProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam,
+                              UINT_PTR, DWORD_PTR)
+{
+  switch (message) {
+  case WM_PAINT:
+    paintGroupBox(hwnd);
+    return 0;
+  case WM_ERASEBKGND:
+    // Transparent: the dialog has painted what is behind the frame.
+    return 1;
+  case WM_SETTEXT:
+  case WM_ENABLE:
+  case WM_SETFONT: {
+    LRESULT result = DefSubclassProc(hwnd, message, wParam, lParam);
+    // The old caption is not erased by this window: the parent repaints.
+    RECT rect;
+    GetWindowRect(hwnd, &rect);
+    HWND parent = GetParent(hwnd);
+    MapWindowPoints(0, parent, reinterpret_cast<POINT *>(&rect), 2);
+    InvalidateRect(parent, &rect, TRUE);
+    return result;
+  }
+  case WM_NCDESTROY:
+    RemoveWindowSubclass(hwnd, groupBoxProc, GROUP_BOX_SUBCLASS_ID);
+    break;
+  }
+  return DefSubclassProc(hwnd, message, wParam, lParam);
 }
 
 }
@@ -183,6 +444,21 @@ void DialogTheme::themeProgressBar(HWND bar)
   SendMessage(bar, PBM_SETBKCOLOR, 0, toColor(tokens.surface));
 }
 
+void DialogTheme::themeGroupBox(HWND box)
+{
+  SetWindowSubclass(box, groupBoxProc, GROUP_BOX_SUBCLASS_ID, 0);
+}
+
+void DialogTheme::themeTabControl(HWND tab)
+{
+  SetWindowSubclass(tab, tabControlProc, TAB_SUBCLASS_ID, 0);
+}
+
+void DialogTheme::themeLabel(HWND label)
+{
+  SetWindowSubclass(label, labelProc, LABEL_SUBCLASS_ID, 0);
+}
+
 void DialogTheme::apply()
 {
   if (m_hwnd == 0) {
@@ -200,6 +476,12 @@ void DialogTheme::apply()
        child = GetWindow(child, GW_HWNDNEXT)) {
     if (hasClass(child, PROGRESS_CLASSW)) {
       themeProgressBar(child);
+    } else if (isGroupBox(child)) {
+      themeGroupBox(child);
+    } else if (hasClass(child, WC_TABCONTROLW)) {
+      themeTabControl(child);
+    } else if (isTextLabel(child)) {
+      themeLabel(child);
     } else if (hasClass(child, L"#32770")) {
       // A child dialog (a tab page) has its own DialogTheme, and the theme
       // broadcast only reaches the top-level windows.

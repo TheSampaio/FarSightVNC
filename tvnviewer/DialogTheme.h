@@ -3,8 +3,9 @@
 //
 // The theme of a classic dialog (a DIALOGEX template run by BaseDialog): the
 // palette of gui/d2d/Theme on the dialog background, its labels, fields and
-// check boxes, the dark frame of a top-level window and the dark variant of
-// the native controls, applied again whenever Theme::changedMessage() comes.
+// check boxes, group boxes, tab controls, disabled labels, the dark frame of a top-level window and the dark
+// variant of the native controls, applied again whenever
+// Theme::changedMessage() comes.
 //
 // The dialog keeps one DialogTheme and calls attach() from onInitDialog(),
 // after it has created or replaced its controls. The DialogTheme subclasses
@@ -61,6 +62,9 @@ private:
   void deleteBrushes();
   void updateFonts();
   void themeProgressBar(HWND bar);
+  void themeGroupBox(HWND box);
+  void themeTabControl(HWND tab);
+  void themeLabel(HWND label);
   void paintBorders();
   LRESULT onMessage(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
   static LRESULT CALLBACK subclassProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam,
