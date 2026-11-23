@@ -78,8 +78,9 @@ void applyControlThemeTree(HWND parent);
 // from the theme and the label is drawn with the color of the palette, which
 // a themed BUTTON would not use (it draws its own label in a tone meant for
 // a light background, so an unchecked one stays dark gray on the dark
-// background). Returns false in the light theme, for any other control or
-// draw stage and when the theme API is unavailable: the caller then answers
+// background). Returns false in the light theme, for any control that is not
+// a BUTTON (the style bits of other classes overlap those of a button), for
+// any other draw stage and when the theme API is unavailable: the caller then answers
 // CDRF_DODEFAULT and the control draws itself as usual.
 bool customDrawButton(HWND button, void *nmcustomdraw);
 

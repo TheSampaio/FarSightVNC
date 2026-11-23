@@ -371,6 +371,15 @@ bool customDrawButton(HWND button, void *nmcustomdraw)
       entries.drawThemeTextEx == 0) {
     return false;
   }
+  // The style bits are only those of a button for a BUTTON: the styles of a
+  // list view overlap them (LVS_REPORT | LVS_SHOWSELALWAYS reads as
+  // BS_AUTORADIOBUTTON), and the rows of the list would be replaced by a
+  // radio button.
+  wchar_t className[16] = { 0 };
+  GetClassNameW(button, className, sizeof(className) / sizeof(className[0]));
+  if (_wcsicmp(className, L"BUTTON") != 0) {
+    return false;
+  }
   LONG style = GetWindowLong(button, GWL_STYLE) & BS_TYPEMASK;
   bool radio = style == BS_RADIOBUTTON || style == BS_AUTORADIOBUTTON;
   bool box = style == BS_CHECKBOX || style == BS_AUTOCHECKBOX ||
