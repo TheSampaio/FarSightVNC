@@ -36,6 +36,7 @@ add_executable(tvnviewer WIN32
   ViewerWindow.cpp
   shell/HomePage.cpp
   shell/SessionActionStrip.cpp
+  shell/SessionTab.cpp
   shell/SessionToolbar.cpp
   shell/ShellWindow.cpp
   shell/TitleBar.cpp

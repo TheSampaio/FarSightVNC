@@ -27,7 +27,8 @@ class StringStorage;
 
 // Everything a session (ViewerWindow) needs from the top-level frame that
 // shows it: the shell window (ShellWindow), which hosts the session view as
-// a child window.
+// a child window. Each session has its own host, its tab (SessionTab), which
+// forwards the calls to the shell with the identity of the tab.
 class SessionHost
 {
 public:

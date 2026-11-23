@@ -24,9 +24,9 @@
 #define _SHELL_WINDOW_H_
 
 #include "HomeActions.h"
-#include "SessionHost.h"
 #include "SettingsActions.h"
 #include "SettingsTab.h"
+#include "SessionTab.h"
 #include "ShellTab.h"
 #include "TabModel.h"
 #include "TitleBar.h"
@@ -38,6 +38,8 @@
 
 #include <memory>
 #include <vector>
+
+class ViewerInstance;
 
 // Tabs of a shell window and the active one.
 typedef fsv::shell::TabModel<ShellTab> TabModel;
@@ -64,8 +66,7 @@ typedef fsv::shell::TabModel<ShellTab> TabModel;
 // that ends (closed by the server, disconnected, reconnection cancelled)
 // gives way to the Home page. Closing the shell ends its session and
 // destroys the shell.
-class ShellWindow : public BaseWindow,
-                    public SessionHost
+class ShellWindow : public BaseWindow
 {
 public:
   // home receives the actions of the Home page.
@@ -78,6 +79,11 @@ public:
   // tab per shell until the browser-like tabs exist: tab replaces the
   // current one.
   void attachTab(std::unique_ptr<ShellTab> tab);
+  // Creates the tab of a session that is about to start, to be passed to its
+  // ViewerInstance as the host, and then shown with attachSession().
+  SessionTab *beginSessionTab();
+  // Shows the session of instance in tab, which beginSessionTab() returned.
+  void attachSession(SessionTab *tab, ViewerInstance *instance);
   // Shows the Home page in the content area; a frame that was never shown
   // gets its default Home size and is shown.
   void showHome();
@@ -88,18 +94,23 @@ public:
   // True after the window received WM_NCDESTROY.
   bool isDestroyed() const;
 
-  // SessionHost implementation.
-  virtual HWND hostHwnd() const;
-  virtual HWND rootHwnd() const;
-  virtual void showFrame();
-  virtual void setTitle(const StringStorage *windowTitle, const StringStorage *tabTitle);
-  virtual void enterFullscreen(const RECT &monitorRect);
-  virtual void exitFullscreen();
-  virtual bool isFullscreen() const;
-  virtual void requestClientSize(int width, int height);
-  virtual void openMaximized();
-  virtual void onSessionEnded(bool reconnecting);
-  virtual void openSettings(SettingsSectionId section);
+  // The frame is full screen.
+  bool isFullscreen() const;
+
+  // Frame services of the session tabs: a SessionTab forwards the calls of
+  // its SessionHost here, with itself as tab. Calls of a tab that is no
+  // longer shown (an ended session) change nothing.
+  void frameShow(const ShellTab *tab);
+  void frameSetTitle(const ShellTab *tab, const StringStorage *windowTitle,
+                     const StringStorage *tabTitle);
+  void frameEnterFullscreen(const ShellTab *tab, const RECT &monitorRect);
+  void frameExitFullscreen(const ShellTab *tab);
+  bool frameIsFullscreen(const ShellTab *tab) const;
+  void frameRequestClientSize(const ShellTab *tab, int width, int height);
+  void frameOpenMaximized(const ShellTab *tab);
+  void frameSessionEnded(const ShellTab *tab, bool reconnecting);
+  // Shows the Settings page of the shell on section, over the active tab.
+  void openSettings(SettingsSectionId section);
 
   // Closes the Settings page and shows the tab it covers again.
   void closeSettings();
@@ -121,6 +132,17 @@ private:
   void onActivate(WPARAM wParam);
   void onDpiChanged(WPARAM wParam, LPARAM lParam);
   void layoutActiveTab();
+  // Takes tab out of the shell. A session tab is kept (m_retired): its
+  // session may still call it.
+  void retireTab(std::unique_ptr<ShellTab> tab);
+  void retireAllTabs();
+  bool isCurrent(const ShellTab *tab) const;
+  // Applies the titles of the active tab: the window (taskbar) and its tab.
+  void setTitle(const StringStorage *windowTitle, const StringStorage *tabTitle);
+  void enterFullscreen(const RECT &monitorRect);
+  void exitFullscreen();
+  void requestClientSize(int width, int height);
+  void openMaximized();
   // The Settings page while it is shown, else the active tab.
   ShellTab *visibleTab() const;
   // Destroys the Settings page without showing the covered tab again (the
@@ -156,6 +178,11 @@ private:
   HomeActions *m_home;
   SettingsActions *m_settingsActions;
   TabModel m_tabs;
+  // Tab of the session that is being started, until attachSession().
+  std::unique_ptr<SessionTab> m_staged;
+  // Session tabs that left the shell.
+  std::vector<std::unique_ptr<ShellTab> > m_retired;
+  unsigned m_nextTabId;
   // The Settings page over the active tab, or none.
   std::unique_ptr<SettingsTab> m_settings;
   // Title of the active tab, kept while the page covers it.

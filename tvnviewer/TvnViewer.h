@@ -30,6 +30,7 @@
 // Modified for FarSightVNC on 2026-11-14: the automatic update check timer repeats; update notifications are owned by a shell and wait for full screen to end.
 // Modified for FarSightVNC on 2026-11-14: "Restart and Install Now" closes every shell window to install a staged update.
 // Modified for FarSightVNC on 2026-11-14: a CBT hook re-owns the update dialog before its owner shell is destroyed.
+// Modified for FarSightVNC on 2026-11-22: every session has its own tab as host (SessionTab), created before the ViewerInstance.
 //
 
 #ifndef _TVN_VIEWER_H_
@@ -205,8 +206,8 @@ protected:
 
   // Creates a hidden shell window, owned by the application.
   ShellWindow *createShell();
-  // Shows the session of viewerInst in shell and starts it.
-  void startInstance(ViewerInstance *viewerInst, ShellWindow *shell);
+  // Shows the session of viewerInst in tab of shell and starts it.
+  void startInstance(ViewerInstance *viewerInst, ShellWindow *shell, SessionTab *tab);
   // Deletes the shells whose window was destroyed.
   void deleteDeadShells();
   // Tells the live shells that the listening mode changed.

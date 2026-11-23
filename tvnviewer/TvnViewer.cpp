@@ -31,6 +31,7 @@
 // Modified for FarSightVNC on 2026-11-14: the automatic update check timer repeats; update notifications are owned by a shell and wait for full screen to end.
 // Modified for FarSightVNC on 2026-11-14: "Restart and Install Now" closes every shell window to install a staged update.
 // Modified for FarSightVNC on 2026-11-14: a CBT hook re-owns the update dialog before its owner shell is destroyed.
+// Modified for FarSightVNC on 2026-11-22: every session has its own tab as host (SessionTab), created before the ViewerInstance.
 //
 
 #include "TvnViewer.h"
@@ -331,7 +332,8 @@ void TvnViewer::runInstance(ConnectionData *conData, const ConnectionConfig *con
                             ShellWindow *target)
 {
   ShellWindow *shell = target != nullptr ? target : createShell();
-  startInstance(new ViewerInstance(this, conData, config, shell), shell);
+  SessionTab *tab = shell->beginSessionTab();
+  startInstance(new ViewerInstance(this, conData, config, tab), shell, tab);
 }
 
 ShellWindow *TvnViewer::findShell(HWND hwnd) const
@@ -353,9 +355,9 @@ ShellWindow *TvnViewer::createShell()
   return m_shells.back().get();
 }
 
-void TvnViewer::startInstance(ViewerInstance *viewerInst, ShellWindow *shell)
+void TvnViewer::startInstance(ViewerInstance *viewerInst, ShellWindow *shell, SessionTab *tab)
 {
-  shell->attachTab(std::unique_ptr<ShellTab>(new SessionTab(viewerInst)));
+  shell->attachSession(tab, viewerInst);
   viewerInst->start();
 
   addInstance(viewerInst);
@@ -554,12 +556,13 @@ void TvnViewer::newListeningConnection()
     while (socket != 0) {
       // Each incoming connection gets its own shell window.
       ShellWindow *shell = createShell();
+      SessionTab *tab = shell->beginSessionTab();
       ViewerInstance *viewerInst = new ViewerInstance(this,
                                                       &connectionData,
                                                       &connectionConfig,
-                                                      shell,
+                                                      tab,
                                                       socket);
-      startInstance(viewerInst, shell);
+      startInstance(viewerInst, shell, tab);
 
       socket = m_conListener->getNewConnection();
     }

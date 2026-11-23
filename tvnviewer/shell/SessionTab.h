@@ -16,42 +16,72 @@
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //
+// Modified for FarSightVNC on 2026-11-22: the tab is the SessionHost of its session (created before the ViewerInstance, bound to it later).
+//
 
 #ifndef _SESSION_TAB_H_
 #define _SESSION_TAB_H_
 
+#include "SessionHost.h"
 #include "ShellTab.h"
-#include "../ViewerInstance.h"
 
-// Tab that shows a remote session. It references the ViewerInstance, owned by
-// the ViewerCollector; the shell drops the tab when the session ends, before
-// the collector deletes the instance.
-class SessionTab : public ShellTab
+class ShellWindow;
+class ViewerInstance;
+class ViewerWindow;
+
+// Tab that shows a remote session, and the SessionHost of that session: the
+// session talks to its frame through the tab, which forwards the calls to the
+// shell with its own identity, so that the shell knows which tab asks.
+//
+// The shell creates the tab before the session exists (the session window is
+// created in the constructor of the ViewerInstance and needs its host), then
+// binds it to the ViewerInstance, owned by the ViewerCollector. The shell
+// drops the tab when the session ends, before the collector deletes the
+// instance; a dropped tab stays alive (the shell keeps it) because the ended
+// session may still call it, and it ignores those calls.
+class SessionTab : public ShellTab,
+                   public SessionHost
 {
 public:
-  explicit SessionTab(ViewerInstance *instance)
-  : m_window(instance->getViewerWindow())
-  {
-  }
+  explicit SessionTab(ShellWindow *shell);
 
-  virtual HWND viewHwnd() const { return m_window->getHWnd(); }
-  virtual HWND focusHwnd() const { return m_window->getFocusHwnd(); }
-  virtual bool onCommand(WPARAM wParam, LPARAM lParam) { return m_window->onFrameCommand(wParam, lParam); }
-  virtual void onActivate(WPARAM wParam) { m_window->onFrameActivate(wParam); }
-  virtual void onFrameSizing() { m_window->onFrameSizing(); }
-  virtual void onDisplayChange() { m_window->onFrameDisplayChange(); }
-  virtual void onDpiChanged(UINT dpi, bool frameMoved) { m_window->onFrameDpiChanged(dpi, frameMoved); }
-  virtual void onCovered() { m_window->onFrameCovered(); }
-  virtual void onUncovered() { m_window->onFrameUncovered(); }
-  virtual bool requestClose()
-  {
-    // The session ends the shell (onSessionEnded()) unless it refuses to
-    // close (file transfer in progress).
-    SendMessage(m_window->getHWnd(), WM_CLOSE, 0, 0);
-    return false;
-  }
+  // The tab shows the session of instance.
+  void bind(ViewerInstance *instance);
+  // The shell dropped the tab: the calls of the session end here.
+  void detach();
+
+  // ShellTab implementation.
+  virtual HWND viewHwnd() const;
+  virtual HWND focusHwnd() const;
+  virtual bool onCommand(WPARAM wParam, LPARAM lParam);
+  virtual void onActivate(WPARAM wParam);
+  virtual void onFrameSizing();
+  virtual void onDisplayChange();
+  virtual void onDpiChanged(UINT dpi, bool frameMoved);
+  virtual void onCovered();
+  virtual void onUncovered();
+  virtual bool requestClose();
+  virtual SessionTab *asSession() { return this; }
+
+  // SessionHost implementation.
+  virtual HWND hostHwnd() const;
+  virtual HWND rootHwnd() const;
+  virtual void showFrame();
+  virtual void setTitle(const StringStorage *windowTitle, const StringStorage *tabTitle);
+  virtual void enterFullscreen(const RECT &monitorRect);
+  virtual void exitFullscreen();
+  virtual bool isFullscreen() const;
+  virtual void requestClientSize(int width, int height);
+  virtual void openMaximized();
+  virtual void onSessionEnded(bool reconnecting);
+  virtual void openSettings(SettingsSectionId section);
 
 private:
+  // Null once the shell dropped the tab.
+  ShellWindow *m_shell;
+  // The shell window, kept for the session after the shell dropped the tab.
+  HWND m_frame;
+  // Null until bind().
   ViewerWindow *m_window;
 };
 

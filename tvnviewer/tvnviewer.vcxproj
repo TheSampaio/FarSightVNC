@@ -342,6 +342,7 @@
     <ClCompile Include="ViewerWindow.cpp" />
     <ClCompile Include="shell\HomePage.cpp" />
     <ClCompile Include="shell\SessionActionStrip.cpp" />
+    <ClCompile Include="shell\SessionTab.cpp" />
     <ClCompile Include="shell\SessionToolbar.cpp" />
     <ClCompile Include="shell\ShellWindow.cpp" />
     <ClCompile Include="shell\TitleBar.cpp" />

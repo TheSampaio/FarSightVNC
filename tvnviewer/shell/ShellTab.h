@@ -22,13 +22,23 @@
 
 #include "util/winhdr.h"
 
+class SessionTab;
+
 // Content of one tab of the shell window. The shell lays the tab's view out
 // in its content area and forwards to the active tab the frame events that
 // only a top-level window receives.
 class ShellTab
 {
 public:
+  ShellTab() : m_id(0) {}
   virtual ~ShellTab() {}
+
+  // Identity of the tab in its shell, given by the shell when it creates the
+  // tab and never reused there; 0 until then.
+  unsigned id() const { return m_id; }
+  void setId(unsigned id) { m_id = id; }
+  // The tab as a session tab, or 0 when it is not one.
+  virtual SessionTab *asSession() { return 0; }
 
   // Child window of the shell that shows the tab.
   virtual HWND viewHwnd() const = 0;
@@ -60,6 +70,9 @@ public:
   // away before covering and sends WM_ACTIVATE again after uncovering.
   virtual void onCovered() {}
   virtual void onUncovered() {}
+
+private:
+  unsigned m_id;
 };
 
 #endif

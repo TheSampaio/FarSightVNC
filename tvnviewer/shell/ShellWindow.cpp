@@ -24,6 +24,7 @@
 
 #include "gui/d2d/Theme.h"
 #include "HomeTab.h"
+#include "../ViewerInstance.h"
 
 #include "gui/DpiUtils.h"
 #include "../NamingDefs.h"
@@ -121,6 +122,7 @@ ShellWindow::ShellWindow(const TCHAR *windowClassName, Logger *logger, HomeActio
 : m_logWriter(logger),
   m_home(home),
   m_settingsActions(settings),
+  m_nextTabId(1),
   m_showsHome(false),
   m_closeRequested(false),
   m_lastFocus(0),
@@ -161,6 +163,7 @@ ShellWindow::~ShellWindow()
 {
   // The tabs reference sessions owned elsewhere: never call them from here.
   m_settings.reset();
+  m_staged.reset();
   m_tabs.clear();
   // ~BaseWindow destroys a window that still exists: its messages must not
   // reach this object any more.
@@ -611,8 +614,9 @@ void ShellWindow::attachTab(std::unique_ptr<ShellTab> tab)
   // The tab that is replaced (the Home page) destroys its view; a new tab
   // is shown, not the Settings page.
   dropSettings();
-  m_tabs.clear();
+  retireAllTabs();
   m_showsHome = false;
+  tab->setId(m_nextTabId++);
   m_tabs.add(std::move(tab));
   m_lastFocus = 0;
   layoutActiveTab();
@@ -620,6 +624,43 @@ void ShellWindow::attachTab(std::unique_ptr<ShellTab> tab)
   if (GetActiveWindow() == m_hWnd) {
     focusActiveTab();
   }
+}
+
+SessionTab *ShellWindow::beginSessionTab()
+{
+  // A tab that never got its session (its construction failed) goes away.
+  m_staged.reset(new SessionTab(this));
+  return m_staged.get();
+}
+
+void ShellWindow::attachSession(SessionTab *tab, ViewerInstance *instance)
+{
+  if (tab == 0 || m_staged.get() != tab) {
+    return;
+  }
+  tab->bind(instance);
+  attachTab(std::move(m_staged));
+}
+
+void ShellWindow::retireTab(std::unique_ptr<ShellTab> tab)
+{
+  SessionTab *session = tab ? tab->asSession() : 0;
+  if (session != 0) {
+    session->detach();
+    m_retired.push_back(std::move(tab));
+  }
+}
+
+void ShellWindow::retireAllTabs()
+{
+  while (!m_tabs.empty()) {
+    retireTab(m_tabs.remove(m_tabs.size() - 1));
+  }
+}
+
+bool ShellWindow::isCurrent(const ShellTab *tab) const
+{
+  return tab != 0 && m_tabs.active() == tab;
 }
 
 void ShellWindow::showHome()
@@ -752,19 +793,52 @@ bool ShellWindow::isDestroyed() const
   return m_destroyed;
 }
 
-HWND ShellWindow::hostHwnd() const
+void ShellWindow::frameShow(const ShellTab *tab)
 {
-  return m_hWnd;
+  if (isCurrent(tab)) {
+    show();
+  }
 }
 
-HWND ShellWindow::rootHwnd() const
+void ShellWindow::frameSetTitle(const ShellTab *tab, const StringStorage *windowTitle,
+                                const StringStorage *tabTitle)
 {
-  return m_hWnd;
+  if (isCurrent(tab)) {
+    setTitle(windowTitle, tabTitle);
+  }
 }
 
-void ShellWindow::showFrame()
+void ShellWindow::frameEnterFullscreen(const ShellTab *tab, const RECT &monitorRect)
 {
-  show();
+  if (isCurrent(tab)) {
+    enterFullscreen(monitorRect);
+  }
+}
+
+void ShellWindow::frameExitFullscreen(const ShellTab *tab)
+{
+  if (isCurrent(tab)) {
+    exitFullscreen();
+  }
+}
+
+bool ShellWindow::frameIsFullscreen(const ShellTab *tab) const
+{
+  return isCurrent(tab) && m_isFullscreen;
+}
+
+void ShellWindow::frameRequestClientSize(const ShellTab *tab, int width, int height)
+{
+  if (isCurrent(tab)) {
+    requestClientSize(width, height);
+  }
+}
+
+void ShellWindow::frameOpenMaximized(const ShellTab *tab)
+{
+  if (isCurrent(tab)) {
+    openMaximized();
+  }
 }
 
 void ShellWindow::setTitle(const StringStorage *windowTitle, const StringStorage *tabTitle)
@@ -899,15 +973,15 @@ void ShellWindow::openMaximized()
   }
 }
 
-void ShellWindow::onSessionEnded(bool reconnecting)
+void ShellWindow::frameSessionEnded(const ShellTab *tab, bool reconnecting)
 {
-  HWND view = 0;
-  if (m_tabs.active() != 0) {
-    view = m_tabs.active()->viewHwnd();
+  if (!isCurrent(tab)) {
+    return;
   }
+  HWND view = tab->viewHwnd();
   // The page goes with the session it covered.
   dropSettings();
-  m_tabs.clear();
+  retireAllTabs();
   m_lastFocus = 0;
   if (!reconnecting && m_closeRequested) {
     // The user closed the shell. The session view is a child: destroying
@@ -1020,7 +1094,7 @@ bool ShellWindow::onMessage(UINT message, WPARAM wParam, LPARAM lParam)
   case WM_NCDESTROY:
     m_destroyed = true;
     m_settings.reset();
-    m_tabs.clear();
+    retireAllTabs();
     // The handle is no longer valid (~BaseWindow must not destroy it).
     m_hWnd = 0;
     return false;
