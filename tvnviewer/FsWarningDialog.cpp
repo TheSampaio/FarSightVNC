@@ -21,6 +21,8 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-20: themed with DialogTheme (new UI, Light/Dark).
+//
 
 #include "FsWarningDialog.h"
 #include "client-config-lib/ViewerConfig.h"
@@ -36,6 +38,7 @@ BOOL FsWarningDialog::onInitDialog()
   setControlById(m_fsWarning, IDC_CWARN_FS);
 
   m_fsWarning.check(false);
+  m_theme.attach(m_ctrlThis.getWindow());
   return FALSE;
 }
 

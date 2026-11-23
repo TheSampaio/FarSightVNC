@@ -45,6 +45,7 @@ BOOL ClipboardPasteDialog::onInitDialog()
   if (!m_pendingStatus.isEmpty()) {
     m_status.setText(m_pendingStatus.getString());
   }
+  m_theme.attach(hwnd);
   return TRUE;
 }
 

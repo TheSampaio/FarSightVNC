@@ -21,6 +21,8 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-20: themed with DialogTheme (new UI, Light/Dark).
+//
 
 #include "HelpDialog.h"
 
@@ -39,6 +41,7 @@ BOOL HelpDialog::onInitDialog()
   ResourceLoader *rLoader = ResourceLoader::getInstance();
   rLoader->loadString(IDS_CMDLINE_HELP, &helpString);
   m_shelp.setText(helpString.getString());
+  m_theme.attach(m_ctrlThis.getWindow());
   return TRUE;
 }
 

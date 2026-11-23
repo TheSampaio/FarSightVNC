@@ -21,6 +21,8 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-20: themed with DialogTheme (new UI, Light/Dark).
+//
 
 #ifndef _FS_WARNING_DIALOG_H_
 #define _FS_WARNING_DIALOG_H_
@@ -28,6 +30,7 @@
 #include "gui/BaseDialog.h"
 #include "gui/CheckBox.h"
 #include "resource.h"
+#include "DialogTheme.h"
 
 class FsWarningDialog : public BaseDialog
 {
@@ -40,6 +43,7 @@ protected:
   BOOL onCommand(UINT controlID, UINT notificationID);
 
   CheckBox m_fsWarning;
+  DialogTheme m_theme;
 };
 
 #endif

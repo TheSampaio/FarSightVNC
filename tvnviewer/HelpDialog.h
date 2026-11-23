@@ -21,6 +21,8 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-20: themed with DialogTheme (new UI, Light/Dark).
+//
 
 #ifndef _HELP_DIALOG_H_
 #define _HELP_DIALOG_H_
@@ -28,6 +30,7 @@
 #include "gui/BaseDialog.h"
 #include "gui/TextBox.h"
 #include "resource.h"
+#include "DialogTheme.h"
 
 class HelpDialog : public BaseDialog
 {
@@ -38,6 +41,7 @@ protected:
   BOOL onInitDialog() ;
   BOOL onCommand(UINT controlID, UINT notificationID);
   TextBox m_shelp;
+  DialogTheme m_theme;
 
 };
 

@@ -27,6 +27,8 @@
 #include "gui/Control.h"
 #include "gui/ProgressBar.h"
 
+#include "DialogTheme.h"
+
 class ClipboardPasteDialog;
 
 // What the dialog reports back to the paste it belongs to. Every method is
@@ -87,6 +89,7 @@ private:
   ProgressBar m_progressBar;
 
   StringStorage m_pendingStatus;
+  DialogTheme m_theme;
 };
 
 #endif // _CLIPBOARD_PASTE_DIALOG_H_
