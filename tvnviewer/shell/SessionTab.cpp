@@ -109,6 +109,16 @@ bool SessionTab::requestClose()
   return false;
 }
 
+HMENU SessionTab::sessionMenu() const
+{
+  return m_window != 0 ? m_window->getSessionMenu() : 0;
+}
+
+unsigned SessionTab::tabId() const
+{
+  return id();
+}
+
 HWND SessionTab::hostHwnd() const
 {
   return m_frame;

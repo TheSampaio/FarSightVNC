@@ -62,6 +62,7 @@ public:
   virtual void onUncovered();
   virtual bool requestClose();
   virtual SessionTab *asSession() { return this; }
+  virtual HMENU sessionMenu() const;
 
   // SessionHost implementation.
   virtual HWND hostHwnd() const;
@@ -75,6 +76,7 @@ public:
   virtual void openMaximized();
   virtual void onSessionEnded(bool reconnecting);
   virtual void openSettings(SettingsSectionId section);
+  virtual unsigned tabId() const;
 
 private:
   // Null once the shell dropped the tab.

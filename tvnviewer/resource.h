@@ -7,6 +7,7 @@
 // Modified for FarSightVNC on 2026-11-11: IDB_TOOLBAR removed (no toolbar bitmap any more).
 // Modified for FarSightVNC on 2026-11-11: IDs of the removed login dialog, its logo bitmap and licensing URL removed.
 // Modified for FarSightVNC on 2026-11-12: IDR_LUCIDE_PLUS, the Lucide "plus" icon (RCDATA).
+// Modified for FarSightVNC on 2026-11-22: IDR_LUCIDE_X, the Lucide "x" icon (RCDATA), close button of a tab.
 // Modified for FarSightVNC on 2026-11-20: IDs of the password dialog heading, host line and Show password (IDC_EHOST removed).
 // Modified for FarSightVNC on 2026-11-20: IDs of the themed reconnect dialog (the buttons keep the ids of the task dialog).
 //
@@ -79,6 +80,7 @@
 #define IDD_OPTIONS_NETWORK             234
 #define IDD_UPDATE_DIALOG               235
 #define IDR_LUCIDE_PLUS                 236
+#define IDR_LUCIDE_X                    239
 #define IDD_RECONNECT                   238
 #define IDC_LABEL                       1001
 #define IDC_FILENAME_EDIT               1002
@@ -191,7 +193,7 @@
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        239
+#define _APS_NEXT_RESOURCE_VALUE        240
 #define _APS_NEXT_COMMAND_VALUE         40010
 #define _APS_NEXT_CONTROL_VALUE         1131
 #define _APS_NEXT_SYMED_VALUE           101

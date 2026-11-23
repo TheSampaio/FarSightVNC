@@ -31,6 +31,7 @@
 // Modified for FarSightVNC on 2026-11-14: "Restart and Install Now" closes every shell window to install a staged update.
 // Modified for FarSightVNC on 2026-11-14: a CBT hook re-owns the update dialog before its owner shell is destroyed.
 // Modified for FarSightVNC on 2026-11-22: every session has its own tab as host (SessionTab), created before the ViewerInstance.
+// Modified for FarSightVNC on 2026-11-23: a reconnection or a connection from Home names the tab that shows the session.
 //
 
 #ifndef _TVN_VIEWER_H_
@@ -148,8 +149,9 @@ public:
   // Payload of WM_USER_RECONNECT and WM_USER_HOME_CONNECT.
   struct ReconnectRequest
   {
-    ReconnectRequest(const ConnectionData &data, const ConnectionConfig &config, HWND frame)
-    : conData(data), conConfig(config), shell(frame)
+    ReconnectRequest(const ConnectionData &data, const ConnectionConfig &config, HWND frame,
+                     unsigned tab = 0)
+    : conData(data), conConfig(config), shell(frame), tabId(tab)
     {
     }
     ConnectionData conData;
@@ -157,6 +159,9 @@ public:
     // Shell window of the dropped session (or of the Home page); the new
     // session is shown in it while it exists.
     HWND shell;
+    // Tab of the shell that shows the new session in its place (the tab of
+    // the dropped session, or the Home tab), 0: a new tab.
+    unsigned tabId;
   };
 
   // This message need send if config is changed.
@@ -199,9 +204,10 @@ protected:
   void unregisterViewerWindowClass();
   static LRESULT CALLBACK wndProcViewer(HWND hWnd, UINT msg, WPARAM wparam, LPARAM lparam);
 
-  // Starts a session in target, or in a new shell window when target is null.
+  // Starts a session in target, or in a new shell window when target is
+  // null. replaceTab: the tab of target that shows it (0: a new tab).
   void runInstance(ConnectionData *conData, const ConnectionConfig *config,
-                   ShellWindow *target = nullptr);
+                   ShellWindow *target = nullptr, unsigned replaceTab = 0);
   void runInstance(const StringStorage *hostName, const ConnectionConfig *config);
 
   // Creates a hidden shell window, owned by the application.

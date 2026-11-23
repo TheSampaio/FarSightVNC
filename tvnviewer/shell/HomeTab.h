@@ -36,6 +36,7 @@ public:
   {
   }
 
+  virtual bool isHome() const { return true; }
   virtual HWND viewHwnd() const { return m_page.getHWnd(); }
   virtual HWND focusHwnd() const { return m_page.focusHwnd(); }
 

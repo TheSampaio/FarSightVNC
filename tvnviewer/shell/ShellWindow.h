@@ -18,6 +18,7 @@
 //
 // Modified for FarSightVNC on 2026-11-12: "+" new connection button of the title bar (client button, tooltip).
 // Modified for FarSightVNC on 2026-11-22: the tabs are an fsv::shell::TabModel (any number of tabs, active index).
+// Modified for FarSightVNC on 2026-11-23: browser-style tabs (title bar tab strip, per-tab activation, closing and reconnection).
 //
 
 #ifndef _SHELL_WINDOW_H_
@@ -45,9 +46,15 @@ class ViewerInstance;
 typedef fsv::shell::TabModel<ShellTab> TabModel;
 
 // Top-level frame of the viewer (window class TvnWindowClass): it hosts the
-// Home page or the session view as a child below its title bar, owns the
-// frame state (full screen, default size, DPI) and forwards the frame events
-// to the active tab.
+// views of its tabs (Home pages and sessions) as children below its title
+// bar, shows the one of the active tab, owns the frame state (full screen,
+// default size, DPI) and forwards the frame events to the tabs.
+//
+// A tab that is not the active one is hidden. Its session keeps running but
+// is "covered" like by the Settings page (no focus, no keyboard hook, never
+// full screen) and is uncovered when the tab is shown again. Only the active
+// tab can be full screen; leaving it for another tab, or closing it, ends
+// full screen first. The window title (taskbar) follows the active tab.
 //
 // The title bar is drawn in the client area with Direct2D (TitleBar): the
 // window keeps WS_OVERLAPPEDWINDOW (resize borders, Aero Snap, system menu),
@@ -61,11 +68,13 @@ typedef fsv::shell::TabModel<ShellTab> TabModel;
 // page and shows the tab as it was.
 //
 // The application owns the shells; a shell whose window is destroyed is
-// deleted by the application (see isDestroyed()). A shell outlives its
-// session: a reconnected session is shown in the same frame, and a session
-// that ends (closed by the server, disconnected, reconnection cancelled)
-// gives way to the Home page. Closing the shell ends its session and
-// destroys the shell.
+// deleted by the application (see isDestroyed()). A tab outlives its
+// session: a reconnected session is shown in the same tab, and a session
+// that ends by itself (closed by the server, disconnected, reconnection
+// cancelled) turns its tab into a Home tab. A tab the user closes goes away
+// once its session ended (a session may refuse during a file transfer) and
+// the window is destroyed with the last one. Closing the window closes all
+// its tabs; a tab that refuses keeps the window open.
 class ShellWindow : public BaseWindow
 {
 public:
@@ -75,19 +84,26 @@ public:
               SettingsActions *settings);
   virtual ~ShellWindow();
 
-  // Shows tab in the content area and makes it the active tab. There is one
-  // tab per shell until the browser-like tabs exist: tab replaces the
-  // current one.
-  void attachTab(std::unique_ptr<ShellTab> tab);
   // Creates the tab of a session that is about to start, to be passed to its
-  // ViewerInstance as the host, and then shown with attachSession().
-  SessionTab *beginSessionTab();
+  // ViewerInstance as the host, and then shown with attachSession(). With
+  // replaceId the session takes the place of the tab with that id (the tab
+  // of a session that ended to reconnect, or a Home tab); else it is a new
+  // tab.
+  SessionTab *beginSessionTab(unsigned replaceId = 0);
   // Shows the session of instance in tab, which beginSessionTab() returned.
   void attachSession(SessionTab *tab, ViewerInstance *instance);
-  // Shows the Home page in the content area; a frame that was never shown
-  // gets its default Home size and is shown.
+  // Adds a Home tab and shows it; a frame that was never shown gets its
+  // default Home size and is shown.
   void showHome();
+  // The active tab is a Home page (the Settings page may cover it).
   bool isShowingHome() const;
+  // Id of the active tab, 0 when there is none.
+  unsigned activeTabId() const;
+  // The shell has a tab with this id, or a Home tab with it.
+  bool hasTab(unsigned id) const;
+  bool hasHomeTab(unsigned id) const;
+  // Tabs that are not a Home page: the sessions the shell keeps.
+  size_t sessionCount() const;
   // The state of the application shown by the tabs changed.
   void onAppStateChanged();
 
@@ -99,7 +115,9 @@ public:
 
   // Frame services of the session tabs: a SessionTab forwards the calls of
   // its SessionHost here, with itself as tab. Calls of a tab that is no
-  // longer shown (an ended session) change nothing.
+  // longer in the shell (an ended session) change nothing; the frame
+  // services that concern the whole frame (full screen, size) only follow
+  // the active tab, or the only tab.
   void frameShow(const ShellTab *tab);
   void frameSetTitle(const ShellTab *tab, const StringStorage *windowTitle,
                      const StringStorage *tabTitle);
@@ -111,10 +129,20 @@ public:
   void frameSessionEnded(const ShellTab *tab, bool reconnecting);
   // Shows the Settings page of the shell on section, over the active tab.
   void openSettings(SettingsSectionId section);
-
   // Closes the Settings page and shows the tab it covers again.
   void closeSettings();
   bool isShowingSettings() const;
+
+  // Tab commands (title bar, keyboard shortcuts). Each of them closes the
+  // Settings page first when it is shown.
+  void newTab();
+  void activateTab(size_t index);
+  void activateNextTab();
+  void activatePreviousTab();
+  // Closes the tab: a Home tab at once, a session through its window (it may
+  // refuse). With the Settings page shown over the tab, closes the page.
+  void closeTab(size_t index);
+  void closeActiveTab();
 
 private:
   // Window procedure installed over the one of the window class: the title
@@ -137,8 +165,27 @@ private:
   void retireTab(std::unique_ptr<ShellTab> tab);
   void retireAllTabs();
   bool isCurrent(const ShellTab *tab) const;
-  // Applies the titles of the active tab: the window (taskbar) and its tab.
-  void setTitle(const StringStorage *windowTitle, const StringStorage *tabTitle);
+  // The frame services of a tab are for the whole frame when the tab is the
+  // active one, or the frame has no other tab, or was never shown.
+  bool isFrameOwner(const ShellTab *tab) const;
+  size_t indexOfId(unsigned id) const;
+  // Adds tab after the active one and shows it, or puts it in the place of
+  // the tab with replaceId (0: add). A new session is not "uncovered".
+  void insertTab(std::unique_ptr<ShellTab> tab, unsigned replaceId);
+  // The active tab changed from old (null: removed): shows the new one and
+  // hides old. fresh: the tab is new, not coming back from the shadow.
+  void presentActive(ShellTab *old, bool fresh);
+  // Takes the tab at index out of the shell and destroys its view; the
+  // window goes with the last tab.
+  void removeTab(size_t index);
+  // Applies the window title of the active tab.
+  void applyWindowTitle();
+  // Gives the title bar the titles of the tabs and the active one.
+  void refreshTabBar();
+  // Tooltip of the tab under the pointer when its title is cut.
+  void updateTabTooltip();
+  // Copies the session menu of the active tab into the system menu.
+  void refreshSystemMenu();
   void enterFullscreen(const RECT &monitorRect);
   void exitFullscreen();
   void requestClientSize(int width, int height);
@@ -148,7 +195,7 @@ private:
   // Destroys the Settings page without showing the covered tab again (the
   // tab goes away too).
   void dropSettings();
-  // Shows the tab title in the bar: "Settings" over the page.
+  // The title of the active tab in the bar is "Settings" over the page.
   void updateTabTitle();
 
   // Title bar.
@@ -165,9 +212,9 @@ private:
   void updateDwmFrame();
   // Window button under a non-client hit test code, or TITLE_BAR_NONE.
   static TitleBarPart windowButtonFromHitCode(WPARAM hitCode);
-  TitleBarPart partAtClientPoint(LPARAM lParam) const;
+  TitleBarPart partAtClientPoint(LPARAM lParam, size_t *tab = 0) const;
   void trackMouseLeave(bool nonClient);
-  void executeTitleBarPart(TitleBarPart part);
+  void executeTitleBarPart(TitleBarPart part, size_t tab);
   void focusActiveTab();
   // Frame rectangle for a client area of width x height on the work area of
   // the shell's monitor.
@@ -178,20 +225,17 @@ private:
   HomeActions *m_home;
   SettingsActions *m_settingsActions;
   TabModel m_tabs;
-  // Tab of the session that is being started, until attachSession().
+  // Tab of the session that is being started, until attachSession(), and
+  // the tab it replaces (0: none).
   std::unique_ptr<SessionTab> m_staged;
+  unsigned m_stagedReplaceId;
   // Session tabs that left the shell.
   std::vector<std::unique_ptr<ShellTab> > m_retired;
   unsigned m_nextTabId;
   // The Settings page over the active tab, or none.
   std::unique_ptr<SettingsTab> m_settings;
-  // Title of the active tab, kept while the page covers it.
-  std::wstring m_tabTitle;
-  // The active tab is the Home page.
-  bool m_showsHome;
-  // The user closes the shell: the end of the session destroys it instead
-  // of showing the Home page.
-  bool m_closeRequested;
+  // Tab whose middle button went down, until it is released.
+  unsigned m_middleTabId;
   // Focused descendant saved when the shell is deactivated.
   HWND m_lastFocus;
   bool m_destroyed;
@@ -207,7 +251,8 @@ private:
   Rect m_rcNormal;
 
   WNDPROC m_baseProc;
-  // Tooltip of the "+" button (owned by the window), or 0.
+  // Tooltip of the "+" button and of the cut titles of the tabs (owned by
+  // the window), or 0.
   HWND m_tooltip;
   ChromeRenderer m_chrome;
   TitleBar m_titleBar;

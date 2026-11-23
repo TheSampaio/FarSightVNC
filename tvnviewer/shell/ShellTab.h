@@ -16,11 +16,16 @@
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //
+// Modified for FarSightVNC on 2026-11-23: a tab keeps its titles and knows whether the user is closing it; isHome(), sessionMenu().
+//
 
 #ifndef _SHELL_TAB_H_
 #define _SHELL_TAB_H_
 
+#include "util/StringStorage.h"
 #include "util/winhdr.h"
+
+#include <string>
 
 class SessionTab;
 
@@ -30,7 +35,7 @@ class SessionTab;
 class ShellTab
 {
 public:
-  ShellTab() : m_id(0) {}
+  ShellTab() : m_id(0), m_closing(false) {}
   virtual ~ShellTab() {}
 
   // Identity of the tab in its shell, given by the shell when it creates the
@@ -39,6 +44,27 @@ public:
   void setId(unsigned id) { m_id = id; }
   // The tab as a session tab, or 0 when it is not one.
   virtual SessionTab *asSession() { return 0; }
+  // The tab is the Home page.
+  virtual bool isHome() const { return false; }
+
+  // Titles of the tab: windowTitle names the frame while the tab is the
+  // active one (taskbar, Alt+Tab), tabTitle is the label in the title bar.
+  const StringStorage &windowTitle() const { return m_windowTitle; }
+  const std::wstring &tabTitle() const { return m_tabTitle; }
+  void setTitles(const StringStorage &windowTitle, const std::wstring &tabTitle)
+  {
+    m_windowTitle = windowTitle;
+    m_tabTitle = tabTitle;
+  }
+
+  // The user asked to close the tab and its session is closing: when it ends
+  // the tab goes away instead of turning into a Home tab.
+  bool isClosing() const { return m_closing; }
+  void setClosing(bool closing) { m_closing = closing; }
+
+  // Menu with the commands of the session of the tab (the shell copies it
+  // into its system menu while the tab is the active one), or 0.
+  virtual HMENU sessionMenu() const { return 0; }
 
   // Child window of the shell that shows the tab.
   virtual HWND viewHwnd() const = 0;
@@ -73,6 +99,9 @@ public:
 
 private:
   unsigned m_id;
+  bool m_closing;
+  StringStorage m_windowTitle;
+  std::wstring m_tabTitle;
 };
 
 #endif

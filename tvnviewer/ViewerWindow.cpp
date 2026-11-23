@@ -42,6 +42,7 @@
 // Modified for FarSightVNC on 2026-11-14: the local keys of the settings are applied to the keyboard hook.
 // Modified for FarSightVNC on 2026-11-16: keyboard release toggle (toolbar, full screen pill and session menu) that hands every key back to the local machine.
 // Modified for FarSightVNC on 2026-11-17: file transfer policy (ask once per session, allow, never).
+// Modified for FarSightVNC on 2026-11-23: the session menu is the session's own menu (the shell copies it into its system menu while the tab is active); a reconnection names the tab.
 //
 
 #include "config-lib/IniFileSettingsManager.h"
@@ -218,9 +219,10 @@ bool ViewerWindow::onCreate(LPCREATESTRUCT lps)
   setClassCursor(LoadCursor(NULL, IDC_ARROW));
   // Hidden until the setting below says otherwise.
   m_toolbar.create(getHWnd(), this);
-  // The session menu lives in the system menu of the frame, which forwards
-  // its commands (onFrameCommand()).
-  m_menu.getSystemMenu(m_host->rootHwnd());
+  // The session menu is the session's own: the frame copies it into its
+  // system menu while this session is the one shown, and forwards the
+  // commands (onFrameCommand()).
+  m_menu.create();
   m_menu.loadMenu();
   addDisplayMenus();
   applySettings();
@@ -470,6 +472,11 @@ bool ViewerWindow::isFrameShown() const
 HWND ViewerWindow::getFocusHwnd() const
 {
   return m_dsktWnd.getHWnd();
+}
+
+HMENU ViewerWindow::getSessionMenu() const
+{
+  return const_cast<ViewerMenu &>(m_menu).getMenu();
 }
 
 bool ViewerWindow::onEraseBackground(HDC hdc)
@@ -1060,7 +1067,7 @@ void ViewerWindow::postReconnect(const ConnectionData &conData)
   // m_requiresReconnect); the new session is shown in the same frame.
   m_requiresReconnect = true;
   TvnViewer::ReconnectRequest *request =
-    new TvnViewer::ReconnectRequest(conData, *m_conConf, m_host->rootHwnd());
+    new TvnViewer::ReconnectRequest(conData, *m_conConf, m_host->rootHwnd(), m_host->tabId());
   m_application->postMessage(TvnViewer::WM_USER_RECONNECT, 0,
                              reinterpret_cast<LPARAM>(request));
 }

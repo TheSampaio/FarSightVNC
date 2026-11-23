@@ -18,12 +18,14 @@
 //
 // Modified for FarSightVNC on 2026-11-12: "+" new connection button of the title bar (client button, tooltip).
 // Modified for FarSightVNC on 2026-11-22: the tabs are an fsv::shell::TabModel (any number of tabs, active index).
+// Modified for FarSightVNC on 2026-11-23: browser-style tabs (title bar tab strip, per-tab activation, closing and reconnection).
 //
 
 #include "ShellWindow.h"
 
 #include "gui/d2d/Theme.h"
 #include "HomeTab.h"
+#include "ReconnectTab.h"
 #include "../ViewerInstance.h"
 
 #include "gui/DpiUtils.h"
@@ -48,17 +50,21 @@ const int kTopResizeEdge = 5;
 // Title of the Home tab and size of the content of a new Home window, in
 // DIPs.
 const TCHAR kHomeTitle[] = _T("Home");
-// Title of the tab while the Settings page covers it.
+// Title of the active tab while the Settings page covers it.
 const wchar_t kSettingsTitle[] = L"Settings";
+// Mark of the items the shell copies into its system menu (dwItemData).
+const ULONG_PTR kSessionMenuTag = 0x46535643;
 // Section of the Settings page shown last in this process: the settings
 // button opens it again.
 SettingsSectionId s_lastSection = SETTINGS_APPEARANCE;
 const float kHomeWidth = 900.0f;
 const float kHomeHeight = 640.0f;
 
-// Tooltip of the "+" button.
-const wchar_t kNewConnectionTooltip[] = L"New connection (Ctrl+N)";
+// Tooltips: the "+" button, and the title of the tab under the pointer when
+// it is cut.
+const wchar_t kNewTabTooltip[] = L"New tab (Ctrl+T)";
 const UINT_PTR kNewTabToolId = 1;
+const UINT_PTR kTabToolId = 2;
 
 // MARGINS of uxtheme.h, declared here because util/winhdr.h hides the DWM
 // API (WINVER 0x0501); DwmExtendFrameIntoClientArea is loaded at run time.
@@ -109,10 +115,52 @@ bool isWindowButton(TitleBarPart part)
   return part == TITLE_BAR_MINIMIZE || part == TITLE_BAR_MAXIMIZE || part == TITLE_BAR_CLOSE;
 }
 
-// Buttons in the client area of the shell (the others are non-client).
+// Parts in the client area of the shell (the others are non-client).
 bool isClientButton(TitleBarPart part)
 {
-  return part == TITLE_BAR_SETTINGS || part == TITLE_BAR_NEW_TAB;
+  return part == TITLE_BAR_SETTINGS || part == TITLE_BAR_NEW_TAB || part == TITLE_BAR_TAB ||
+         part == TITLE_BAR_TAB_CLOSE;
+}
+
+// Appends the items of source to target (position -1) or inserts them from
+// position; submenus are copied. The items of the top level carry
+// kSessionMenuTag.
+void copyMenuItems(HMENU source, HMENU target, int position, bool tag)
+{
+  int count = GetMenuItemCount(source);
+  for (int i = 0; i < count; i++) {
+    TCHAR text[256];
+    text[0] = 0;
+    MENUITEMINFO info;
+    ZeroMemory(&info, sizeof(info));
+    info.cbSize = sizeof(info);
+    info.fMask = MIIM_ID | MIIM_STATE | MIIM_FTYPE | MIIM_SUBMENU | MIIM_STRING;
+    info.dwTypeData = text;
+    info.cch = sizeof(text) / sizeof(text[0]) - 1;
+    if (!GetMenuItemInfo(source, i, TRUE, &info)) {
+      continue;
+    }
+    MENUITEMINFO copy;
+    ZeroMemory(&copy, sizeof(copy));
+    copy.cbSize = sizeof(copy);
+    copy.fMask = MIIM_FTYPE | MIIM_DATA;
+    copy.fType = info.fType & MFT_SEPARATOR;
+    copy.dwItemData = tag ? kSessionMenuTag : 0;
+    if (!(info.fType & MFT_SEPARATOR)) {
+      copy.fMask |= MIIM_ID | MIIM_STATE | MIIM_STRING;
+      copy.wID = info.wID;
+      copy.fState = info.fState;
+      copy.dwTypeData = text;
+      if (info.hSubMenu != 0) {
+        HMENU submenu = CreatePopupMenu();
+        copyMenuItems(info.hSubMenu, submenu, -1, false);
+        copy.fMask |= MIIM_SUBMENU;
+        copy.hSubMenu = submenu;
+      }
+    }
+    int where = position < 0 ? GetMenuItemCount(target) : position++;
+    InsertMenuItem(target, where, TRUE, &copy);
+  }
 }
 
 }
@@ -122,9 +170,9 @@ ShellWindow::ShellWindow(const TCHAR *windowClassName, Logger *logger, HomeActio
 : m_logWriter(logger),
   m_home(home),
   m_settingsActions(settings),
+  m_stagedReplaceId(0),
   m_nextTabId(1),
-  m_showsHome(false),
-  m_closeRequested(false),
+  m_middleTabId(0),
   m_lastFocus(0),
   m_destroyed(false),
   m_sessionWasShown(false),
@@ -293,21 +341,29 @@ bool ShellWindow::onFrameMessage(UINT message, WPARAM wParam, LPARAM lParam, LRE
     m_titleBar.setPressed(TITLE_BAR_NONE);
     invalidateTitleBar();
     if (windowButtonFromHitCode(wParam) == pressed) {
-      executeTitleBarPart(pressed);
+      executeTitleBarPart(pressed, TitleBar::kNoTab);
     }
     *result = 0;
     return true;
   }
+  case WM_INITMENUPOPUP:
+    // The system menu shows the session menu of the active tab.
+    if (HIWORD(lParam) != 0) {
+      refreshSystemMenu();
+    }
+    return false;
   case WM_MOUSEMOVE:
   {
-    // Only the settings and "+" buttons of the bar are in the client area;
-    // the rest of the client area belongs to the session view.
-    TitleBarPart part = partAtClientPoint(lParam);
+    // The tabs and the settings and "+" buttons of the bar are in the client
+    // area; the rest of the client area belongs to the session view.
+    size_t tab;
+    TitleBarPart part = partAtClientPoint(lParam, &tab);
     if (isClientButton(part)) {
       trackMouseLeave(false);
     }
-    if (m_titleBar.setHover(isClientButton(part) ? part : TITLE_BAR_NONE)) {
+    if (m_titleBar.setHover(isClientButton(part) ? part : TITLE_BAR_NONE, tab)) {
       invalidateTitleBar();
+      updateTabTooltip();
     }
     return false;
   }
@@ -316,18 +372,20 @@ bool ShellWindow::onFrameMessage(UINT message, WPARAM wParam, LPARAM lParam, LRE
     if (isClientButton(m_titleBar.hover()) && m_titleBar.pressed() == TITLE_BAR_NONE) {
       m_titleBar.setHover(TITLE_BAR_NONE);
       invalidateTitleBar();
+      updateTabTooltip();
     }
     *result = 0;
     return true;
   case WM_LBUTTONDOWN:
   case WM_LBUTTONDBLCLK:
   {
-    TitleBarPart part = partAtClientPoint(lParam);
+    size_t tab;
+    TitleBarPart part = partAtClientPoint(lParam, &tab);
     if (!isClientButton(part)) {
       return false;
     }
-    m_titleBar.setPressed(part);
-    m_titleBar.setHover(part);
+    m_titleBar.setPressed(part, tab);
+    m_titleBar.setHover(part, tab);
     SetCapture(m_hWnd);
     invalidateTitleBar();
     *result = 0;
@@ -336,14 +394,44 @@ bool ShellWindow::onFrameMessage(UINT message, WPARAM wParam, LPARAM lParam, LRE
   case WM_LBUTTONUP:
   {
     TitleBarPart pressed = m_titleBar.pressed();
+    size_t pressedTab = m_titleBar.pressedTab();
     if (!isClientButton(pressed)) {
       return false;
     }
     m_titleBar.setPressed(TITLE_BAR_NONE);
     ReleaseCapture();
     invalidateTitleBar();
-    if (partAtClientPoint(lParam) == pressed) {
-      executeTitleBarPart(pressed);
+    size_t tab;
+    if (partAtClientPoint(lParam, &tab) == pressed && tab == pressedTab) {
+      executeTitleBarPart(pressed, tab);
+    }
+    *result = 0;
+    return true;
+  }
+  case WM_MBUTTONDOWN:
+  {
+    // The middle button closes the tab it was pressed and released on.
+    size_t tab;
+    TitleBarPart part = partAtClientPoint(lParam, &tab);
+    if (part != TITLE_BAR_TAB && part != TITLE_BAR_TAB_CLOSE) {
+      return false;
+    }
+    m_middleTabId = m_tabs.at(tab) != 0 ? m_tabs.at(tab)->id() : 0;
+    *result = 0;
+    return true;
+  }
+  case WM_MBUTTONUP:
+  {
+    unsigned id = m_middleTabId;
+    m_middleTabId = 0;
+    size_t tab;
+    TitleBarPart part = partAtClientPoint(lParam, &tab);
+    if (id == 0 || (part != TITLE_BAR_TAB && part != TITLE_BAR_TAB_CLOSE)) {
+      return false;
+    }
+    if (m_tabs.at(tab) != 0 && m_tabs.at(tab)->id() == id) {
+      m_titleBar.setHover(TITLE_BAR_NONE);
+      closeTab(tab);
     }
     *result = 0;
     return true;
@@ -441,10 +529,12 @@ LRESULT ShellWindow::hitTest(WPARAM wParam, LPARAM lParam)
     return HTCLOSE;
   case TITLE_BAR_SETTINGS:
   case TITLE_BAR_NEW_TAB:
+  case TITLE_BAR_TAB:
+  case TITLE_BAR_TAB_CLOSE:
     return HTCLIENT;
   default:
-    // Logo, tab and empty space drag the window; a double click maximizes
-    // and a right click opens the system menu (DefWindowProc).
+    // Logo and empty space drag the window; a double click maximizes and a
+    // right click opens the system menu (DefWindowProc).
     return HTCAPTION;
   }
 }
@@ -463,14 +553,17 @@ TitleBarPart ShellWindow::windowButtonFromHitCode(WPARAM hitCode)
   }
 }
 
-TitleBarPart ShellWindow::partAtClientPoint(LPARAM lParam) const
+TitleBarPart ShellWindow::partAtClientPoint(LPARAM lParam, size_t *tab) const
 {
+  if (tab != 0) {
+    *tab = TitleBar::kNoTab;
+  }
   if (m_isFullscreen) {
     return TITLE_BAR_NONE;
   }
   int x = static_cast<short>(LOWORD(lParam));
   int y = static_cast<short>(HIWORD(lParam));
-  return m_titleBar.hitTest(m_chrome.pixelsToDips(x), m_chrome.pixelsToDips(y));
+  return m_titleBar.hitTest(m_chrome.pixelsToDips(x), m_chrome.pixelsToDips(y), tab);
 }
 
 void ShellWindow::trackMouseLeave(bool nonClient)
@@ -487,7 +580,7 @@ void ShellWindow::trackMouseLeave(bool nonClient)
   tracking = !!TrackMouseEvent(&track);
 }
 
-void ShellWindow::executeTitleBarPart(TitleBarPart part)
+void ShellWindow::executeTitleBarPart(TitleBarPart part, size_t tab)
 {
   m_titleBar.setHover(TITLE_BAR_NONE);
   switch (part) {
@@ -505,8 +598,13 @@ void ShellWindow::executeTitleBarPart(TitleBarPart part)
     PostMessage(m_hWnd, WM_COMMAND, IDS_TB_CONFIGURATION, 0);
     break;
   case TITLE_BAR_NEW_TAB:
-    // Same as Ctrl+N: a new shell window on the Home page (posted).
-    m_home->openHome();
+    newTab();
+    break;
+  case TITLE_BAR_TAB:
+    activateTab(tab);
+    break;
+  case TITLE_BAR_TAB_CLOSE:
+    closeTab(tab);
     break;
   default:
     break;
@@ -519,6 +617,7 @@ void ShellWindow::layoutTitleBar()
   GetClientRect(m_hWnd, &client);
   m_titleBar.layout(m_chrome.pixelsToDips(client.right - client.left));
   updateTooltipRect();
+  updateTabTooltip();
 }
 
 void ShellWindow::createTooltip()
@@ -536,8 +635,45 @@ void ShellWindow::createTooltip()
   tool.cbSize = sizeof(tool);
   tool.hwnd = m_hWnd;
   tool.uId = kNewTabToolId;
-  tool.lpszText = const_cast<wchar_t *>(kNewConnectionTooltip);
+  tool.lpszText = const_cast<wchar_t *>(kNewTabTooltip);
   SendMessage(m_tooltip, TTM_ADDTOOLW, 0, reinterpret_cast<LPARAM>(&tool));
+  // The tooltip of the tabs has no area until a tab with a cut title is
+  // under the pointer (updateTabTooltip()).
+  ZeroMemory(&tool, sizeof(tool));
+  tool.cbSize = sizeof(tool);
+  tool.hwnd = m_hWnd;
+  tool.uId = kTabToolId;
+  tool.lpszText = const_cast<wchar_t *>(L"");
+  SendMessage(m_tooltip, TTM_ADDTOOLW, 0, reinterpret_cast<LPARAM>(&tool));
+}
+
+void ShellWindow::updateTabTooltip()
+{
+  if (m_tooltip == 0) {
+    return;
+  }
+  TOOLINFOW tool;
+  ZeroMemory(&tool, sizeof(tool));
+  tool.cbSize = sizeof(tool);
+  tool.hwnd = m_hWnd;
+  tool.uId = kTabToolId;
+  std::wstring text;
+  size_t index = m_titleBar.hoverTab();
+  if (index != TitleBar::kNoTab && index < m_titleBar.tabCount()) {
+    const std::wstring &title = m_titleBar.tabTitle(index);
+    float width = m_chrome.measureText(title.c_str(), currentTheme().fontSizeSmall);
+    if (width > m_titleBar.tabLabelWidth(index)) {
+      const D2D1_RECT_F &rect = m_titleBar.tabRect(index);
+      tool.rect.left = m_chrome.dipsToPixels(rect.left);
+      tool.rect.top = m_chrome.dipsToPixels(rect.top);
+      tool.rect.right = m_chrome.dipsToPixels(rect.right);
+      tool.rect.bottom = m_chrome.dipsToPixels(rect.bottom);
+      text = title;
+    }
+  }
+  SendMessage(m_tooltip, TTM_NEWTOOLRECTW, 0, reinterpret_cast<LPARAM>(&tool));
+  tool.lpszText = const_cast<wchar_t *>(text.c_str());
+  SendMessage(m_tooltip, TTM_UPDATETIPTEXTW, 0, reinterpret_cast<LPARAM>(&tool));
 }
 
 void ShellWindow::updateTooltipRect()
@@ -609,27 +745,11 @@ void ShellWindow::updateDwmFrame()
   }
 }
 
-void ShellWindow::attachTab(std::unique_ptr<ShellTab> tab)
-{
-  // The tab that is replaced (the Home page) destroys its view; a new tab
-  // is shown, not the Settings page.
-  dropSettings();
-  retireAllTabs();
-  m_showsHome = false;
-  tab->setId(m_nextTabId++);
-  m_tabs.add(std::move(tab));
-  m_lastFocus = 0;
-  layoutActiveTab();
-  // A reconnected session arrives in an active frame (no WM_ACTIVATE).
-  if (GetActiveWindow() == m_hWnd) {
-    focusActiveTab();
-  }
-}
-
-SessionTab *ShellWindow::beginSessionTab()
+SessionTab *ShellWindow::beginSessionTab(unsigned replaceId)
 {
   // A tab that never got its session (its construction failed) goes away.
   m_staged.reset(new SessionTab(this));
+  m_stagedReplaceId = replaceId;
   return m_staged.get();
 }
 
@@ -639,7 +759,131 @@ void ShellWindow::attachSession(SessionTab *tab, ViewerInstance *instance)
     return;
   }
   tab->bind(instance);
-  attachTab(std::move(m_staged));
+  unsigned replaceId = m_stagedReplaceId;
+  m_stagedReplaceId = 0;
+  insertTab(std::move(m_staged), replaceId);
+}
+
+size_t ShellWindow::indexOfId(unsigned id) const
+{
+  for (size_t i = 0; i < m_tabs.size(); i++) {
+    if (m_tabs.at(i)->id() == id) {
+      return i;
+    }
+  }
+  return TabModel::npos;
+}
+
+void ShellWindow::insertTab(std::unique_ptr<ShellTab> tab, unsigned replaceId)
+{
+  if (tab->windowTitle().isEmpty()) {
+    tab->setTitles(StringStorage(WindowNames::TVN_WINDOW_TITLE_NAME), tab->tabTitle());
+  }
+  size_t index = replaceId != 0 ? indexOfId(replaceId) : TabModel::npos;
+  if (index == TabModel::npos) {
+    // A new tab right after the active one, which is shown no more.
+    ShellTab *old = m_tabs.active();
+    // The Settings page goes away; the tab it covered stays hidden.
+    dropSettings();
+    if (old != 0) {
+      // A full screen session leaves full screen here.
+      old->onCovered();
+      if (m_isFullscreen) {
+        exitFullscreen();
+      }
+    }
+    tab->setId(m_nextTabId++);
+    m_tabs.add(std::move(tab));
+    presentActive(old, true);
+    return;
+  }
+  // The tab takes the place of another one (a session that ended to
+  // reconnect, a Home page that connects) with its id and, for a session,
+  // its titles.
+  bool active = index == m_tabs.activeIndex();
+  ShellTab *shown = tab.get();
+  tab->setId(replaceId);
+  if (!m_tabs.at(index)->isHome()) {
+    tab->setTitles(m_tabs.at(index)->windowTitle(), m_tabs.at(index)->tabTitle());
+  }
+  if (active) {
+    dropSettings();
+  }
+  // The Home page goes away with the tab that held it.
+  m_tabs.replace(index, std::move(tab)).reset();
+  if (active) {
+    presentActive(0, true);
+  } else {
+    // Not the active tab: its session keeps running covered and hidden.
+    if (shown->viewHwnd() != 0) {
+      ShowWindow(shown->viewHwnd(), SW_HIDE);
+    }
+    shown->onCovered();
+    refreshTabBar();
+  }
+}
+
+void ShellWindow::presentActive(ShellTab *old, bool fresh)
+{
+  ShellTab *tab = m_tabs.active();
+  if (tab == 0) {
+    return;
+  }
+  m_lastFocus = 0;
+  layoutActiveTab();
+  if (tab->viewHwnd() != 0) {
+    ShowWindow(tab->viewHwnd(), SW_SHOW);
+  }
+  if (!fresh) {
+    tab->onUncovered();
+  }
+  // A reconnected session arrives in an active frame (no WM_ACTIVATE).
+  if (GetActiveWindow() == m_hWnd) {
+    focusActiveTab();
+    // The keyboard hook of a session follows the activation of the frame.
+    if (!fresh) {
+      tab->onActivate(MAKEWPARAM(WA_ACTIVE, 0));
+    }
+  }
+  if (old != 0 && old != tab && old->viewHwnd() != 0) {
+    ShowWindow(old->viewHwnd(), SW_HIDE);
+  }
+  applyWindowTitle();
+  refreshTabBar();
+  InvalidateRect(m_hWnd, 0, FALSE);
+}
+
+void ShellWindow::removeTab(size_t index)
+{
+  ShellTab *tab = m_tabs.at(index);
+  if (tab == 0) {
+    return;
+  }
+  bool active = index == m_tabs.activeIndex();
+  bool session = tab->asSession() != 0;
+  HWND view = tab->viewHwnd();
+  if (active) {
+    // The page goes with the tab it covered; full screen ends first.
+    dropSettings();
+    if (m_isFullscreen) {
+      exitFullscreen();
+    }
+    m_lastFocus = 0;
+  }
+  retireTab(m_tabs.remove(index));
+  // The view of a session is destroyed here; a Home page went with its tab.
+  if (session && view != 0) {
+    DestroyWindow(view);
+  }
+  if (m_tabs.empty()) {
+    destroyWindow();
+    return;
+  }
+  if (active) {
+    presentActive(0, false);
+  } else {
+    refreshTabBar();
+  }
 }
 
 void ShellWindow::retireTab(std::unique_ptr<ShellTab> tab)
@@ -663,16 +907,20 @@ bool ShellWindow::isCurrent(const ShellTab *tab) const
   return tab != 0 && m_tabs.active() == tab;
 }
 
+bool ShellWindow::isFrameOwner(const ShellTab *tab) const
+{
+  return m_tabs.indexOf(tab) != TabModel::npos &&
+         (m_tabs.size() == 1 || !IsWindowVisible(m_hWnd));
+}
+
 void ShellWindow::showHome()
 {
   if (m_hWnd == 0) {
     return;
   }
-  attachTab(std::unique_ptr<ShellTab>(new HomeTab(m_hWnd, m_home)));
-  m_showsHome = true;
-  StringStorage windowTitle(WindowNames::TVN_WINDOW_TITLE_NAME);
-  StringStorage tabTitle(kHomeTitle);
-  setTitle(&windowTitle, &tabTitle);
+  std::unique_ptr<HomeTab> home(new HomeTab(m_hWnd, m_home));
+  home->setTitles(StringStorage(WindowNames::TVN_WINDOW_TITLE_NAME), toWide(kHomeTitle));
+  insertTab(std::move(home), 0);
   if (!IsWindowVisible(m_hWnd)) {
     // A new window, or one whose session ended before it was shown (a
     // connection from the command line that failed).
@@ -685,14 +933,42 @@ void ShellWindow::showHome()
 
 bool ShellWindow::isShowingHome() const
 {
-  return m_showsHome;
+  ShellTab *tab = m_tabs.active();
+  return tab != 0 && tab->isHome();
+}
+
+unsigned ShellWindow::activeTabId() const
+{
+  ShellTab *tab = m_tabs.active();
+  return tab != 0 ? tab->id() : 0;
+}
+
+bool ShellWindow::hasTab(unsigned id) const
+{
+  return id != 0 && indexOfId(id) != TabModel::npos;
+}
+
+bool ShellWindow::hasHomeTab(unsigned id) const
+{
+  size_t index = id != 0 ? indexOfId(id) : TabModel::npos;
+  return index != TabModel::npos && m_tabs.at(index)->isHome();
+}
+
+size_t ShellWindow::sessionCount() const
+{
+  size_t count = 0;
+  for (size_t i = 0; i < m_tabs.size(); i++) {
+    if (!m_tabs.at(i)->isHome()) {
+      count++;
+    }
+  }
+  return count;
 }
 
 void ShellWindow::onAppStateChanged()
 {
-  ShellTab *tab = m_tabs.active();
-  if (tab != 0) {
-    tab->onAppStateChanged();
+  for (size_t i = 0; i < m_tabs.size(); i++) {
+    m_tabs.at(i)->onAppStateChanged();
   }
 }
 
@@ -707,6 +983,78 @@ ShellTab *ShellWindow::visibleTab() const
 bool ShellWindow::isShowingSettings() const
 {
   return !!m_settings;
+}
+
+void ShellWindow::newTab()
+{
+  showHome();
+}
+
+void ShellWindow::activateTab(size_t index)
+{
+  if (index >= m_tabs.size() || index == m_tabs.activeIndex()) {
+    return;
+  }
+  // The Settings page covers the active tab only: it goes away, the tab it
+  // covered stays hidden and covered.
+  dropSettings();
+  ShellTab *old = m_tabs.active();
+  // A full screen session leaves full screen here, while it is the current
+  // tab.
+  old->onCovered();
+  if (m_isFullscreen) {
+    exitFullscreen();
+  }
+  m_tabs.activate(index);
+  presentActive(old, false);
+}
+
+void ShellWindow::activateNextTab()
+{
+  if (m_tabs.size() > 1) {
+    activateTab((m_tabs.activeIndex() + 1) % m_tabs.size());
+  }
+}
+
+void ShellWindow::activatePreviousTab()
+{
+  if (m_tabs.size() > 1) {
+    activateTab((m_tabs.activeIndex() + m_tabs.size() - 1) % m_tabs.size());
+  }
+}
+
+void ShellWindow::closeTab(size_t index)
+{
+  ShellTab *tab = m_tabs.at(index);
+  if (tab == 0) {
+    return;
+  }
+  if (m_settings && index == m_tabs.activeIndex()) {
+    // The tab of the bar reads "Settings": it closes the page.
+    closeSettings();
+    return;
+  }
+  if (tab->isClosing()) {
+    return;
+  }
+  tab->setClosing(true);
+  if (tab->requestClose()) {
+    size_t now = m_tabs.indexOf(tab);
+    if (now != TabModel::npos) {
+      removeTab(now);
+    }
+    return;
+  }
+  // The session was asked to close: its end removes the tab
+  // (frameSessionEnded()), unless it refuses (file transfer in progress).
+  if (m_tabs.indexOf(tab) != TabModel::npos) {
+    tab->setClosing(false);
+  }
+}
+
+void ShellWindow::closeActiveTab()
+{
+  closeTab(m_tabs.activeIndex());
 }
 
 void ShellWindow::openSettings(SettingsSectionId section)
@@ -784,8 +1132,67 @@ void ShellWindow::dropSettings()
 
 void ShellWindow::updateTabTitle()
 {
-  m_titleBar.setTitle(m_settings ? std::wstring(kSettingsTitle) : m_tabTitle);
+  refreshTabBar();
+}
+
+void ShellWindow::refreshTabBar()
+{
+  std::vector<std::wstring> titles;
+  for (size_t i = 0; i < m_tabs.size(); i++) {
+    const ShellTab *tab = m_tabs.at(i);
+    std::wstring title = tab->tabTitle();
+    if (title.empty()) {
+      title = toWide(tab->windowTitle().getString());
+    }
+    if (m_settings && i == m_tabs.activeIndex()) {
+      title = kSettingsTitle;
+    }
+    titles.push_back(title);
+  }
+  m_titleBar.setTabs(titles, m_tabs.empty() ? 0 : m_tabs.activeIndex());
+  updateTooltipRect();
+  updateTabTooltip();
   invalidateTitleBar();
+}
+
+void ShellWindow::applyWindowTitle()
+{
+  // The window keeps the full title (taskbar, Alt+Tab) of the active tab.
+  ShellTab *tab = m_tabs.active();
+  if (tab != 0 && !tab->windowTitle().isEmpty()) {
+    setWindowText(&tab->windowTitle());
+  }
+}
+
+void ShellWindow::refreshSystemMenu()
+{
+  HMENU menu = GetSystemMenu(m_hWnd, FALSE);
+  if (menu == 0) {
+    return;
+  }
+  for (int i = GetMenuItemCount(menu) - 1; i >= 0; i--) {
+    MENUITEMINFO info;
+    ZeroMemory(&info, sizeof(info));
+    info.cbSize = sizeof(info);
+    info.fMask = MIIM_DATA;
+    if (GetMenuItemInfo(menu, i, TRUE, &info) && info.dwItemData == kSessionMenuTag) {
+      DeleteMenu(menu, i, MF_BYPOSITION);
+    }
+  }
+  ShellTab *tab = m_tabs.active();
+  HMENU source = tab != 0 ? tab->sessionMenu() : 0;
+  if (source == 0) {
+    return;
+  }
+  // Before the separator that precedes Close.
+  int position = GetMenuItemCount(menu);
+  for (int i = 0; i < position; i++) {
+    if (GetMenuItemID(menu, i) == SC_CLOSE) {
+      position = i > 0 ? i - 1 : i;
+      break;
+    }
+  }
+  copyMenuItems(source, menu, position, true);
 }
 
 bool ShellWindow::isDestroyed() const
@@ -795,7 +1202,7 @@ bool ShellWindow::isDestroyed() const
 
 void ShellWindow::frameShow(const ShellTab *tab)
 {
-  if (isCurrent(tab)) {
+  if (isFrameOwner(tab)) {
     show();
   }
 }
@@ -803,9 +1210,18 @@ void ShellWindow::frameShow(const ShellTab *tab)
 void ShellWindow::frameSetTitle(const ShellTab *tab, const StringStorage *windowTitle,
                                 const StringStorage *tabTitle)
 {
-  if (isCurrent(tab)) {
-    setTitle(windowTitle, tabTitle);
+  size_t index = m_tabs.indexOf(tab);
+  if (index == TabModel::npos) {
+    return;
   }
+  // The tab shows only the session name (the window title while there is
+  // none); the window keeps the full title while the tab is the active one.
+  const StringStorage *label = tabTitle->isEmpty() ? windowTitle : tabTitle;
+  m_tabs.at(index)->setTitles(*windowTitle, toWide(label->getString()));
+  if (index == m_tabs.activeIndex()) {
+    applyWindowTitle();
+  }
+  refreshTabBar();
 }
 
 void ShellWindow::frameEnterFullscreen(const ShellTab *tab, const RECT &monitorRect)
@@ -829,26 +1245,16 @@ bool ShellWindow::frameIsFullscreen(const ShellTab *tab) const
 
 void ShellWindow::frameRequestClientSize(const ShellTab *tab, int width, int height)
 {
-  if (isCurrent(tab)) {
+  if (isFrameOwner(tab)) {
     requestClientSize(width, height);
   }
 }
 
 void ShellWindow::frameOpenMaximized(const ShellTab *tab)
 {
-  if (isCurrent(tab)) {
+  if (isFrameOwner(tab)) {
     openMaximized();
   }
-}
-
-void ShellWindow::setTitle(const StringStorage *windowTitle, const StringStorage *tabTitle)
-{
-  // The window keeps the full title (taskbar, Alt+Tab); the tab shows only
-  // the session name (the window title while there is none).
-  setWindowText(windowTitle);
-  const StringStorage *tab = tabTitle->isEmpty() ? windowTitle : tabTitle;
-  m_tabTitle = toWide(tab->getString());
-  updateTabTitle();
 }
 
 void ShellWindow::enterFullscreen(const RECT &monitorRect)
@@ -975,33 +1381,65 @@ void ShellWindow::openMaximized()
 
 void ShellWindow::frameSessionEnded(const ShellTab *tab, bool reconnecting)
 {
-  if (!isCurrent(tab)) {
+  size_t index = m_tabs.indexOf(tab);
+  if (index == TabModel::npos) {
     return;
   }
-  HWND view = tab->viewHwnd();
-  // The page goes with the session it covered.
-  dropSettings();
-  retireAllTabs();
-  m_lastFocus = 0;
-  if (!reconnecting && m_closeRequested) {
-    // The user closed the shell. The session view is a child: destroying
-    // the shell destroys it too. The application deletes this object later
-    // (isDestroyed()).
-    destroyWindow();
+  ShellTab *ended = m_tabs.at(index);
+  if (!reconnecting && ended->isClosing()) {
+    // The user closed the tab.
+    removeTab(index);
     return;
   }
+  bool active = index == m_tabs.activeIndex();
+  HWND view = ended->viewHwnd();
+  if (active) {
+    // The page goes with the session it covered.
+    dropSettings();
+    m_lastFocus = 0;
+  }
+  if (reconnecting) {
+    // The tab keeps its place and its titles until the next session is shown
+    // in it (TvnViewer::runInstance()); the frame stays as it is, full
+    // screen included.
+    std::unique_ptr<ShellTab> pending(new ReconnectTab);
+    pending->setId(ended->id());
+    pending->setTitles(ended->windowTitle(), ended->tabTitle());
+    retireTab(m_tabs.replace(index, std::move(pending)));
+    if (view != 0) {
+      DestroyWindow(view);
+    }
+    refreshTabBar();
+    return;
+  }
+  // The session ended by itself (the server closed it, an error, the
+  // reconnection was cancelled): the tab turns into a Home tab, in a
+  // windowed frame.
+  if (active && m_isFullscreen) {
+    exitFullscreen();
+  }
+  std::unique_ptr<HomeTab> home(new HomeTab(m_hWnd, m_home));
+  home->setId(ended->id());
+  home->setTitles(StringStorage(WindowNames::TVN_WINDOW_TITLE_NAME), toWide(kHomeTitle));
+  ShellTab *shown = home.get();
+  retireTab(m_tabs.replace(index, std::move(home)));
   if (view != 0) {
     DestroyWindow(view);
   }
-  // The next session adds its own menu to a fresh system menu.
-  GetSystemMenu(m_hWnd, TRUE);
-  if (reconnecting) {
-    // The frame waits for the reconnected session (TvnViewer::runInstance()).
-    return;
+  if (active) {
+    presentActive(0, true);
+  } else {
+    if (shown->viewHwnd() != 0) {
+      ShowWindow(shown->viewHwnd(), SW_HIDE);
+    }
+    refreshTabBar();
   }
-  // Back to the Home page, in a windowed frame.
-  exitFullscreen();
-  showHome();
+  if (!IsWindowVisible(m_hWnd)) {
+    // A session of the command line that failed before it was shown.
+    requestClientSize(m_chrome.dipsToPixels(kHomeWidth), m_chrome.dipsToPixels(kHomeHeight));
+    ShowWindow(m_hWnd, SW_SHOW);
+    SetForegroundWindow(m_hWnd);
+  }
 }
 
 bool ShellWindow::onCommand(WPARAM wParam, LPARAM lParam)
@@ -1042,7 +1480,6 @@ bool ShellWindow::onSysCommand(WPARAM wParam, LPARAM lParam)
 
 bool ShellWindow::onMessage(UINT message, WPARAM wParam, LPARAM lParam)
 {
-  ShellTab *tab = m_tabs.active();
   switch (message) {
   case WM_SIZE:
     if (wParam != SIZE_MINIMIZED) {
@@ -1050,8 +1487,8 @@ bool ShellWindow::onMessage(UINT message, WPARAM wParam, LPARAM lParam)
     }
     return true;
   case WM_SIZING:
-    if (tab != 0) {
-      tab->onFrameSizing();
+    for (size_t i = 0; i < m_tabs.size(); i++) {
+      m_tabs.at(i)->onFrameSizing();
     }
     if (m_settings) {
       m_settings->onFrameSizing();
@@ -1064,22 +1501,32 @@ bool ShellWindow::onMessage(UINT message, WPARAM wParam, LPARAM lParam)
     focusActiveTab();
     return true;
   case WM_CLOSE:
-    // Closing the shell stops the session, which then destroys the shell
-    // (onSessionEnded()); the tab is gone when requestClose() returns.
-    m_closeRequested = true;
-    if (tab == 0 || tab->requestClose()) {
+  {
+    // Closes every tab, which ends their sessions; the last one takes the
+    // window with it (removeTab()). A session may refuse to close (file
+    // transfer in progress): the window stays with the tabs that remain.
+    closeSettings();
+    std::vector<ShellTab *> tabs;
+    for (size_t i = 0; i < m_tabs.size(); i++) {
+      tabs.push_back(m_tabs.at(i));
+    }
+    for (size_t i = tabs.size(); i > 0 && !m_destroyed; i--) {
+      size_t index = m_tabs.indexOf(tabs[i - 1]);
+      if (index != TabModel::npos) {
+        closeTab(index);
+      }
+    }
+    if (tabs.empty() && !m_destroyed) {
       destroyWindow();
-    } else if (!m_destroyed) {
-      // The session refused to close (file transfer in progress).
-      m_closeRequested = false;
     }
     return true;
+  }
   case WM_DPICHANGED:
     onDpiChanged(wParam, lParam);
     return true;
   case WM_DISPLAYCHANGE:
-    if (tab != 0) {
-      tab->onDisplayChange();
+    for (size_t i = 0; i < m_tabs.size(); i++) {
+      m_tabs.at(i)->onDisplayChange();
     }
     return false;
   case WM_SETTINGCHANGE:
@@ -1128,9 +1575,8 @@ void ShellWindow::onDpiChanged(WPARAM wParam, LPARAM lParam)
   // A windowed frame moved between monitors takes the rectangle suggested by
   // the system; a full screen frame keeps covering its monitor(s).
   bool frameMoved = !m_isFullscreen && suggested != 0;
-  ShellTab *tab = m_tabs.active();
-  if (tab != 0) {
-    tab->onDpiChanged(LOWORD(wParam), frameMoved);
+  for (size_t i = 0; i < m_tabs.size(); i++) {
+    m_tabs.at(i)->onDpiChanged(LOWORD(wParam), frameMoved);
   }
   if (m_settings) {
     m_settings->onDpiChanged(LOWORD(wParam), frameMoved);

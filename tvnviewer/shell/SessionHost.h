@@ -71,6 +71,10 @@ public:
 
   // Shows the Settings page of the frame on section, over the session.
   virtual void openSettings(SettingsSectionId section) = 0;
+
+  // Identity of the tab of the session in its frame. A reconnection asks the
+  // application to show the next session in the tab with this id.
+  virtual unsigned tabId() const = 0;
 };
 
 #endif

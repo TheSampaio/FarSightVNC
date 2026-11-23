@@ -401,6 +401,8 @@
     <ClInclude Include="shell\SessionToolbar.h" />
     <ClInclude Include="shell\ShellTab.h" />
     <ClInclude Include="shell\TabModel.h" />
+    <ClInclude Include="shell\TabStripLayout.h" />
+    <ClInclude Include="shell\ReconnectTab.h" />
     <ClInclude Include="shell\ShellWindow.h" />
     <ClInclude Include="shell\TitleBar.h" />
     <ClInclude Include="ConnectionOptionsForm.h" />

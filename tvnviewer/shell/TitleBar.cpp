@@ -18,6 +18,7 @@
 //
 // Modified for FarSightVNC on 2026-11-12: "+" button (new connection, Lucide icon) right after the tab.
 // Modified for FarSightVNC on 2026-11-12: the application icon (IDI_APPICON) is the logo of the bar.
+// Modified for FarSightVNC on 2026-11-23: any number of tabs, each with a close button; hit tests return the tab index.
 //
 
 #include "TitleBar.h"
@@ -32,14 +33,11 @@ namespace {
 const float kCaptionButtonWidth = 46.0f;
 const float kSettingsWidth = 40.0f;
 const float kLogoSize = 20.0f;
-const float kTabMaxWidth = 240.0f;
-const float kTabMinWidth = 72.0f;
-const float kTabGap = 4.0f;
-const float kNewTabWidth = 28.0f;
 const float kTabVerticalMargin = 6.0f;
 const float kCaptionGlyphSize = 10.0f;
 const float kSettingsGlyphSize = 14.0f;
 const float kNewTabIconSize = 16.0f;
+const float kCloseIconSize = 12.0f;
 
 // Codepoints of Segoe Fluent Icons / Segoe MDL2 Assets. The icon phase
 // replaces them with Lucide icons.
@@ -50,6 +48,9 @@ const wchar_t kGlyphClose = 0xE8BB;
 const wchar_t kGlyphSettings = 0xE713;
 // Fallback of the Lucide "plus" icon (Windows 10 before 1703).
 const wchar_t kGlyphAdd = 0xE710;
+// Fallback of the Lucide "x" icon of a tab: the glyph of the window close
+// button.
+const wchar_t kGlyphTabClose = 0xE8BB;
 
 bool contains(const D2D1_RECT_F &rect, float x, float y)
 {
@@ -63,46 +64,21 @@ D2D1_RECT_F inset(const D2D1_RECT_F &rect, float dx, float dy)
 
 }
 
-TabStripLayout::TabStripLayout()
-: m_newTab(D2D1::RectF())
-{
-}
-
-void TabStripLayout::layout(float left, float right, float top, float bottom, size_t count)
-{
-  m_tabs.clear();
-  float available = right - left - kNewTabWidth - kTabGap * count;
-  float width = 0.0f;
-  if (count > 0 && available > 0.0f) {
-    width = available / count;
-    if (width > kTabMaxWidth) {
-      width = kTabMaxWidth;
-    }
-  }
-  // Below the minimum width a tab cannot show its title: the strip keeps
-  // the space of the tabs but draws none.
-  float x = left;
-  for (size_t i = 0; i < count; i++) {
-    float w = width >= kTabMinWidth ? width : 0.0f;
-    m_tabs.push_back(D2D1::RectF(x, top, x + w, bottom));
-    x += w + kTabGap;
-  }
-  m_newTab = D2D1::RectF(x, top, x + kNewTabWidth, bottom);
-  if (m_newTab.right > right) {
-    m_newTab.right = m_newTab.left;
-  }
-}
-
 TitleBar::TitleBar()
 : m_width(0.0f),
+  m_stripLeft(0.0f),
+  m_stripRight(0.0f),
   m_logo(D2D1::RectF()),
   m_settings(D2D1::RectF()),
   m_minimize(D2D1::RectF()),
   m_maximize(D2D1::RectF()),
   m_close(D2D1::RectF()),
   m_empty(D2D1::RectF()),
+  m_activeTab(0),
   m_hover(TITLE_BAR_NONE),
+  m_hoverTab(kNoTab),
   m_pressed(TITLE_BAR_NONE),
+  m_pressedTab(kNoTab),
   m_settingsActive(false)
 {
 }
@@ -128,17 +104,58 @@ void TitleBar::layout(float width)
   m_logo = D2D1::RectF(theme.spacing + theme.spacingSmall, logoTop,
                        theme.spacing + theme.spacingSmall + kLogoSize, logoTop + kLogoSize);
 
-  // One tab for now: the strip is already laid out for several.
-  float stripLeft = m_logo.right + theme.spacing + theme.spacingSmall;
-  float stripRight = m_settings.left - theme.spacing;
-  if (stripRight < stripLeft) {
-    stripRight = stripLeft;
+  m_stripLeft = m_logo.right + theme.spacing + theme.spacingSmall;
+  m_stripRight = m_settings.left - theme.spacing;
+  if (m_stripRight < m_stripLeft) {
+    m_stripRight = m_stripLeft;
   }
-  m_tabs.layout(stripLeft, stripRight, kTabVerticalMargin, h - kTabVerticalMargin, 1);
+  layoutTabs();
 }
 
-TitleBarPart TitleBar::hitTest(float x, float y) const
+void TitleBar::layoutTabs()
 {
+  m_tabs.layout(m_stripLeft, m_stripRight, kTabVerticalMargin, height() - kTabVerticalMargin,
+                m_titles.size(), m_titles.empty() ? TabStripLayout::npos : m_activeTab);
+}
+
+void TitleBar::setTabs(const std::vector<std::wstring> &titles, size_t active)
+{
+  m_titles = titles;
+  m_activeTab = active;
+  if (m_hoverTab != kNoTab && m_hoverTab >= m_titles.size()) {
+    m_hoverTab = kNoTab;
+    m_hover = TITLE_BAR_NONE;
+  }
+  if (m_pressedTab != kNoTab && m_pressedTab >= m_titles.size()) {
+    m_pressedTab = kNoTab;
+    m_pressed = TITLE_BAR_NONE;
+  }
+  layoutTabs();
+}
+
+float TitleBar::tabLabelWidth(size_t index) const
+{
+  if (index >= m_tabs.count() || !m_tabs.isVisible(index)) {
+    return 0.0f;
+  }
+  D2D1_RECT_F label = tabLabelRect(index);
+  return label.right > label.left ? label.right - label.left : 0.0f;
+}
+
+D2D1_RECT_F TitleBar::tabLabelRect(size_t index) const
+{
+  const ThemeTokens &theme = currentTheme();
+  const D2D1_RECT_F &tab = m_tabs.tab(index);
+  D2D1_RECT_F close = m_tabs.closeButton(index);
+  return D2D1::RectF(tab.left + theme.spacing, tab.top, close.left - theme.spacingSmall / 2.0f,
+                     tab.bottom);
+}
+
+TitleBarPart TitleBar::hitTest(float x, float y, size_t *tab) const
+{
+  if (tab != 0) {
+    *tab = kNoTab;
+  }
   if (y < 0.0f || y >= height() || x < 0.0f || x >= m_width) {
     return TITLE_BAR_NONE;
   }
@@ -154,10 +171,12 @@ TitleBarPart TitleBar::hitTest(float x, float y) const
   if (contains(m_settings, x, y)) {
     return TITLE_BAR_SETTINGS;
   }
-  for (size_t i = 0; i < m_tabs.count(); i++) {
-    if (contains(m_tabs.tab(i), x, y)) {
-      return TITLE_BAR_TAB;
+  size_t index = m_tabs.tabAt(x, y);
+  if (index != TabStripLayout::npos) {
+    if (tab != 0) {
+      *tab = index;
     }
+    return m_tabs.isOnClose(index, x, y) ? TITLE_BAR_TAB_CLOSE : TITLE_BAR_TAB;
   }
   if (contains(m_tabs.newTabSlot(), x, y)) {
     return TITLE_BAR_NEW_TAB;
@@ -165,26 +184,38 @@ TitleBarPart TitleBar::hitTest(float x, float y) const
   return TITLE_BAR_CAPTION;
 }
 
-void TitleBar::setTitle(const std::wstring &title)
+namespace {
+
+bool isTabPart(TitleBarPart part)
 {
-  m_title = title;
+  return part == TITLE_BAR_TAB || part == TITLE_BAR_TAB_CLOSE;
 }
 
-bool TitleBar::setHover(TitleBarPart part)
+}
+
+bool TitleBar::setHover(TitleBarPart part, size_t tab)
 {
-  if (part == m_hover) {
+  if (!isTabPart(part)) {
+    tab = kNoTab;
+  }
+  if (part == m_hover && tab == m_hoverTab) {
     return false;
   }
   m_hover = part;
+  m_hoverTab = tab;
   return true;
 }
 
-bool TitleBar::setPressed(TitleBarPart part)
+bool TitleBar::setPressed(TitleBarPart part, size_t tab)
 {
-  if (part == m_pressed) {
+  if (!isTabPart(part)) {
+    tab = kNoTab;
+  }
+  if (part == m_pressed && tab == m_pressedTab) {
     return false;
   }
   m_pressed = part;
+  m_pressedTab = tab;
   return true;
 }
 
@@ -290,6 +321,48 @@ void TitleBar::paintNewTabButton(ChromeRenderer *renderer, bool active) const
   }
 }
 
+void TitleBar::paintTab(ChromeRenderer *renderer, size_t index, bool active, float line) const
+{
+  const ThemeTokens &theme = currentTheme();
+  if (!m_tabs.isVisible(index)) {
+    return;
+  }
+  const D2D1_RECT_F &tab = m_tabs.tab(index);
+  bool selected = index == m_activeTab;
+  bool hovered = m_hoverTab == index && isTabPart(m_hover);
+  if (selected) {
+    renderer->fillRoundRect(tab, theme.cornerRadius, theme.background);
+    renderer->drawRoundRect(tab, theme.cornerRadius, theme.border, line);
+  } else if (hovered) {
+    renderer->fillRoundRect(tab, theme.cornerRadius, theme.hover);
+  }
+  ThemeColor text = (selected && active) || hovered ? theme.text : theme.mutedText;
+  D2D1_RECT_F label = tabLabelRect(index);
+  if (label.right > label.left) {
+    renderer->drawText(m_titles[index].c_str(), label, text, theme.fontSizeSmall);
+  }
+  if (!selected && !hovered) {
+    return;
+  }
+  // Close button: its background follows its own hover and pressed state.
+  D2D1_RECT_F close = m_tabs.closeButton(index);
+  bool overClose = hovered && m_hover == TITLE_BAR_TAB_CLOSE;
+  bool pressedClose = m_pressed == TITLE_BAR_TAB_CLOSE && m_pressedTab == index;
+  if (pressedClose && overClose) {
+    renderer->fillRoundRect(close, theme.cornerRadius - 2.0f, theme.pressed);
+  } else if (overClose && m_pressed == TITLE_BAR_NONE) {
+    renderer->fillRoundRect(close, theme.cornerRadius - 2.0f, theme.selectedHover);
+  }
+  float cx = (close.left + close.right) / 2.0f;
+  float cy = (close.top + close.bottom) / 2.0f;
+  float half = kCloseIconSize / 2.0f;
+  D2D1_RECT_F icon = D2D1::RectF(cx - half, cy - half, cx + half, cy + half);
+  if (!renderer->drawSvgIcon(IDR_LUCIDE_X, icon, text) &&
+      !renderer->drawIconGlyph(kGlyphTabClose, close, text, kCloseIconSize - 2.0f)) {
+    renderer->drawGlyph(L"\x2715", close, text);
+  }
+}
+
 void TitleBar::paint(ChromeRenderer *renderer, bool active, bool maximized) const
 {
   const ThemeTokens &theme = currentTheme();
@@ -310,17 +383,7 @@ void TitleBar::paint(ChromeRenderer *renderer, bool active, bool maximized) cons
   }
 
   for (size_t i = 0; i < m_tabs.count(); i++) {
-    const D2D1_RECT_F &tab = m_tabs.tab(i);
-    if (tab.right - tab.left <= 0.0f) {
-      continue;
-    }
-    renderer->fillRoundRect(tab, theme.cornerRadius, theme.background);
-    renderer->drawRoundRect(tab, theme.cornerRadius, theme.border, line);
-    D2D1_RECT_F label = D2D1::RectF(tab.left + theme.spacing + theme.spacingSmall, tab.top,
-                                    tab.right - theme.spacing - theme.spacingSmall, tab.bottom);
-    if (label.right > label.left) {
-      renderer->drawText(m_title.c_str(), label, text, theme.fontSizeSmall);
-    }
+    paintTab(renderer, i, active, line);
   }
 
   paintNewTabButton(renderer, active);

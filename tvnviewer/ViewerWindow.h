@@ -37,6 +37,7 @@
 // Modified for FarSightVNC on 2026-11-16: clipboard file paste (Ctrl+V over files copied on the local machine).
 // Modified for FarSightVNC on 2026-11-16: keyboard release toggle (the keys go to the local machine while it is on).
 // Modified for FarSightVNC on 2026-11-17: file transfer policy (ask once per session, allow, never).
+// Modified for FarSightVNC on 2026-11-23: getSessionMenu().
 //
 
 #ifndef _VIEWER_WINDOW_H_
@@ -117,6 +118,9 @@ public:
   void onFrameDpiChanged(UINT dpi, bool frameMoved);
   // Window that takes the keyboard focus (the remote desktop).
   HWND getFocusHwnd() const;
+  // Menu with the commands of the session (the frame copies it into its
+  // system menu).
+  HMENU getSessionMenu() const;
   // True when the frame is visible (a reconnection reuses a shown frame).
   bool isFrameShown() const;
 

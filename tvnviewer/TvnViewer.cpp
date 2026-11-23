@@ -32,6 +32,7 @@
 // Modified for FarSightVNC on 2026-11-14: "Restart and Install Now" closes every shell window to install a staged update.
 // Modified for FarSightVNC on 2026-11-14: a CBT hook re-owns the update dialog before its owner shell is destroyed.
 // Modified for FarSightVNC on 2026-11-22: every session has its own tab as host (SessionTab), created before the ViewerInstance.
+// Modified for FarSightVNC on 2026-11-23: a reconnection or a connection from Home shows the session in the same tab; open sessions count the session tabs.
 //
 
 #include "TvnViewer.h"
@@ -194,8 +195,11 @@ void TvnViewer::connectFromHome(HWND shell, const StringStorage *host,
 
   ConnectionData conData;
   conData.setHost(host);
+  // The Home page that asks is the one shown: the session takes its tab.
+  ShellWindow *frame = findShell(shell);
+  unsigned tab = frame != nullptr && frame->isShowingHome() ? frame->activeTabId() : 0;
   postMessage(WM_USER_HOME_CONNECT, 0,
-              reinterpret_cast<LPARAM>(new ReconnectRequest(conData, conConfig, shell)));
+              reinterpret_cast<LPARAM>(new ReconnectRequest(conData, conConfig, shell, tab)));
 }
 
 void TvnViewer::openHome()
@@ -294,8 +298,8 @@ int TvnViewer::updateOpenSessions()
   int count = 0;
   std::list<std::unique_ptr<ShellWindow> >::iterator iter;
   for (iter = m_shells.begin(); iter != m_shells.end(); ++iter) {
-    if (!(*iter)->isDestroyed() && !(*iter)->isShowingHome()) {
-      count++;
+    if (!(*iter)->isDestroyed()) {
+      count += static_cast<int>((*iter)->sessionCount());
     }
   }
   return count;
@@ -329,10 +333,10 @@ void TvnViewer::runInstance(const StringStorage *hostName, const ConnectionConfi
 }
 
 void TvnViewer::runInstance(ConnectionData *conData, const ConnectionConfig *config,
-                            ShellWindow *target)
+                            ShellWindow *target, unsigned replaceTab)
 {
   ShellWindow *shell = target != nullptr ? target : createShell();
-  SessionTab *tab = shell->beginSessionTab();
+  SessionTab *tab = shell->beginSessionTab(replaceTab);
   startInstance(new ViewerInstance(this, conData, config, tab), shell, tab);
 }
 
@@ -648,19 +652,23 @@ LRESULT CALLBACK TvnViewer::wndProc(HWND hWnd, UINT msg, WPARAM wparam, LPARAM l
       case WM_USER_RECONNECT: {
         std::unique_ptr<ReconnectRequest> request(reinterpret_cast<ReconnectRequest *>(lparam));
         // The session copies the data; a shell closed meanwhile is replaced
-        // by a new one.
-        _this->runInstance(&request->conData, &request->conConfig,
-                           _this->findShell(request->shell));
+        // by a new one. A tab the user closed meanwhile cancels the
+        // reconnection.
+        ShellWindow *shell = _this->findShell(request->shell);
+        if (shell == nullptr || shell->hasTab(request->tabId)) {
+          _this->runInstance(&request->conData, &request->conConfig, shell,
+                             shell != nullptr ? request->tabId : 0);
+        }
         _this->m_instances.decreaseToReconnect();
         break;
       }
 
       case WM_USER_HOME_CONNECT: {
         std::unique_ptr<ReconnectRequest> request(reinterpret_cast<ReconnectRequest *>(lparam));
-        // Only a shell that still shows its Home page takes the session.
+        // Only a shell that still has the Home tab takes the session in it.
         ShellWindow *shell = _this->findShell(request->shell);
-        if (shell != nullptr && shell->isShowingHome()) {
-          _this->runInstance(&request->conData, &request->conConfig, shell);
+        if (shell != nullptr && shell->hasHomeTab(request->tabId)) {
+          _this->runInstance(&request->conData, &request->conConfig, shell, request->tabId);
         }
         break;
       }
