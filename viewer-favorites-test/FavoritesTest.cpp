@@ -23,6 +23,8 @@
 // decisions (ReconnectPolicy).
 // Modified for FarSightVNC on 2026-11-14: also runs the Home page list
 // geometry checks (HomeLayoutTest.cpp).
+// Modified for FarSightVNC on 2026-11-22: also runs the shell tab model checks
+// (TabModelTest.cpp).
 
 // Deterministic test for the in-memory logic of ConnectionFavorites (the
 // favorite and recent hosts of the login dialog): case-insensitive host
@@ -38,6 +40,8 @@
 
 // HomeLayoutTest.cpp.
 void testHomeLayout(void (*check)(bool, const char *));
+// TabModelTest.cpp.
+void testTabModel(void (*check)(bool, const char *));
 
 namespace {
 
@@ -288,6 +292,7 @@ int main()
   testReconnectBackoff();
   testReconnectCountdown();
   testHomeLayout(check);
+  testTabModel(check);
   printf("viewer-favorites-test: %d passed, %d failed\n", g_passed, g_failed);
   return g_failed == 0 ? 0 : 1;
 }

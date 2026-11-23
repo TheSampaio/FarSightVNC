@@ -17,6 +17,7 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //
 // Modified for FarSightVNC on 2026-11-12: "+" new connection button of the title bar (client button, tooltip).
+// Modified for FarSightVNC on 2026-11-22: the tabs are an fsv::shell::TabModel (any number of tabs, active index).
 //
 
 #ifndef _SHELL_WINDOW_H_
@@ -27,6 +28,7 @@
 #include "SettingsActions.h"
 #include "SettingsTab.h"
 #include "ShellTab.h"
+#include "TabModel.h"
 #include "TitleBar.h"
 #include "gui/d2d/ChromeRenderer.h"
 #include "gui/BaseWindow.h"
@@ -37,23 +39,8 @@
 #include <memory>
 #include <vector>
 
-// Tabs of a shell window and the active one. There is exactly one tab for
-// now; the vector is the place of the browser-like tabs of a later phase.
-class TabModel
-{
-public:
-  TabModel() : m_active(0) {}
-
-  void add(std::unique_ptr<ShellTab> tab);
-  void clear();
-  bool empty() const { return m_tabs.empty(); }
-  // Active tab, or 0 when there is none.
-  ShellTab *active() const;
-
-private:
-  std::vector<std::unique_ptr<ShellTab> > m_tabs;
-  size_t m_active;
-};
+// Tabs of a shell window and the active one.
+typedef fsv::shell::TabModel<ShellTab> TabModel;
 
 // Top-level frame of the viewer (window class TvnWindowClass): it hosts the
 // Home page or the session view as a child below its title bar, owns the

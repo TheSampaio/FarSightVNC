@@ -17,6 +17,7 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //
 // Modified for FarSightVNC on 2026-11-12: "+" new connection button of the title bar (client button, tooltip).
+// Modified for FarSightVNC on 2026-11-22: the tabs are an fsv::shell::TabModel (any number of tabs, active index).
 //
 
 #include "ShellWindow.h"
@@ -113,23 +114,6 @@ bool isClientButton(TitleBarPart part)
   return part == TITLE_BAR_SETTINGS || part == TITLE_BAR_NEW_TAB;
 }
 
-}
-
-void TabModel::add(std::unique_ptr<ShellTab> tab)
-{
-  m_tabs.push_back(std::move(tab));
-  m_active = m_tabs.size() - 1;
-}
-
-void TabModel::clear()
-{
-  m_tabs.clear();
-  m_active = 0;
-}
-
-ShellTab *TabModel::active() const
-{
-  return m_active < m_tabs.size() ? m_tabs[m_active].get() : 0;
 }
 
 ShellWindow::ShellWindow(const TCHAR *windowClassName, Logger *logger, HomeActions *home,

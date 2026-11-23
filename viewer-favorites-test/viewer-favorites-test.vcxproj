@@ -299,6 +299,7 @@
   <ItemGroup>
     <ClCompile Include="FavoritesTest.cpp" />
     <ClCompile Include="HomeLayoutTest.cpp" />
+    <ClCompile Include="TabModelTest.cpp" />
     
   </ItemGroup>
   <ItemGroup>

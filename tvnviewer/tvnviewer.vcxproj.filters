@@ -258,6 +258,9 @@
     <ClInclude Include="shell\ShellTab.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="shell\TabModel.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="shell\ShellWindow.h">
       <Filter>Header Files</Filter>
     </ClInclude>
