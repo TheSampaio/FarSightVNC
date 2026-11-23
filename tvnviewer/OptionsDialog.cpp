@@ -25,12 +25,10 @@
 // Input and Network tab pages, with Ctrl+Tab switching between them.
 // Modified for FarSightVNC on 2026-11-11: the scale control shows "Fit to window", disabled (the remote screen always fits).
 // Modified for FarSightVNC on 2026-11-11: the option logic moved to ConnectionOptionsForm, shared with the Settings page.
+// Modified for FarSightVNC on 2026-11-22: themed with DialogTheme (new UI, Light/Dark), the dialog and its pages.
 //
 
 #include "OptionsDialog.h"
-
-#include <uxtheme.h>
-#pragma comment(lib, "uxtheme.lib")
 
 OptionsPage::OptionsPage(DWORD resourceId, OptionsDialog *owner)
 : BaseDialog(resourceId),
@@ -40,8 +38,9 @@ OptionsPage::OptionsPage(DWORD resourceId, OptionsDialog *owner)
 
 BOOL OptionsPage::onInitDialog()
 {
-  // Paint the page background like the tab body.
-  EnableThemeDialogTexture(m_ctrlThis.getWindow(), ETDT_ENABLETAB);
+  // The page has the background of the dialog: the DialogTheme palette
+  // replaces the texture of the tab body, which has no dark variant.
+  m_theme.attach(m_ctrlThis.getWindow());
   return FALSE;
 }
 
@@ -118,6 +117,8 @@ void OptionsDialog::createPage(OptionsPage *page, const TCHAR *caption)
 {
   page->setParent(&m_ctrlThis);
   page->create();
+  // The tab goes in first: the display area depends on the strip of tabs.
+  m_tabControl.addTab(page, caption);
 
   // Fit the page into the display area of the tab control.
   RECT rect;
@@ -131,8 +132,6 @@ void OptionsDialog::createPage(OptionsPage *page, const TCHAR *caption)
   // goes from the tab control to the page controls and then to OK and Cancel.
   SetWindowPos(page->getControl()->getWindow(), m_tabControl.getWindow(),
                0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-
-  m_tabControl.addTab(page, caption);
 }
 
 HWND OptionsDialog::findControl(UINT controlID)
@@ -236,6 +235,7 @@ BOOL OptionsDialog::onInitDialog()
 
   m_form.bind([this](UINT controlID) { return findControl(controlID); });
   m_form.load(m_conConfig, m_connected);
+  m_theme.attach(m_ctrlThis.getWindow());
   m_tabControl.setFocus();
   return FALSE;
 }

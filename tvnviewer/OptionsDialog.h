@@ -25,6 +25,7 @@
 // Input and Network tab pages, with Ctrl+Tab switching between them.
 // Modified for FarSightVNC on 2026-11-11: no scale validation (the remote screen always fits).
 // Modified for FarSightVNC on 2026-11-11: the option logic moved to ConnectionOptionsForm, shared with the Settings page.
+// Modified for FarSightVNC on 2026-11-22: themed with DialogTheme (new UI, Light/Dark), the dialog and its pages.
 //
 
 #ifndef _OPTIONS_DIALOG_H_
@@ -34,6 +35,7 @@
 #include "client-config-lib/ConnectionConfig.h"
 #include "client-config-lib/ConnectionConfigSM.h"
 #include "ConnectionOptionsForm.h"
+#include "DialogTheme.h"
 #include "client-config-lib/ViewerSettingsManager.h"
 #include "util/StringParser.h"
 #include "gui/BaseDialog.h"
@@ -61,6 +63,7 @@ protected:
 
 private:
   OptionsDialog *m_owner;
+  DialogTheme m_theme;
 };
 
 class OptionsDialog : public BaseDialog
@@ -99,6 +102,7 @@ private:
   OptionsPage m_inputPage;
   OptionsPage m_networkPage;
   HHOOK m_msgHook;
+  DialogTheme m_theme;
 
   // The hook procedure has no user data, so the open Options dialogs are kept
   // in a list. Several viewer windows can open their own modal Options dialog,
