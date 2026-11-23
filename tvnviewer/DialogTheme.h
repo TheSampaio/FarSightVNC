@@ -3,7 +3,7 @@
 //
 // The theme of a classic dialog (a DIALOGEX template run by BaseDialog): the
 // palette of gui/d2d/Theme on the dialog background, its labels, fields and
-// check boxes, group boxes, tab controls, disabled labels, the dark frame of a top-level window and the dark
+// check boxes, group boxes, tab controls, list views, disabled labels, the dark frame of a top-level window and the dark
 // variant of the native controls, applied again whenever
 // Theme::changedMessage() comes.
 //
@@ -65,6 +65,7 @@ private:
   void themeGroupBox(HWND box);
   void themeTabControl(HWND tab);
   void themeLabel(HWND label);
+  void themeListView(HWND list);
   void paintBorders();
   LRESULT onMessage(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
   static LRESULT CALLBACK subclassProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam,

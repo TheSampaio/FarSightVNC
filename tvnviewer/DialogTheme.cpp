@@ -17,6 +17,7 @@ const UINT_PTR SUBCLASS_ID = 0x46534454; // "FSDT"
 const UINT_PTR GROUP_BOX_SUBCLASS_ID = 0x46534742; // "FSGB"
 const UINT_PTR TAB_SUBCLASS_ID = 0x46535442; // "FSTB"
 const UINT_PTR LABEL_SUBCLASS_ID = 0x4653534C; // "FSSL"
+const UINT_PTR HEADER_SUBCLASS_ID = 0x46534844; // "FSHD"
 
 COLORREF toColor(ThemeColor color)
 {
@@ -186,6 +187,80 @@ LRESULT CALLBACK tabControlProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
     return 1;
   case WM_NCDESTROY:
     RemoveWindowSubclass(hwnd, tabControlProc, TAB_SUBCLASS_ID);
+    break;
+  }
+  return DefSubclassProc(hwnd, message, wParam, lParam);
+}
+
+// The header of a list view is drawn by the visual style, which paints its
+// captions in a dark gray in the dark theme too. In the dark theme it is drawn
+// here: the surface color of the palette, the captions in the text color and a
+// divider on the right edge of each item.
+void paintListHeader(HWND header)
+{
+  PAINTSTRUCT paint;
+  HDC dc = BeginPaint(header, &paint);
+  if (dc == 0) {
+    return;
+  }
+  const ThemeTokens &tokens = currentTheme();
+  RECT client;
+  GetClientRect(header, &client);
+  HBRUSH surface = CreateSolidBrush(toColor(tokens.surface));
+  FillRect(dc, &client, surface);
+  DeleteObject(surface);
+
+  HFONT font = reinterpret_cast<HFONT>(SendMessage(header, WM_GETFONT, 0, 0));
+  HGDIOBJ oldFont = font != 0 ? SelectObject(dc, font) : 0;
+  SetBkMode(dc, TRANSPARENT);
+  SetTextColor(dc, toColor(tokens.text));
+  HBRUSH border = CreateSolidBrush(toColor(tokens.border));
+  const int count = static_cast<int>(SendMessage(header, HDM_GETITEMCOUNT, 0, 0));
+  for (int i = 0; i < count; i++) {
+    RECT rect;
+    wchar_t caption[128] = { 0 };
+    HDITEMW item;
+    ZeroMemory(&item, sizeof(item));
+    item.mask = HDI_TEXT | HDI_FORMAT;
+    item.pszText = caption;
+    item.cchTextMax = sizeof(caption) / sizeof(caption[0]);
+    if (!SendMessage(header, HDM_GETITEMRECT, i, reinterpret_cast<LPARAM>(&rect)) ||
+        !SendMessage(header, HDM_GETITEMW, i, reinterpret_cast<LPARAM>(&item))) {
+      continue;
+    }
+    RECT divider = { rect.right - 1, rect.top, rect.right, rect.bottom };
+    FillRect(dc, &divider, border);
+    RECT text = rect;
+    InflateRect(&text, -6, 0);
+    DWORD flags = DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS;
+    const int align = item.fmt & HDF_JUSTIFYMASK;
+    flags |= align == HDF_RIGHT ? DT_RIGHT : (align == HDF_CENTER ? DT_CENTER : DT_LEFT);
+    DrawTextW(dc, caption, -1, &text, flags);
+  }
+  DeleteObject(border);
+  if (oldFont != 0) {
+    SelectObject(dc, oldFont);
+  }
+  EndPaint(header, &paint);
+}
+
+LRESULT CALLBACK listHeaderProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam,
+                                UINT_PTR, DWORD_PTR)
+{
+  switch (message) {
+  case WM_PAINT:
+    if (Theme::isDark()) {
+      paintListHeader(hwnd);
+      return 0;
+    }
+    break;
+  case WM_ERASEBKGND:
+    if (Theme::isDark()) {
+      return 1;
+    }
+    break;
+  case WM_NCDESTROY:
+    RemoveWindowSubclass(hwnd, listHeaderProc, HEADER_SUBCLASS_ID);
     break;
   }
   return DefSubclassProc(hwnd, message, wParam, lParam);
@@ -454,6 +529,22 @@ void DialogTheme::themeTabControl(HWND tab)
   SetWindowSubclass(tab, tabControlProc, TAB_SUBCLASS_ID, 0);
 }
 
+// A list view takes the palette for its rows (its scroll bars come from the
+// "DarkMode_Explorer" theme every control gets) and a header drawn here in the
+// dark theme.
+void DialogTheme::themeListView(HWND list)
+{
+  const ThemeTokens &tokens = currentTheme();
+  HWND header = ListView_GetHeader(list);
+  if (header != 0) {
+    SetWindowSubclass(header, listHeaderProc, HEADER_SUBCLASS_ID, 0);
+    InvalidateRect(header, 0, TRUE);
+  }
+  ListView_SetBkColor(list, toColor(tokens.field));
+  ListView_SetTextBkColor(list, toColor(tokens.field));
+  ListView_SetTextColor(list, toColor(tokens.text));
+}
+
 void DialogTheme::themeLabel(HWND label)
 {
   SetWindowSubclass(label, labelProc, LABEL_SUBCLASS_ID, 0);
@@ -480,6 +571,8 @@ void DialogTheme::apply()
       themeGroupBox(child);
     } else if (hasClass(child, WC_TABCONTROLW)) {
       themeTabControl(child);
+    } else if (hasClass(child, WC_LISTVIEWW)) {
+      themeListView(child);
     } else if (isTextLabel(child)) {
       themeLabel(child);
     } else if (hasClass(child, L"#32770")) {
