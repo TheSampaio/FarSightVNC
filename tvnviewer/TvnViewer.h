@@ -32,6 +32,7 @@
 // Modified for FarSightVNC on 2026-11-14: a CBT hook re-owns the update dialog before its owner shell is destroyed.
 // Modified for FarSightVNC on 2026-11-22: every session has its own tab as host (SessionTab), created before the ViewerInstance.
 // Modified for FarSightVNC on 2026-11-23: a reconnection or a connection from Home names the tab that shows the session.
+// Modified for FarSightVNC on 2026-11-23: tab shortcuts on Home and Settings; an incoming connection is a tab of the most recently active shell.
 //
 
 #ifndef _TVN_VIEWER_H_
@@ -220,6 +221,12 @@ protected:
   void notifyShells();
   // Live shell with the window hwnd, or null.
   ShellWindow *findShell(HWND hwnd) const;
+  // Most recently active shell that can take an incoming connection as a new
+  // tab (top of the z-order), or null.
+  ShellWindow *findIncomingShell() const;
+  // Gives a tab shortcut of the Home or Settings page (Ctrl+T...) to its
+  // shell. True when the key was handled.
+  bool handleTabShortcut(const MSG &msg);
 
   bool onTimer(WPARAM idTimer);
 

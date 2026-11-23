@@ -27,6 +27,8 @@
 // (TabModelTest.cpp).
 // Modified for FarSightVNC on 2026-11-23: also runs the tab strip layout checks
 // (TabStripLayoutTest.cpp).
+// Modified for FarSightVNC on 2026-11-23: also runs the tab shortcut checks
+// (ShellShortcutsTest.cpp).
 
 // Deterministic test for the in-memory logic of ConnectionFavorites (the
 // favorite and recent hosts of the login dialog): case-insensitive host
@@ -46,6 +48,8 @@ void testHomeLayout(void (*check)(bool, const char *));
 void testTabModel(void (*check)(bool, const char *));
 // TabStripLayoutTest.cpp.
 void testTabStripLayout(void (*check)(bool, const char *));
+// ShellShortcutsTest.cpp.
+void testShellShortcuts(void (*check)(bool, const char *));
 
 namespace {
 
@@ -298,6 +302,7 @@ int main()
   testHomeLayout(check);
   testTabModel(check);
   testTabStripLayout(check);
+  testShellShortcuts(check);
   printf("viewer-favorites-test: %d passed, %d failed\n", g_passed, g_failed);
   return g_failed == 0 ? 0 : 1;
 }

@@ -19,6 +19,7 @@
 // Modified for FarSightVNC on 2026-11-12: "+" new connection button of the title bar (client button, tooltip).
 // Modified for FarSightVNC on 2026-11-22: the tabs are an fsv::shell::TabModel (any number of tabs, active index).
 // Modified for FarSightVNC on 2026-11-23: browser-style tabs (title bar tab strip, per-tab activation, closing and reconnection).
+// Modified for FarSightVNC on 2026-11-23: tab keyboard shortcuts (onShortcutKey()).
 //
 
 #ifndef _SHELL_WINDOW_H_
@@ -143,6 +144,14 @@ public:
   // refuse). With the Settings page shown over the tab, closes the page.
   void closeTab(size_t index);
   void closeActiveTab();
+  // Ctrl+T, Ctrl+W, Ctrl+Tab and Ctrl+Shift+Tab (ShellShortcuts.h) while the
+  // Home page or the Settings page has the keyboard. In a session every key
+  // goes to the remote computer: returns false then, and for any other key.
+  // key is the virtual key of a WM_KEYDOWN.
+  bool onShortcutKey(WPARAM key);
+  // The shell can take an incoming connection as a new tab: it is shown and
+  // not in full screen.
+  bool canTakeIncomingTab() const;
 
 private:
   // Window procedure installed over the one of the window class: the title

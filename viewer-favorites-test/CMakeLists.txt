@@ -3,7 +3,8 @@ add_executable(viewer-favorites-test
   FavoritesTest.cpp
   HomeLayoutTest.cpp
   TabModelTest.cpp
-  TabStripLayoutTest.cpp)
+  TabStripLayoutTest.cpp
+  ShellShortcutsTest.cpp)
 
 fsv_configure_executable(viewer-favorites-test)
 target_include_directories(viewer-favorites-test PRIVATE ${FSV_ROOT})

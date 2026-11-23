@@ -270,6 +270,9 @@
     <ClInclude Include="shell\ReconnectTab.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="shell\ShellShortcuts.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="shell\ShellWindow.h">
       <Filter>Header Files</Filter>
     </ClInclude>

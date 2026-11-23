@@ -19,6 +19,7 @@
 // Modified for FarSightVNC on 2026-11-12: "+" new connection button of the title bar (client button, tooltip).
 // Modified for FarSightVNC on 2026-11-22: the tabs are an fsv::shell::TabModel (any number of tabs, active index).
 // Modified for FarSightVNC on 2026-11-23: browser-style tabs (title bar tab strip, per-tab activation, closing and reconnection).
+// Modified for FarSightVNC on 2026-11-23: tab keyboard shortcuts (onShortcutKey()).
 //
 
 #include "ShellWindow.h"
@@ -26,6 +27,7 @@
 #include "gui/d2d/Theme.h"
 #include "HomeTab.h"
 #include "ReconnectTab.h"
+#include "ShellShortcuts.h"
 #include "../ViewerInstance.h"
 
 #include "gui/DpiUtils.h"
@@ -1055,6 +1057,39 @@ void ShellWindow::closeTab(size_t index)
 void ShellWindow::closeActiveTab()
 {
   closeTab(m_tabs.activeIndex());
+}
+
+bool ShellWindow::onShortcutKey(WPARAM key)
+{
+  ShellTab *tab = visibleTab();
+  if (tab == 0 || tab->asSession() != 0) {
+    return false;
+  }
+  fsv::shell::TabShortcut shortcut = fsv::shell::tabShortcutFromKey(
+    static_cast<unsigned>(key), GetKeyState(VK_CONTROL) < 0, GetKeyState(VK_SHIFT) < 0,
+    GetKeyState(VK_MENU) < 0);
+  switch (shortcut) {
+  case fsv::shell::TabShortcut::NewTab:
+    newTab();
+    return true;
+  case fsv::shell::TabShortcut::CloseTab:
+    closeActiveTab();
+    return true;
+  case fsv::shell::TabShortcut::NextTab:
+    activateNextTab();
+    return true;
+  case fsv::shell::TabShortcut::PreviousTab:
+    activatePreviousTab();
+    return true;
+  default:
+    return false;
+  }
+}
+
+bool ShellWindow::canTakeIncomingTab() const
+{
+  return !m_destroyed && m_hWnd != 0 && IsWindowVisible(m_hWnd) && !m_isFullscreen &&
+         !m_tabs.empty();
 }
 
 void ShellWindow::openSettings(SettingsSectionId section)

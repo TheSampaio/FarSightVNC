@@ -33,6 +33,7 @@
 // Modified for FarSightVNC on 2026-11-14: a CBT hook re-owns the update dialog before its owner shell is destroyed.
 // Modified for FarSightVNC on 2026-11-22: every session has its own tab as host (SessionTab), created before the ViewerInstance.
 // Modified for FarSightVNC on 2026-11-23: a reconnection or a connection from Home shows the session in the same tab; open sessions count the session tabs.
+// Modified for FarSightVNC on 2026-11-23: tab shortcuts on Home and Settings; an incoming connection is a tab of the most recently active shell.
 //
 
 #include "TvnViewer.h"
@@ -351,6 +352,27 @@ ShellWindow *TvnViewer::findShell(HWND hwnd) const
   return nullptr;
 }
 
+ShellWindow *TvnViewer::findIncomingShell() const
+{
+  // The z-order lists the top-level windows from the most recently active.
+  for (HWND window = GetTopWindow(0); window != 0; window = GetWindow(window, GW_HWNDNEXT)) {
+    ShellWindow *shell = findShell(window);
+    if (shell != nullptr && shell->canTakeIncomingTab()) {
+      return shell;
+    }
+  }
+  return nullptr;
+}
+
+bool TvnViewer::handleTabShortcut(const MSG &msg)
+{
+  if (msg.message != WM_KEYDOWN || msg.hwnd == 0) {
+    return false;
+  }
+  ShellWindow *shell = findShell(GetAncestor(msg.hwnd, GA_ROOT));
+  return shell != nullptr && shell->onShortcutKey(msg.wParam);
+}
+
 ShellWindow *TvnViewer::createShell()
 {
   m_shells.push_back(std::unique_ptr<ShellWindow>(
@@ -520,6 +542,12 @@ int TvnViewer::processMessages()
       }
     }
 
+    // Ctrl+T, Ctrl+W and Ctrl+Tab on the Home and Settings pages: before the
+    // dialog manager of the pages takes Ctrl+Tab.
+    if (handleTabShortcut(msg)) {
+      continue;
+    }
+
     if (!processDialogMessage(&msg)) {
       // Modified for FarSightVNC on 2026-11-01: probe before TranslateMessage
       // consumes the pending dead key. Controls retain the usual order.
@@ -558,8 +586,12 @@ void TvnViewer::newListeningConnection()
   if (m_conListener != 0) {
     SocketIPv4 *socket = m_conListener->getNewConnection();
     while (socket != 0) {
-      // Each incoming connection gets its own shell window.
-      ShellWindow *shell = createShell();
+      // Each incoming connection is a new tab of the most recently active
+      // shell window, or gets a window of its own.
+      ShellWindow *shell = findIncomingShell();
+      if (shell == nullptr) {
+        shell = createShell();
+      }
       SessionTab *tab = shell->beginSessionTab();
       ViewerInstance *viewerInst = new ViewerInstance(this,
                                                       &connectionData,

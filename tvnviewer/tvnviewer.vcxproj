@@ -403,6 +403,7 @@
     <ClInclude Include="shell\TabModel.h" />
     <ClInclude Include="shell\TabStripLayout.h" />
     <ClInclude Include="shell\ReconnectTab.h" />
+    <ClInclude Include="shell\ShellShortcuts.h" />
     <ClInclude Include="shell\ShellWindow.h" />
     <ClInclude Include="shell\TitleBar.h" />
     <ClInclude Include="ConnectionOptionsForm.h" />
