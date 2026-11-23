@@ -21,6 +21,8 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-22: themed with DialogTheme (new UI, Light/Dark).
+//
 
 #ifndef _FILE_TRANSFER_MAIN_DIALOG_H_
 #define _FILE_TRANSFER_MAIN_DIALOG_H_
@@ -38,6 +40,7 @@
 
 #include "FileInfoListView.h"
 #include "FileExistDialog.h"
+#include "DialogTheme.h"
 #include "thread/Thread.h"
 #include "ft-client-lib/FileTransferInterface.h"
 
@@ -275,6 +278,8 @@ protected:
   //
 
   FileInfo *m_fakeMoveUpFolder;
+
+  DialogTheme m_theme;
 
 private:
 

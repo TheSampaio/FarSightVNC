@@ -21,6 +21,8 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-22: themed with DialogTheme (new UI, Light/Dark).
+//
 
 #include "FileExistDialog.h"
 #include "util/DateTime.h"
@@ -81,6 +83,7 @@ void FileExistDialog::resetDialogResultValue()
 BOOL FileExistDialog::onInitDialog()
 {
   initControls();
+  m_theme.attach(m_ctrlThis.getWindow());
 
   _ASSERT(m_newFileInfo != NULL);
   _ASSERT(m_existingFileInfo != NULL);

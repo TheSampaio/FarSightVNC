@@ -22,6 +22,7 @@
 //-------------------------------------------------------------------------
 //
 // Modified for FarSightVNC on 2026-11-03: FarSightVNC message box caption.
+// Modified for FarSightVNC on 2026-11-22: themed with DialogTheme (new UI, Light/Dark).
 //
 
 #include "FileTransferMainDialog.h"
@@ -87,6 +88,7 @@ BOOL FileTransferMainDialog::onInitDialog()
   m_isClosing = false;
 
   initControls();
+  m_theme.attach(m_ctrlThis.getWindow());
 
   tryListRemoteFolder(_T("/"));
   tryListLocalFolder(_T(""));

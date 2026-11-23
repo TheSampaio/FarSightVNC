@@ -21,6 +21,8 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //-------------------------------------------------------------------------
 //
+// Modified for FarSightVNC on 2026-11-22: themed with DialogTheme (new UI, Light/Dark).
+//
 
 #ifndef _FILE_EXIST_DIALOG_H_
 #define _FILE_EXIST_DIALOG_H_
@@ -28,6 +30,7 @@
 #include "gui/BaseDialog.h"
 #include "gui/Control.h"
 #include "ft-common/FileInfo.h"
+#include "DialogTheme.h"
 
 class FileExistDialog : public BaseDialog
 {
@@ -106,6 +109,7 @@ protected:
   Control m_appendButton;
 
   bool m_canAppend;
+  DialogTheme m_theme;
 };
 
 #endif
