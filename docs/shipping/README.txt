@@ -1,9 +1,9 @@
-FarSightVNC Viewer v1.4.0a (alpha)
+FarSightVNC Viewer v1.5.0a (alpha)
 ==================================
 
 VNC client for Windows based on TightVNC Viewer 2.8.90.
 License: GNU GPL version 2 or later (see LICENSE.txt).
-Date: 2026-11-16 - branch develop.
+Date: 2026-11-24 - branch develop.
 
 
 Pinned favorites on Home, local shortcut capture and a button to release
@@ -11,7 +11,9 @@ the keyboard to the local computer (v1.3.0a). Print Screen is local by
 default and configurable. Optional Ctrl+V file paste requires FarSightVNC
 support on both ends; it stays dormant with existing TightVNC servers.
 Security fixes in file transfer, and a switch for it (v1.4.0a).
-Everything from v1.3.0a is retained. See CHANGES IN v1.4.0a below.
+Browser-style tabs and the new look in every window, the password prompt
+included (v1.5.0a). Everything from earlier versions is retained. See
+CHANGES IN v1.5.0a below.
 
 
 *** BREAKING CHANGE in v1.0.0a (still applies) ***
@@ -82,6 +84,33 @@ can ignore it and keep the files where they are.
   fsvncviewer.exe and fsvncupdater.exe are replaced or added; no document
   (README.txt, ...) is ever written there, so a README.txt of your own stays
   as it is.
+
+
+CHANGES IN v1.5.0a (tabs and the new look of the dialogs)
+--------------------------------------------------------
+- Tabs: several connections in one window, like a browser. The "+" next to
+  the tabs opens a new tab on the start page. Click a tab to switch to it.
+  The tab's "x" or the middle mouse button closes it. Ctrl+N still opens a
+  new window.
+- A session in a tab that is not in front stays connected but does not get
+  the keyboard. If its connection drops and you stop reconnecting, the tab
+  goes back to the start page in the same place.
+- On the start page and in Settings: Ctrl+T opens a tab, Ctrl+W closes the
+  current one, and Ctrl+Tab / Ctrl+Shift+Tab switch tabs. Inside a session
+  these keys go to the remote computer like any other key.
+- In listening mode, an incoming connection opens as a tab in the window
+  you used last.
+- The password prompt has a new design: it shows the server address and
+  has a "Show password" option.
+- The other windows that still looked like old TightVNC now follow the
+  Light/Dark theme: reconnection, the full screen notice, file paste,
+  command line help, connection options and file transfer.
+- Known issue: when you open a tab that is trying to reconnect, the remote
+  screen area may show what the previous tab left on screen. It is only
+  visual and goes away when the session is back.
+
+Nothing changes about how you connect to the TightVNC servers you already
+have.
 
 
 CHANGES IN v1.4.0a (file transfer security)

@@ -1,9 +1,9 @@
-FarSightVNC Viewer v1.4.0a (alpha)
+FarSightVNC Viewer v1.5.0a (alpha)
 ==================================
 
 Cliente VNC para Windows baseado no TightVNC Viewer 2.8.90.
 Licença: GNU GPL versão 2 ou posterior (ver LICENSE.txt).
-Data: 2026-11-19 - branch develop.
+Data: 2026-11-24 - branch develop.
 
 
 Favoritos fixos na Home, captura de atalhos locais e botão para liberar o
@@ -11,8 +11,9 @@ teclado ao computador local (v1.3.0a). Print Screen é local por padrão e
 pode ser configurado. A colagem de arquivos por Ctrl+V é opcional e exige
 suporte FarSightVNC nas duas pontas; fica dormente em servidores TightVNC.
 Correções de segurança na transferência de arquivos e um interruptor
-para ela (v1.4.0a). Tudo da v1.3.0a continua aqui. Ver O QUE MUDOU NA
-v1.4.0a abaixo.
+para ela (v1.4.0a). Abas no estilo navegador e o visual novo em todas as
+janelas, inclusive a de senha (v1.5.0a). Tudo das versões anteriores
+continua aqui. Ver O QUE MUDOU NA v1.5.0a abaixo.
 
 
 *** MUDANÇA INCOMPATÍVEL na v1.0.0a (continua valendo) ***
@@ -88,6 +89,31 @@ pode ignorá-lo e manter os arquivos onde estão.
   fsvncviewer.exe e o fsvncupdater.exe são trocados ou adicionados; nenhum
   documento (README.txt, ...) é gravado ali, então um README.txt seu continua
   como está.
+
+
+O QUE MUDOU NA v1.5.0a (abas e visual novo das janelas)
+-------------------------------------------------------
+- Abas: várias conexões na mesma janela, como num navegador. O "+" ao lado
+  das abas abre uma aba nova na tela inicial. Clique numa aba para trocar.
+  O "x" da aba ou o botão do meio do mouse fecha a aba. Ctrl+N continua
+  abrindo uma janela nova.
+- Uma sessão numa aba que não está à frente continua conectada, mas não
+  recebe o teclado. Se a conexão cai e você desiste de reconectar, a aba
+  volta para a tela inicial no mesmo lugar.
+- Na tela inicial e nas Configurações: Ctrl+T abre uma aba, Ctrl+W fecha a
+  aba atual e Ctrl+Tab / Ctrl+Shift+Tab trocam de aba. Dentro de uma sessão
+  essas teclas vão para o computador remoto, como qualquer outra.
+- No modo escuta, uma conexão recebida abre como aba na última janela usada.
+- A janela de senha foi redesenhada: mostra o endereço do servidor e tem a
+  opção "Show password".
+- As outras janelas que ainda tinham cara de TightVNC antigo agora seguem o
+  tema Claro/Escuro: reconexão, aviso de tela cheia, colagem de arquivos,
+  ajuda da linha de comando, opções da conexão e transferência de arquivos.
+- Problema conhecido: ao abrir uma aba que está tentando reconectar, a
+  área da tela remota pode mostrar o que a aba anterior deixou na tela. É
+  só visual e some quando a sessão volta.
+
+Nada muda na forma de conectar aos servidores TightVNC já instalados.
 
 
 O QUE MUDOU NA v1.4.0a (segurança da transferência de arquivos)

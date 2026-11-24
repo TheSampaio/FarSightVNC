@@ -18,7 +18,7 @@
 - Registre a versão na mensagem de commit, no `MODIFICATIONS.md` e no `LEIAME.txt` (português) e no `README.txt` (inglês) do shipping, que acompanham os executáveis e o `LICENSE.txt`.
 - Shipping na área de trabalho do dono: `Desktop\FarSightVNC-v<versão>\` + `.zip` (substitui a pasta/zip anterior), com apenas `fsvncviewer.exe`, `fsvncupdater.exe`, `LEIAME.txt`, `LICENSE.txt` e `README.txt` na raiz (layout plano; só 64 bits, sem versão 32 bits).
 - Toda versão publicada no GitHub DEVE anexar, além do `.zip`, os assets `farsightvnc-update.manifest` e `farsightvnc-update.manifest.sig` gerados por `tools/release/New-UpdateManifest.ps1` a partir do zip exato que foi publicado; sem eles o atualizador do app não instala a versão e só oferece a página de releases. Depois do upload, `tools/release/Test-ReleaseAssets.ps1 -Tag v<versão>` tem de passar (procedimento em `docs/updater/RELEASING.md`).
-- Versão atual: `v1.4.0a`.
+- Versão atual: `v1.5.0a`.
 
 ## Commits (obrigatório)
 
